@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>灯骸夜行</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0d1c; overflow: hidden; }
+  #game { width: 100%; height: 100%; }
+  /* 字体分片加载期间的过场：纸灯笼摇曳 + 标题 + 提示，避免黑屏 */
+  #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    background: radial-gradient(ellipse at 50% 42%, #2a2350 0%, #141a33 45%, #0b0d1c 100%);
+    color: #f3e6c8; font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif; user-select: none; }
+  #loading .lantern { position: relative; width: 64px; height: 84px; transform-origin: 50% -26px; animation: sway 2.4s ease-in-out infinite; }
+  #loading .lantern::before { content: ""; position: absolute; left: 31px; top: -26px; width: 2px; height: 26px; background: #0b0d18; }
+  #loading .lantern i { position: absolute; inset: 8px 0; border-radius: 46% / 50%; border: 3px solid #0b0d18;
+    background: radial-gradient(circle at 50% 55%, #fff1c4 0%, #ffb14f 38%, #e8611c 78%, #a8360f 100%);
+    box-shadow: 0 0 32px 10px rgba(255, 150, 60, .45), 0 0 90px 30px rgba(255, 130, 40, .18); animation: flicker 1.6s ease-in-out infinite; }
+  #loading .lantern i::after { content: ""; position: absolute; inset: 0 20px; border-left: 2px solid rgba(11,13,24,.45); border-right: 2px solid rgba(11,13,24,.45); border-radius: 50%; }
+  #loading .lantern b, #loading .lantern s { position: absolute; left: 14px; width: 36px; height: 10px; background: #2a1d1a; border: 3px solid #0b0d18; border-radius: 3px; box-sizing: border-box; }
+  #loading .lantern b { top: 0; } #loading .lantern s { bottom: 0; }
+  #loading h1 { margin: 6px 0 0; font: 48px "STKaiti", "KaiTi", "Kaiti SC", "BiauKai", serif; letter-spacing: 14px; text-indent: 14px; color: #f3e6c8;
+    -webkit-text-stroke: 2px #0b0d18; paint-order: stroke fill; text-shadow: 0 0 22px rgba(255, 154, 60, .55); }
+  #loading h1 em { font-style: normal; color: #ff9a3c; }
+  #loading p { margin: 0; font-size: 16px; letter-spacing: 4px; color: #ffc977; }
+  #loading p::after { content: ""; display: inline-block; width: 1.5em; text-align: left; animation: dots 1.4s steps(4) infinite; }
+  #loading small { font-size: 13px; color: #7f86b8; letter-spacing: 2px; }
+  @keyframes sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+  @keyframes flicker { 0%, 100% { opacity: 1; } 45% { opacity: .86; } 55% { opacity: .95; } }
+  @keyframes dots { 0% { content: ""; } 25% { content: "·"; } 50% { content: "··"; } 75%, 100% { content: "···"; } }
+  @media (prefers-reduced-motion: reduce) { #loading * { animation: none !important; } }
+</style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="loading" role="status" aria-live="polite">
+    <div class="lantern"><b></b><i></i><s></s></div>
+    <h1>灯<em>骸</em>夜行</h1>
+    <p>灯火点燃中</p>
+    <small>首次加载书法字体需要几秒</small>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

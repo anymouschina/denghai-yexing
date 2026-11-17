@@ -1,0 +1,8 @@
+[
+  { "id": "mingdeng", "name": "命灯",   "icon": "yupei",    "desc": "最大生命 +10",    "max": 5, "cost": [60, 120, 200, 320, 480], "stat": "maxHp",   "per": 10 },
+  { "id": "taomu",    "name": "桃木",   "icon": "taomu",    "desc": "所有伤害 +5%",    "max": 5, "cost": [80, 150, 250, 380, 550], "stat": "dmg",     "per": 0.05 },
+  { "id": "caolv",    "name": "草履",   "icon": "caolv",    "desc": "移动速度 +4%",    "max": 5, "cost": [50, 100, 170, 260, 380], "stat": "speed",   "per": 0.04 },
+  { "id": "hundai",   "name": "魂袋",   "icon": "hundai",   "desc": "拾取范围 +15%",   "max": 5, "cost": [50, 100, 170, 260, 380], "stat": "pickup",  "per": 0.15 },
+  { "id": "qiantong", "name": "签筒",   "icon": "qiantong", "desc": "每局换一批 +1 次", "max": 3, "cost": [150, 300, 500],          "stat": "rerolls", "per": 1 },
+  { "id": "huanhun",  "name": "还魂符", "icon": "huanhun",  "desc": "每局可复活一次",   "max": 1, "cost": [600],                    "stat": "revive",  "per": 1 }
+]

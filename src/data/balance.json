@@ -1,0 +1,23 @@
+{
+  "worldScale": 1.25,
+  "worldMargin": 170,
+  "player": {
+    "hp": 100, "speed": 215, "radius": 18, "scale": 0.44,
+    "pickup": 75, "lightPull": 450, "lightPullSpeed": 34, "magnetSpeed": 640,
+    "invuln": 0.8, "crit": 0.05, "critMul": 1.6,
+    "dashCd": 2.5, "dashTime": 0.18, "dashSpeed": 3.3, "dashInvuln": 0.26,
+    "idleFrame": 0, "ghostEvery": 0.03, "ghostLife": 0.32, "ghostAlpha": 0.55, "hurtPush": 14,
+    "deathSlowmo": 0.22, "deathDelay": 1.1, "deathZoom": 1.25,
+    "hitStopCrit": 60, "hitStopKill": 80, "hitStopGap": 0.45,
+    "shakeLight": 0.0015, "shakeDash": 0.002, "shakeHurt": 0.003, "shakeBig": 0.006, "shakeDeath": 0.008
+  },
+  "fu": { "range": 430, "speed": 540, "spread": 0.17, "life": 1.3 },
+  "huanhuo": { "spin": 3.0, "hitInterval": 0.38, "knock": 190 },
+  "lei": { "range": 460, "chainRange": 175, "chainRatio": 0.7, "burnBonus": 0.3, "strikeGap": 0.07, "knock": 40 },
+  "burn": { "time": 3, "baseDps": 0, "tick": 0.5 },
+  "knockback": 210,
+  "xp": { "first": [5, 10, 15, 20, 25], "growth": 1.15 },
+  "drops": { "coin": 0.04, "oil": 0.012, "oilHeal": 25, "maxGems": 280, "magnetPop": 240, "chestLevels": 2, "fillerHeal": 40, "fillerCoins": 10 },
+  "rerolls": 2,
+  "soul": { "perSecond": 0.6, "perKill": 0.15, "perCoin": 3, "bossBonus": 200, "winMul": 1.5, "fillerSoul": 30 }
+}
