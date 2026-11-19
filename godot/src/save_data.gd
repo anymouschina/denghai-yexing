@@ -8,7 +8,7 @@ static var mem: Dictionary = {}
 
 
 static func defaults() -> Dictionary:
-	return {"soul": 0, "best": 0, "wins": 0, "runs": 0, "meta": {}, "mute": false, "run": {}, "unlocked_artifacts": [], "seen_rift_hint": false}
+	return {"soul": 0, "best": 0, "wins": 0, "runs": 0, "meta": {}, "mute": false, "run": {}, "unlocked_artifacts": [], "seen_rift_hint": false, "mode": "full"}
 
 
 static func load_save() -> Dictionary:

@@ -454,6 +454,10 @@ func _draw() -> void:
 			_push(e.y, 1, e)
 			_vis_enemies.append(e)
 	_push(sim.py, 2, null)
+	if sim.phase == Sim.PH_SEG:
+		for i in range(sim.pois.size()):
+			if _visible(float(sim.pois[i].x), float(sim.pois[i].y), 260.0):
+				_push(float(sim.pois[i].y), 5, i)
 	if sim.phase == Sim.PH_BREAK:
 		_push(sim.break_pos("rift").y, 4, "rift")
 		_push(sim.break_pos("merchant").y, 4, "merchant")
@@ -489,6 +493,7 @@ func _draw() -> void:
 				_draw_pickup(o)
 				PerfStat.add("d_pickup", t_k)
 			4: _draw_zone(o)
+			5: _draw_poi(o)
 	for e2: SimEnemy in _vis_enemies:
 		if e2.mark_t > 0.0 or e2.marks > 0 or e2.elite or e2.boss:
 			_draw_enemy_overlays(e2)
@@ -691,6 +696,32 @@ func _draw_pickup(k: SimPickup) -> void:
 	var h := tx.get_height() * sc
 	var bob := sin(k.bob) * 3.0
 	draw_texture_rect(tx, Rect2(k.x - w / 2.0, k.y - h / 2.0 + bob, w, h), false, col)
+
+
+func _draw_poi(i: int) -> void:
+	if sim.pois[i].kind == "merchant":
+		var mp2 := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
+		var mt: Texture2D = T.merchant
+		var mh := 150.0
+		var mw := mt.get_width() * mh / mt.get_height()
+		draw_texture_rect(mt, Rect2(mp2.x - mw / 2.0, mp2.y - mh * 0.95, mw, mh), false, Color.WHITE)
+		_draw_zone_text(mp2 + Vector2(0, -mh - 4.0), String(sim.pois[i].name), "站定 1 秒打开商店（灯芯换遗物）", UI.GOLD)
+		return
+	var pp := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
+	var tx: Texture2D = T.rift_portal
+	var st := sim.poi_state(i)
+	var sc := 1.0 + sin(t_anim * 3.0) * 0.03
+	var w := tx.get_width() * sc
+	var h := tx.get_height() * sc
+	draw_texture_rect(T.glow, Rect2(pp.x - 200, pp.y - 260, 400, 300), false, Color(0.7, 0.3, 1.0, 0.45 if st == "ok" else 0.15))
+	draw_texture_rect(tx, Rect2(pp.x - w / 2.0, pp.y - h * 0.75, w, h), false, Color.WHITE if st == "ok" else Color(0.55, 0.5, 0.62))
+	var sub: String = "站定进入 • 消耗灯芯×1" if st == "ok" else {"weak": "灯弱，不可入", "nowick": "灯芯不足", "sealed": "裂隙已闭合", "max": "本局已入两次"}.get(st, "")
+	_draw_zone_text(pp + Vector2(0, -h * 0.75 - 10.0), String(sim.pois[i].name), sub, UI.GOLD if st == "ok" else Color("ff8a7a"))
+	var zr: float = GameData.SEG["break"].zoneR
+	var hv: float = float(sim.poi_hold.get(i, 0.0))
+	draw_arc(pp, zr, 0, TAU, 48, Color(1, 0.8, 0.4, 0.35), 3.0, true)
+	if hv > 0.0:
+		draw_arc(pp, zr, -PI / 2.0, -PI / 2.0 + clampf(hv / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, 48, Color(1.0, 0.9, 0.5, 0.95), 7.0, true)
 
 
 func _draw_zone(which: String) -> void:

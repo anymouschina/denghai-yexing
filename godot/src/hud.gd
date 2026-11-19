@@ -207,12 +207,12 @@ func _draw_hud_inner() -> void:
 	_text(Vector2(rr - 240, T + 52 * k), "魂火  %d" % sim.soul_payout(), _fs(22), UI.GHOST, 240.0, HORIZONTAL_ALIGNMENT_RIGHT)
 	# 顶部中央：大计时 + 段名
 	var cx := vw.x / 2.0
-	var tt := sim.t if sim.phase != Sim.PH_RIFT else sim.rift_t
+	var tt := sim.clock if sim.phase != Sim.PH_RIFT else sim.rift_t
 	_text(Vector2(cx - 200, T + 40 * k), UI.fmt_time(tt), _fs(46), UI.PAPER, 400.0, HORIZONTAL_ALIGNMENT_CENTER)
 	var title := ""
 	match sim.phase:
 		Sim.PH_SEG:
-			title = "%s  •  第 %d / 3 段  •  裂隙 %s 后开启" % [GameData.SEG.segments[sim.seg].name, sim.seg + 1, UI.fmt_time(maxf(0.0, float(GameData.SEG.segments[sim.seg].to) - sim.t))]
+			title = "%s  •  第 %d / 3 段  •  裂隙 %s 后开启" % [GameData.SEG.segments[sim.seg].name, sim.seg + 1, UI.fmt_time(maxf(0.0, (float(GameData.SEG.segments[sim.seg].to) - sim.t) * sim.stretch))]
 		Sim.PH_BREAK:
 			title = "段间 • 清场  •  %s 后自动启程" % UI.fmt_time(maxf(0.0, float(GameData.SEG["break"].max) - sim.break_t))
 		Sim.PH_RIFT:
@@ -250,6 +250,25 @@ func _draw_hud_inner() -> void:
 			var perp := Vector2(-dn.y, dn.x)
 			canvas.draw_colored_polygon(PackedVector2Array([ap + dn * 26.0 * pul, ap - dn * 12.0 + perp * 20.0, ap - dn * 12.0 - perp * 20.0]), Color(0.85, 0.6, 1.0, 0.95))
 			_text(ap - dn * 34.0 - Vector2(60, -8), "%s %dm" % [lab, int(dv.length() / 10.0)], _fs(18), Color(0.9, 0.75, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
+	_draw_minimap(vw)
+	# 大地图：指向最近剑冢裂隙的边缘箭头（离得远时）
+	if sim.phase == Sim.PH_SEG:
+		var best := -1
+		var bdist := 1e9
+		for i in range(sim.pois.size()):
+			if sim.pois[i].kind != "sword":
+				continue
+			var dd := Vector2(float(sim.pois[i].x) - sim.px, float(sim.pois[i].y) - sim.py).length()
+			if dd < bdist:
+				bdist = dd
+				best = i
+		if best >= 0 and bdist > 520.0:
+			var dn := Vector2(float(sim.pois[best].x) - sim.px, float(sim.pois[best].y) - sim.py).normalized()
+			var ctr2 := Vector2(vw.x / 2.0, vw.y / 2.0)
+			var ap2 := ctr2 + Vector2(dn.x * (vw.x * 0.5 - 70.0), dn.y * (vw.y * 0.5 - 60.0))
+			var perp2 := Vector2(-dn.y, dn.x)
+			canvas.draw_colored_polygon(PackedVector2Array([ap2 + dn * 20.0, ap2 - dn * 10.0 + perp2 * 14.0, ap2 - dn * 10.0 - perp2 * 14.0]), Color(0.85, 0.6, 1.0, 0.9))
+			_text(ap2 - Vector2(70, -34) if dn.y > 0 else ap2 - Vector2(70, 20), "剑冢裂隙 %dm" % int(bdist / 10.0), 15, Color(0.9, 0.75, 1.0), 140.0, HORIZONTAL_ALIGNMENT_CENTER)
 	# 底部提示（桌面）
 	if not touch_mode:
 		var tip2 := "WASD / 方向键 移动 • 空格 冲刺 • Esc 暂停"
@@ -280,6 +299,30 @@ func _draw_hud_inner() -> void:
 			_text(Vector2(L, ry + 74 * k), "飞剑已臻圆满", _fs(15), Color(0.8, 0.9, 1.0))
 	if sim.fusion != "":
 		_text(Vector2(L, T + 190 * k), "融合 • %s" % GameData.DG.fusion.names[sim.fusion], _fs(17), Color(1.0, 0.85, 0.4))
+
+
+func _draw_minimap(vw: Vector2) -> void:
+	# 右上小地图：全图缩略 + 探索足迹 + 玩家 + 剑冢裂隙入口 + 宝箱；触屏时下移避开暂停键
+	var mw := 190.0 if not touch_mode else 170.0
+	var mh := mw * Sim.H / Sim.W
+	var x0 := vw.x - inset.z - mw - 14.0
+	var y0 := inset.y + (84.0 if touch_mode else 96.0)
+	canvas.draw_rect(Rect2(x0 - 3, y0 - 3, mw + 6, mh + 6), Color(0.04, 0.05, 0.12, 0.7))
+	var cw := mw / 36.0
+	var ch := mh / 24.0
+	for gy in range(24):
+		for gx in range(36):
+			if sim.explored.size() == 864 and sim.explored[gy * 36 + gx] == 1:
+				canvas.draw_rect(Rect2(x0 + gx * cw, y0 + gy * ch, cw, ch), Color(0.35, 0.45, 0.75, 0.35))
+	canvas.draw_rect(Rect2(x0, y0, mw, mh), UI.ORANGE, false, 2.0)
+	for pp in sim.pois:
+		var st_ := Color(0.8, 0.45, 1.0) if pp.kind == "sword" else Color(1.0, 0.8, 0.3)
+		canvas.draw_circle(Vector2(x0 + float(pp.x) / Sim.W * mw, y0 + float(pp.y) / Sim.H * mh), 5.0, st_)
+	for k in sim.pickups:
+		if k.kind == "chest":
+			canvas.draw_rect(Rect2(x0 + k.x / Sim.W * mw - 3, y0 + k.y / Sim.H * mh - 3, 6, 6), Color(1.0, 0.85, 0.3))
+	canvas.draw_circle(Vector2(x0 + sim.px / Sim.W * mw, y0 + sim.py / Sim.H * mh), 4.0, Color(0.5, 1.0, 1.0))
+	canvas.draw_rect(Rect2(x0 + sim.px / Sim.W * mw - 7, y0 + sim.py / Sim.H * mh - 4, 14, 8), Color(1, 1, 1, 0.5), false, 1.0)
 
 
 func _icon(id: String) -> Texture2D:

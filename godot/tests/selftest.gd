@@ -294,12 +294,47 @@ func _init() -> void:
 	q.sw_stage = 5
 	q.px = Sim.W / 2.0; q.py = Sim.H / 2.0
 	q.phase = Sim.PH_SEG
+	q.pickups.clear()
+	q.pending_chest = 0
+	q.choice = {}
 	var dm := q.spawn_enemy("paperman", -1.0, -1.0, {"pos": Vector2(q.px + 120.0, q.py)})
 	dm.hp = 1e9; dm.maxhp = 1e9; dm.speed = 0.0
 	for i in range(120):
 		q.step(0.05)
 	ok(q.sw_wheel_pos.size() == 3, "阶段3 剑轮 3 把")
 	ok(float(q.dmg_by.get("sw_wheel", 0.0)) > 0.0 and float(q.dmg_by.get("sw_qi", 0.0)) > 0.0 and float(q.dmg_by.get("sw_array", 0.0)) > 0.0, "阶段3/4/5 的攻击方式都实际造成伤害")
+	print("== 大地图 / 战斗中裂隙入口 ==")
+	var mp := fresh(21)
+	ok(Sim.W == 3600.0 and Sim.H == 2400.0, "主战场 3600×2400")
+	ok(mp.pois.size() == 3 and mp.poi_state(0) == "ok", "大地图 2 处剑冢裂隙 + 1 处游商灯摊（kind 字段）")
+	ok(mp.pickups.size() >= 1 and mp.pickups[0].kind == "chest" and Vector2(mp.pickups[0].x - mp.px, mp.pickups[0].y - mp.py).length() < 350.0, "出生点 350px 内刷古灯宝箱")
+	var mw0 := mp.wicks
+	mp.px = float(mp.pois[0].x); mp.py = float(mp.pois[0].y)
+	for i in range(40):
+		mp.step(0.05)
+		if mp.phase == Sim.PH_RIFT:
+			break
+	ok(mp.phase == Sim.PH_RIFT and mp.wicks == mw0 - 1 and mp.rift_poi == 0, "站定入口 1 秒进入裂隙，耗 1 灯芯")
+	mp.damage(mp.rift_warden, 1e9, "fu", {"noCrit": true, "pierce": true})
+	mp.step(0.05)
+	ok(mp.phase == Sim.PH_SEG and absf(mp.px - float(mp.pois[0].x)) < 1.0 and mp.artifact == "sword", "击败后回到主图原位并得飞剑术")
+	mp.hp = maxf(1.0, mp.maxhp * 0.1)
+	ok(mp.poi_state(1) == "weak", "灯弱时入口不可入")
+	print("== 30/10 分钟模式 ==")
+	var mf := Sim.new(3, {"mode": "full"})
+	var mq := Sim.new(3, {"mode": "quick"})
+	for i in range(300):
+		mf.choice = {}; mq.choice = {}
+		mf.step(0.1); mq.step(0.1)
+	ok(near(mf.clock, 30.0) and near(mf.t, 30.0 / 3.75), "完整模式：战斗节奏钟拉伸 3.75×（整局 480×3.75=30 分钟）")
+	ok(near(mq.t, 30.0 / 1.25), "疾速模式：拉伸 1.25×（整局 10 分钟）")
+	var mm := fresh(22)
+	mm.px = float(mm.pois[2].x); mm.py = float(mm.pois[2].y)
+	for i in range(40):
+		mm.step(0.05)
+		if mm.shop_open:
+			break
+	ok(mm.shop_open and mm.shop.size() > 0, "战斗中站定游商灯摊 1 秒打开商店")
 	print("== 确定性 ==")
 	var r1 := _run_fixed(777)
 	var r2 := _run_fixed(777)

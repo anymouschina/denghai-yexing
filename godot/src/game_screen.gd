@@ -29,7 +29,7 @@ func start(p_touch: bool, resume: Dictionary = {}) -> void:
 	var seed_v: int = Playtest.seed_value if Playtest.seed_value != 0 else int(Time.get_ticks_usec() & 0x7fffffff)
 	if not resume.is_empty():
 		seed_v = int(resume.get("seed_v", seed_v))
-	sim = Sim.new(seed_v, {"emit": true, "touch": touch_mode, "meta": sv.meta})
+	sim = Sim.new(seed_v, {"emit": true, "touch": touch_mode, "meta": sv.meta, "mode": String(resume.get("mode", sv.get("mode", "full")))})
 	if not resume.is_empty():
 		sim.from_save(resume)
 	view = WorldView.new()
@@ -256,6 +256,9 @@ func _publish() -> void:
 	snap["relics"] = sim.relics.size()
 	snap["threat"] = sim.threat_next + sim.threat_cur
 	snap["break_idx"] = sim.break_idx
+	snap["poi0"] = sim.poi_state(0)
+	snap["poi_x"] = int(sim.pois[0].x)
+	snap["poi_y"] = int(sim.pois[0].y)
 	snap["breakT"] = snappedf(sim.break_t, 0.1)
 	snap["choices"] = sim.choice.options.size() if not sim.choice.is_empty() else 0
 	if Playtest.enabled:

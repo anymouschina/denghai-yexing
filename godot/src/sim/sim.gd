@@ -4,8 +4,8 @@ extends RefCounted
 ## 纯数据、无节点：游戏渲染层与 headless 平衡脚本共用这一份规则，避免“测的不是玩的”。
 ## 一局：3 段场地（S1/S2/S3）〉 每段后「段间」（裂隙 / 游商 / 启程三选一）〉 BOSS。
 
-const W := 2500.0
-const H := 1394.0
+const W := 3600.0
+const H := 2400.0
 const MARGIN := 170.0
 const CELL := 80.0
 const PH_SEG := 0
@@ -133,6 +133,14 @@ var lei_queue: Array = []
 var wicks := 2
 var wick_spent_rift := 0
 var wick_spent_shop := 0
+var stretch := 1.0            # 模式拉伸：战斗节奏钟(t)每走 1 秒需要 stretch 个真实战斗秒；30 分钟=3.75，10 分钟=1.25，测试默认 1
+var mode := "classic"
+var clock := 0.0              # 玩家看到的战斗时钟（真实秒，不含段间/裂隙）
+var rift_from := 1
+var rift_poi := -1
+var pois: Array = []          # 大地图上的“剑冢裂隙”入口：{x,y,name}
+var poi_hold: Dictionary = {}
+var explored := PackedByteArray()   # 36×24 格探索足迹（小地图）
 var break_idx := -1          # 当前段间序号 0/1/2
 var break_t := 0.0
 var gift_pending := false
@@ -196,6 +204,8 @@ func _init(p_seed: int = 1, opts: Dictionary = {}) -> void:
 	rng.seed = p_seed
 	emit = opts.get("emit", false)
 	touch = opts.get("touch", false)
+	mode = String(opts.get("mode", "classic"))
+	stretch = {"full": 3.75, "quick": 1.25}.get(mode, 1.0)
 	var m: Dictionary = opts.get("meta", {})
 	var saved: Dictionary = m
 	for mm in GameData.META:
@@ -215,6 +225,7 @@ func _init(p_seed: int = 1, opts: Dictionary = {}) -> void:
 	_recalc()
 	hp = maxhp
 	need = req_for(1)
+	_gen_pois()
 	_ev("start")
 
 
@@ -397,10 +408,11 @@ func step(dt: float) -> void:
 
 
 func _step_combat(dt: float) -> void:
-	if phase != PH_RIFT and real_t >= float(GameData.DG.fusion.atRealSec):
+	if phase != PH_RIFT and clock >= float(GameData.DG.fusion.atRealSec):
 		_trigger_fusion()
 	if phase != PH_RIFT:
-		t += dt
+		t += dt / stretch
+		clock += dt
 	_rebuild_grid()
 	_update_player(dt)
 	if phase == PH_SEG:
@@ -413,7 +425,8 @@ func _step_combat(dt: float) -> void:
 	_update_pickups(dt)
 	_update_teles(dt)
 	_update_lamps(dt)
-	if phase == PH_SEG and t >= float(GameData.SEG.segments[seg].to) - 20.0 and not announced.has(seg):
+	_update_pois(dt)
+	if phase == PH_SEG and t >= float(GameData.SEG.segments[seg].to) - 20.0 / stretch and not announced.has(seg):
 		announced[seg] = true
 		_ev("banner", "20 秒后清场 · 场地中央将裂开「灯骸裂隙」", "#d9b8ff")
 	if phase == PH_SEG and t >= float(GameData.SEG.segments[seg].to):
@@ -1913,11 +1926,9 @@ func _roll_shop() -> void:
 		pool.remove_at(i)
 
 
-func rift_state() -> String:
-	## "ok" 可进；否则返回不可进的原因
-	if phase != PH_BREAK:
-		return "none"
-	if rift_sealed.has(break_idx):
+func rift_gate(sealed_key: int) -> String:
+	## 进入裂隙的通用条件（段间与大地图入口共用）：返回 "ok" 或原因
+	if rift_sealed.has(sealed_key):
 		return "sealed"
 	if rift_entries >= int(GameData.DG.rift.maxEntries):
 		return "max"
@@ -1926,6 +1937,72 @@ func rift_state() -> String:
 	if wicks < int(GameData.DG.wick.riftCost):
 		return "nowick"
 	return "ok"
+
+
+func rift_state() -> String:
+	## "ok" 可进；否则返回不可进的原因
+	if phase != PH_BREAK:
+		return "none"
+	return rift_gate(break_idx)
+
+
+func poi_state(i: int) -> String:
+	if phase != PH_SEG or pois[i].kind == "merchant":
+		return "none"
+	return rift_gate(100 + i)
+
+
+func _gen_pois() -> void:
+	# 大地图上两处剑冢裂隙入口（东北 / 西南），战斗中靠近站定即可进入；出生点旁刷一只古灯宝箱
+	var c := Vector2(W / 2.0, H / 2.0)
+	pois = [{"kind": "sword", "x": c.x + 1000.0, "y": c.y - 700.0, "name": "剑冢裂隙 • 东北"}, {"kind": "sword", "x": c.x - 1100.0, "y": c.y + 720.0, "name": "剑冢裂隙 • 西南"},
+		{"kind": "merchant", "x": c.x - 650.0, "y": c.y - 420.0, "name": "游商灯摊"}]
+	explored.resize(36 * 24)
+	_spawn_pickup("chest", c.x + 230.0, c.y - 110.0, 1)
+
+
+func _mark_explored() -> void:
+	if phase == PH_RIFT:
+		return
+	var gx := int(px / (W / 36.0))
+	var gy := int(py / (H / 24.0))
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var x := gx + dx
+			var y := gy + dy
+			if x >= 0 and x < 36 and y >= 0 and y < 24:
+				explored[y * 36 + x] = 1
+
+
+func _update_pois(dt: float) -> void:
+	_mark_explored()
+	if phase != PH_SEG:
+		return
+	var zr: float = GameData.SEG["break"].zoneR
+	for i in range(pois.size()):
+		var pp := Vector2(float(pois[i].x), float(pois[i].y))
+		if pois[i].kind == "merchant":
+			if Vector2(px, py).distance_to(pp) < zr:
+				poi_hold[i] = float(poi_hold.get(i, 0.0)) + dt
+				if float(poi_hold[i]) >= float(GameData.DG.rift.hold) and not shop_inside:
+					poi_hold[i] = 0.0
+					shop_inside = true
+					_roll_shop()
+					shop_open = true
+					shop_serial += 1
+					_ev("shop_open")
+			else:
+				poi_hold[i] = 0.0
+				shop_inside = false
+			continue
+		if Vector2(px, py).distance_to(pp) < zr and poi_state(i) == "ok":
+			poi_hold[i] = float(poi_hold.get(i, 0.0)) + dt
+			if float(poi_hold[i]) >= float(GameData.DG.rift.hold):
+				poi_hold[i] = 0.0
+				enter_rift(i)
+				return
+		else:
+			poi_hold[i] = 0.0
 
 
 func _step_break(dt: float) -> void:
@@ -2027,16 +2104,21 @@ func close_shop() -> void:
 # ======================================================================
 # 灯骸裂隙（副本）
 # ======================================================================
-func enter_rift() -> bool:
-	if rift_state() != "ok":
+func enter_rift(poi: int = -1) -> bool:
+	if poi < 0 and rift_state() != "ok":
 		return false
+	if poi >= 0 and poi_state(poi) != "ok":
+		return false
+	rift_from = phase
+	rift_poi = poi
 	checkpoint()   # 进副本前存档（存的是进入前的状态：灯芯未扣）
 	var dg: Dictionary = GameData.DG
 	wicks -= int(dg.wick.riftCost)
 	wick_spent_rift += 1
 	rift_entries += 1
 	var entry_no := rift_entries
-	gift_pending = false       # 进入即放弃本段段间的三选一
+	if poi < 0:
+		gift_pending = false       # 进入即放弃本段段间的三选一
 	shop_open = false
 	rift_ret = Vector2(px, py)
 	rift_hp_before = hp
@@ -2086,7 +2168,7 @@ func _step_rift(dt: float) -> void:
 func _rift_end(ok: bool, how: String, hp_ref: float) -> void:
 	var dg: Dictionary = GameData.DG
 	var entry_no := rift_entries
-	var rec := {"break": break_idx, "entry": entry_no, "ok": ok, "how": how, "t": rift_t, "target": rift_target, "limit": rift_limit,
+	var rec := {"break": break_idx, "poi": rift_poi, "entry": entry_no, "ok": ok, "how": how, "t": rift_t, "target": rift_target, "limit": rift_limit,
 		"dps_est": rift_dps_est, "warden_hp": (rift_warden.maxhp if rift_warden != null else 0.0), "dealt": rift_dmg_dealt, "hp_in": rift_hp_before, "hp_out": 0.0, "artifact": "", "levels": levels.duplicate(), "evo": evo.duplicate(), "by": rift_by.duplicate(), "parts": rift_parts.duplicate()}
 	for e2: SimEnemy in enemies:
 		e2.alive = false
@@ -2097,7 +2179,7 @@ func _rift_end(ok: bool, how: String, hp_ref: float) -> void:
 	trails.clear()
 	lei_queue.clear()
 	rift_warden = null
-	phase = PH_BREAK
+	phase = rift_from
 	px = rift_ret.x
 	py = rift_ret.y
 	invuln = dg.rift.exitInvuln
@@ -2131,7 +2213,7 @@ func _rift_end(ok: bool, how: String, hp_ref: float) -> void:
 				_ev("banner", "遗宝 • %s" % GameData.RELIC_BY_ID[rid].name, "#ffc977")
 	else:
 		rift_fails += 1
-		rift_sealed[break_idx] = true
+		rift_sealed[100 + rift_poi if rift_poi >= 0 else break_idx] = true
 		var base := hp_ref
 		hp = maxf(1.0, base * (1.0 - float(dg.rift.failHpLoss)))
 	threat_next += 1   # 出副本后下一段威胁预算 +1 档
@@ -2236,7 +2318,7 @@ func duel_warden(build: Dictionary, entry: int, with_sword: bool) -> void:
 
 const SAVE_KEYS := ["seed_v", "phase", "t", "real_t", "seg", "kills", "coins", "level", "xp", "need", "pending_lv", "hp", "px", "py", "levels", "evo", "relics",
 	"wicks", "artifact", "rift_entries", "rift_clears", "rift_sealed", "threat_next", "threat_cur", "rerolls", "revive", "bonus_soul", "break_idx", "gift_pending", "shop",
-	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw"]
+	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock"]
 
 
 ## 检查点存档：只在「段/段间」两种阶段落档；恢复时妖物/弹幕清空，从该点继续（局内中断续档）

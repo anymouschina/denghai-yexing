@@ -85,6 +85,12 @@ func _build_left() -> void:
 		var bc := UI.button("继续本局（第 %d 段 • Lv %d）" % [int(save.run.get("seg", 0)) + 1, int(save.run.get("level", 1))], Vector2(320, 62), true, 26)
 		bc.pressed.connect(_continue)
 		col.add_child(bc)
+	var bm := UI.button(_mode_label(), Vector2(320, 46), false, 22)
+	bm.pressed.connect(func():
+		save["mode"] = "quick" if String(save.get("mode", "full")) == "full" else "full"
+		SaveData.write_save(save)
+		bm.text = _mode_label())
+	col.add_child(bm)
 	var b1 := UI.button("开始夜行" if not has_run else "新开一局", Vector2(320, 62), not has_run, 32)
 	b1.pressed.connect(_start)
 	col.add_child(b1)
@@ -151,6 +157,10 @@ func _refresh_record() -> void:
 	rec_labels[0].text = UI.fmt_time(float(save.best))
 	rec_labels[1].text = str(int(save.soul))
 	rec_labels[2].text = "%d / %d" % [int(save.wins), int(save.runs)]
+
+
+func _mode_label() -> String:
+	return "模式：完整夜行 • 30分钟" if String(save.get("mode", "full")) == "full" else "模式：疾速试炼 • 10分钟"
 
 
 func _snd_label() -> String:
