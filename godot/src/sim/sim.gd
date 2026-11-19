@@ -66,6 +66,8 @@ var meta: Dictionary = {"maxHp": 0.0, "dmg": 0.0, "speed": 0.0, "pickup": 0.0, "
 var rerolls := 2
 var choice: Dictionary = {}
 var choice_serial := 0
+var cp_serial := 0
+var announced: Dictionary = {}
 var shop_serial := 0
 var death_cause := ""
 var last_src := ""
@@ -87,6 +89,7 @@ var moving := false
 var stun := 0.0
 var revive := 0
 var hurt_flash := 0.0
+var vel := Vector2.ZERO
 
 # ---- 汇总数值 ----
 var s_speed := 215.0
@@ -384,6 +387,9 @@ func _step_combat(dt: float) -> void:
 	_update_pickups(dt)
 	_update_teles(dt)
 	_update_lamps(dt)
+	if phase == PH_SEG and t >= float(GameData.SEG.segments[seg].to) - 20.0 and not announced.has(seg):
+		announced[seg] = true
+		_ev("banner", "20 秒后清场 · 场地中央将裂开「灯骸裂隙」", "#d9b8ff")
 	if phase == PH_SEG and t >= float(GameData.SEG.segments[seg].to):
 		_start_break(seg)
 
@@ -472,26 +478,24 @@ func _update_player(dt: float) -> void:
 		var mulc := float(GameData.DG.rift.dashCdMul) if phase == PH_RIFT else 1.0
 		dash_cd = s_dash_cd * mulc
 		_ev("dash")
-	var sp := s_speed
-	var vx := mv.x
-	var vy := mv.y
+	var M: Dictionary = GameData.MV
 	if dash_t > 0.0:
 		dash_t -= dt
-		vx = dash_dx
-		vy = dash_dy
-		sp *= P.dashSpeed
+		var dn := Vector2(dash_dx, dash_dy).normalized()
+		vel = dn * s_speed * P.dashSpeed
 	else:
-		sp *= ln if ln > 0.0 else 0.0
+		# 目标速度 = 摇杆/按键向量(已限长 1) × 速度；向目标做线性加减速（accelTime / decelTime 外置）
+		var tv := mv * s_speed
 		if stun > 0.0:
-			sp *= P.stunSlow
-	if dash_t > 0.0 or moving:
-		var nv := Vector2(vx, vy)
-		if dash_t > 0.0:
-			nv = nv.normalized()
+			tv *= P.stunSlow
+		var rate_t: float = float(M.accelTime) if tv.length() > vel.length() - 0.01 and moving else float(M.decelTime)
+		if rate_t <= 0.0:
+			vel = tv
 		else:
-			nv = nv.normalized() if nv.length() > 0.001 else nv
-		px += nv.x * sp * dt
-		py += nv.y * sp * dt
+			vel = vel.move_toward(tv, s_speed / rate_t * dt)
+	if vel.length_squared() > 0.0001:
+		px += vel.x * dt
+		py += vel.y * dt
 		_clamp_player()
 
 
@@ -649,7 +653,7 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 	if dist < 0.0:
 		dist = WV.spawnDist
 	var is_boss: bool = opts.get("boss", false)
-	var def: Dictionary = EN.boss if is_boss else EN[type]
+	var def: Dictionary = EN.boss if is_boss else (opts.def if opts.has("def") else EN[type])
 	var el: Dictionary = EN.elites[type] if opts.get("elite", false) else {}
 	if opts.has("el"):
 		el = opts.el
@@ -715,6 +719,8 @@ func damage(e: SimEnemy, base: float, weapon: String, o: Dictionary = {}) -> voi
 	var synergy := weapon == "lei" and e.burn_t > 0.0 and lv("leiyin") > 0
 	if synergy:
 		dmg *= 1.0 + GameData.BAL.lei.burnBonus
+	if e.stagger_t > 0.0:
+		dmg *= float(GameData.DG.warden.lunge.staggerTakenMul)
 	if e.armor > 0.0 and not o.has("pierce"):
 		dmg *= 1.0 - e.armor
 	e.hp -= dmg
@@ -1213,6 +1219,11 @@ func _update_enemies(dt: float) -> void:
 						e.timer = e.def.fuse
 						_add_tele(e.x, e.y, e.def.blastR, e.def.fuse, Callable(), e)
 						_ev("sfx", "warn")
+			"swordwarden":
+				var wv := _swordwarden_ai(e, dt, ux, uy, dist)
+				vx = wv.x
+				vy = wv.y
+				e.lift = sin(real_t * 2.0) * 8.0
 			"boss":
 				_boss_ai(e, dt)
 				if e.warn_t > 0.0:
@@ -1272,6 +1283,87 @@ func _update_enemies(dt: float) -> void:
 			continue
 		alive_list.append(e)
 	enemies = alive_list
+
+
+func warden_blade_pos(e: SimEnemy, i: int) -> Vector2:
+	var C: Dictionary = GameData.DG.warden
+	var a := e.blade_ang + float(i) / float(C.blades) * TAU
+	return Vector2(e.x + cos(a) * float(C.bladeRx), e.y - e.h * 0.45 + sin(a) * float(C.bladeRy))
+
+
+func _swordwarden_ai(e: SimEnemy, dt: float, ux: float, uy: float, dist: float) -> Vector2:
+	var C: Dictionary = GameData.DG.warden
+	var L: Dictionary = C.lunge
+	e.stagger_t = maxf(0.0, e.stagger_t - dt)
+	e.blade_hit_cd = maxf(0.0, e.blade_hit_cd - dt)
+	for i in range(int(C.blades)):
+		e.blade_down[i] = maxf(0.0, float(e.blade_down[i]) - dt)
+	# 御剑环身：三把灵剑绕它回旋，触碰受伤；玩家的飞剑回旋碰到灵剑会把它击落一阵（剑碰剑）
+	if e.blades_t > 0.0:
+		e.blades_t -= dt
+		e.blade_ang += float(C.bladeW) * dt
+		for i in range(int(C.blades)):
+			if float(e.blade_down[i]) > 0.0:
+				continue
+			var bp := warden_blade_pos(e, i)
+			if has_sword() and sw_state == SW_ORBIT and Vector2(sw_x, sw_y).distance_to(bp) < float(C.clashR):
+				e.blade_down[i] = float(C.clashDown)
+				_ev("clash", bp.x, bp.y)
+				continue
+			if e.blade_hit_cd <= 0.0 and not over and bp.distance_to(Vector2(px, py - 34.0)) < float(C.bladeHitR):
+				hurt_player(float(C.bladeDmg), bp.x, bp.y, "warden:blade")
+				e.blade_hit_cd = float(C.bladeHitCd)
+	# 回鞘突刺：红线预警 → 沿锁定方向冲撞 → 冲完露出破绽（承伤 ×staggerTakenMul）
+	if e.state == "lunge":
+		e.timer -= dt
+		if not e.lunge_hit and not over and Vector2(px, py - 20.0).distance_to(Vector2(e.x, e.y - 20.0)) < e.r + 22.0 + float(L.width) * 0.5:
+			e.lunge_hit = true
+			hurt_player(float(L.dmg), e.x, e.y, "warden:lunge")
+		if e.timer <= 0.0:
+			e.state = "move"
+			e.stagger_t = float(L.stagger)
+			_ev("stagger", e.x, e.y)
+		return e.lunge_dir * float(L.speed)
+	if e.warn_t > 0.0:
+		e.warn_t -= dt
+		if e.warn_t <= 0.0:
+			e.state = "lunge"
+			e.timer = float(L.len) / float(L.speed)
+			e.lunge_hit = false
+		return Vector2.ZERO
+	if e.stagger_t > 0.0:
+		return Vector2.ZERO
+	var dirp := Vector2(ux, uy)
+	var v := dirp * e.speed
+	if dist < 170.0:
+		v = -dirp * e.speed * 0.5
+	elif dist < 280.0:
+		v = Vector2(-uy, ux) * e.speed * 0.6
+	e.atk_t -= dt
+	if e.atk_t <= 0.0:
+		e.atk_t = float(C.cycleGap)
+		match e.atk_idx % 3:
+			0:
+				e.blades_t = float(C.orbitTime)
+				e.blade_down = [0.0, 0.0, 0.0]
+				_ev("sfx", "warn")
+			1:
+				e.lunge_dir = Vector2(px - e.x, py - 20.0 - (e.y - 20.0)).normalized()
+				e.warn_t = float(L.warn)
+				_ev("sfx", "warn")
+			2:
+				var R: Dictionary = C.rain
+				for k in range(int(R.count)):
+					var rx := px + (0.0 if k == 0 else (rng.randf() - 0.5) * 2.0 * float(R.spread))
+					var ry := py + (0.0 if k == 0 else (rng.randf() - 0.5) * 2.0 * float(R.spread) * 0.7)
+					var rcb := func() -> void:
+						_ev("shock", rx, ry, float(R.r))
+						if Vector2(px - rx, py - ry).length() < float(R.r) + 8.0:
+							hurt_player(float(R.dmg), rx, ry, "warden:rain")
+					_add_tele(rx, ry, float(R.r), float(R.warn) + k * 0.1, rcb, null)
+				_ev("sfx", "warn")
+		e.atk_idx += 1
+	return v
 
 
 func _elite_slam(e: SimEnemy, dt: float, dist: float) -> void:
@@ -1673,6 +1765,8 @@ func choose(i: int) -> void:
 	invuln = maxf(invuln, 0.5)
 	choice = {}
 	_ev("choice_done", kind)
+	if kind != "gift":
+		checkpoint()
 	if kind == "gift":
 		gift_pending = false
 		_advance()
@@ -1744,6 +1838,8 @@ func _start_break(k: int) -> void:
 		_ev("banner", "灯芯 +1 • 决战在即", "#ffc977")
 	_ev("break_start", k)
 	_roll_shop()
+	_ev("banner", "灯骸裂隙已开启 · 走到场地中央的紫色光柱站定进入" if rift_state() == "ok" else ("灯弱，不可入裂隙（生命需不低于 60%）" if rift_state() == "weak" else "裂隙不可进入"), "#d9b8ff")
+	checkpoint()
 	if sw_state == SW_ORBIT or sw_state == SW_RECALL:
 		sw_state = SW_CD
 		sw_t = 0.5
@@ -1849,6 +1945,7 @@ func _advance() -> void:
 		spawn_t = 1.0
 		_ev("seg_start", seg)
 	break_idx = -1
+	checkpoint()
 
 
 func buy_relic(i: int) -> bool:
@@ -1877,6 +1974,7 @@ func close_shop() -> void:
 func enter_rift() -> bool:
 	if rift_state() != "ok":
 		return false
+	checkpoint()   # 进副本前存档（存的是进入前的状态：灯芯未扣）
 	var dg: Dictionary = GameData.DG
 	wicks -= int(dg.wick.riftCost)
 	wick_spent_rift += 1
@@ -1905,24 +2003,17 @@ func enter_rift() -> bool:
 	rift_dps_est = build_dps()
 	rift_parts = dps_parts()
 	rift_by = {}
-	# 守关者：现有行为原型（跳尸王）+ 3 词缀 + 1.3 倍体型；血量 = 当前 DPS × 目标击杀时长
+	# 守关者：剑冢「剑灵」——专属机制（御剑环身 / 回鞘突刺 / 剑雨），血量 = 当前 DPS × 目标击杀秒数
 	var wd: Dictionary = dg.warden
-	var base_el: Dictionary = GameData.EN.elites[wd.base].duplicate()
-	base_el.scale = wd.scale
-	base_el.xp = 0
-	base_el.armor = wd.armor
-	base_el.hp = rift_dps_est * rift_target
-	base_el.name = "守关者"
-	var w := spawn_enemy(wd.base, -1.0, -1.0, {"el": base_el, "pos": c + Vector2(float(dg.rift.spawnDist) - 0.0, 0.0), "warden": true})
+	var wdef := {"name": wd.name, "tex": wd.tex, "h": wd.h, "r": wd.r, "hp": 1, "speed": wd.speed, "dmg": wd.dmg, "xp": 0, "ai": "swordwarden", "faceRight": true, "knock": 0.0, "fx": "spark"}
+	var base_el := {"name": wd.name, "scale": wd.scale, "hp": rift_dps_est * rift_target, "dmg": wd.dmg, "speed": wd.speed, "xp": 0, "armor": wd.armor, "glow": 0}
+	var w := spawn_enemy("swordwarden", -1.0, -1.0, {"el": base_el, "def": wdef, "pos": c + Vector2(float(dg.rift.spawnDist), 0.0), "warden": true})
 	w.warden = true
-	w.swift = true
-	w.quake = true
-	w.ember = true
-	w.speed *= float(wd.affixes[0].speedMul)
-	w.ember_t = float(wd.affixes[2].ringCd) * 0.6
+	w.atk_t = 1.5
 	w.maxhp = w.hp
 	rift_warden = w
 	_ev("rift_enter", entry_no)
+	_ev("banner", "剑灵现身 • 御剑环身 / 回鞘突刺（之后露破绽）/ 剑雨", "#9fe8ff")
 	return true
 
 
@@ -1990,6 +2081,7 @@ func _rift_end(ok: bool, how: String, hp_ref: float) -> void:
 	rift_log.append(rec)
 	hold.clear()
 	_ev("rift_exit", ok, how)
+	checkpoint()
 
 
 # ======================================================================
@@ -2082,6 +2174,70 @@ func duel_warden(build: Dictionary, entry: int, with_sword: bool) -> void:
 		artifact = "sword"
 		sw_state = SW_STOW
 	enter_rift()
+
+
+const SAVE_KEYS := ["seed_v", "phase", "t", "real_t", "seg", "kills", "coins", "level", "xp", "need", "pending_lv", "hp", "px", "py", "levels", "evo", "relics",
+	"wicks", "artifact", "rift_entries", "rift_clears", "rift_sealed", "threat_next", "threat_cur", "rerolls", "revive", "bonus_soul", "break_idx", "gift_pending", "shop",
+	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced"]
+
+
+## 检查点存档：只在「段/段间」两种阶段落档；恢复时妖物/弹幕清空，从该点继续（局内中断续档）
+func checkpoint() -> void:
+	if phase != PH_SEG and phase != PH_BREAK:
+		return
+	if over or ended:
+		return
+	cp_serial += 1
+
+
+func to_save() -> Dictionary:
+	var d := {}
+	for k in SAVE_KEYS:
+		var v: Variant = get(k)
+		d[k] = v.duplicate(true) if (v is Dictionary or v is Array) else v
+	d["ver"] = 2
+	return d
+
+
+func from_save(d: Dictionary) -> void:
+	for k in SAVE_KEYS:
+		if not d.has(k):
+			continue
+		var cur: Variant = get(k)
+		var v: Variant = d[k]
+		if cur is int:
+			v = int(v)
+		elif cur is float:
+			v = float(v)
+		elif cur is Dictionary and k in ["rift_sealed", "announced"]:
+			var nd := {}
+			for kk in v:
+				nd[int(kk)] = true
+			v = nd
+		elif cur is Dictionary:
+			var nd2 := {}
+			for kk in v:
+				nd2[kk] = (int(v[kk]) if k == "levels" else v[kk])
+			v = nd2
+		set(k, v)
+	rng.seed = seed_v + int(real_t * 10.0)
+	_recalc()
+	hp = minf(float(d.get("hp", maxhp)), maxhp)
+	enemies.clear(); ebullets.clear(); bullets.clear(); pickups.clear(); teles.clear(); trails.clear(); lei_queue.clear()
+	boss = null
+	var events: Array = GameData.WV.events
+	event_idx = 0
+	while event_idx < events.size() and float(events[event_idx].at) <= t and events[event_idx].kind != "boss":
+		event_idx += 1
+	spawn_t = 1.0
+	invuln = 2.0
+	vel = Vector2.ZERO
+	if artifact == "sword":
+		sw_state = SW_STOW
+		sw_cd = 0.0
+	hold.clear()
+	shop_open = false
+	choice = {}
 
 
 func snapshot() -> Dictionary:

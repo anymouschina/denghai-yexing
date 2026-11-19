@@ -206,11 +206,11 @@ func _draw_hud() -> void:
 	var title := ""
 	match sim.phase:
 		Sim.PH_SEG:
-			title = "%s  •  第 %d / 3 段" % [GameData.SEG.segments[sim.seg].name, sim.seg + 1]
+			title = "%s  •  第 %d / 3 段  •  裂隙 %s 后开启" % [GameData.SEG.segments[sim.seg].name, sim.seg + 1, UI.fmt_time(maxf(0.0, float(GameData.SEG.segments[sim.seg].to) - sim.t))]
 		Sim.PH_BREAK:
 			title = "段间 • 清场  •  %s 后自动启程" % UI.fmt_time(maxf(0.0, float(GameData.SEG["break"].max) - sim.break_t))
 		Sim.PH_RIFT:
-			title = "灯骸裂隙 • 守关者"
+			title = "灯骸裂隙 • 剑灵"
 		Sim.PH_BOSS:
 			title = "终局 • 灯骸老祖"
 	_text(Vector2(cx - 300, T + 68 * k), title, _fs(20), UI.GOLD, 600.0, HORIZONTAL_ALIGNMENT_CENTER)
@@ -222,7 +222,7 @@ func _draw_hud() -> void:
 		if sim.rift_warden != null:
 			var w := sim.rift_warden
 			_bar(Rect2(cx - 240, yb + 28, 480, 16), w.hp / maxf(1.0, w.maxhp), Color("b36bff"))
-			_text(Vector2(cx - 300, yb + 62), "守关者 • 迅捷 • 震地 • 灯焰", _fs(17), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER)
+			_text(Vector2(cx - 300, yb + 62), "剑冢守关者「剑灵」• 御剑环身 • 回鞘突刺 • 剑雨", _fs(17), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER)
 		_text(Vector2(cx - 340, yb + 84), "无补给 • 无三选一 • 骨灯全熄 • 冲刺冷却×1.25 • 受击硬直×1.2", _fs(15), Color("ff9a8a"), 680.0, HORIZONTAL_ALIGNMENT_CENTER)
 	elif sim.boss != null and sim.boss.alive:
 		var b := sim.boss
@@ -230,6 +230,20 @@ func _draw_hud() -> void:
 		_text(Vector2(cx - 300, yb + 50), "灯骸老祖", _fs(20), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER)
 	elif sim.phase == Sim.PH_BREAK:
 		_text(Vector2(cx - 420, yb + 22), "站定「启程」领三选一馈赠；站定「灯骸裂隙」则放弃它 • 游商用灯芯换遗物", _fs(17), UI.PAPER, 840.0, HORIZONTAL_ALIGNMENT_CENTER)
+	# 段间：指向裂隙的箭头（离得远时）+ 状态牌
+	if sim.phase == Sim.PH_BREAK:
+		var rp := sim.break_pos("rift")
+		var dv := rp - Vector2(sim.px, sim.py)
+		var st_ := sim.rift_state()
+		var lab := "灯骸裂隙" if st_ == "ok" else ("灯弱，不可入" if st_ == "weak" else ("灯芯不足" if st_ == "nowick" else "裂隙已封"))
+		if dv.length() > 220.0:
+			var dn := dv.normalized()
+			var ctr := Vector2(vw.x / 2.0, vw.y / 2.0 + 20.0)
+			var ap := ctr + dn * minf(vw.y * 0.34, 230.0)
+			var pul := 1.0 + sin(t * 6.0) * 0.12
+			var perp := Vector2(-dn.y, dn.x)
+			canvas.draw_colored_polygon(PackedVector2Array([ap + dn * 26.0 * pul, ap - dn * 12.0 + perp * 20.0, ap - dn * 12.0 - perp * 20.0]), Color(0.85, 0.6, 1.0, 0.95))
+			_text(ap - dn * 34.0 - Vector2(60, -8), "%s %dm" % [lab, int(dv.length() / 10.0)], _fs(18), Color(0.9, 0.75, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
 	# 底部提示（桌面）
 	if not touch_mode:
 		var tip2 := "WASD / 方向键 移动 • 空格 冲刺 • Esc 暂停"
@@ -453,6 +467,9 @@ func show_pause(on: bool) -> void:
 		game.toggle_mute()
 		b2.text = "声音：%s" % ("关" if Audio.muted else "开"))
 	hb.add_child(b2)
+	var b2s := UI.button("手动存档", Vector2(220, 58))
+	b2s.pressed.connect(func(): game.manual_save())
+	hb.add_child(b2s)
 	var b3 := UI.button("回标题", Vector2(220, 58))
 	b3.pressed.connect(func(): game.to_title())
 	hb.add_child(b3)

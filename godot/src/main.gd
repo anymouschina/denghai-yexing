@@ -33,7 +33,17 @@ func _show_title() -> void:
 	var t := TitleScreen.new()
 	t.touch_mode = touch_mode
 	t.start_pressed.connect(_start_game)
+	t.continue_pressed.connect(_continue_game)
 	_swap(t)
+
+
+func _continue_game() -> void:
+	var sv := SaveData.load_save()
+	var g := GameScreen.new()
+	g.request_title.connect(_show_title)
+	g.request_restart.connect(_start_game)
+	_swap(g)
+	g.start(touch_mode, sv.run)
 
 
 func _start_game() -> void:

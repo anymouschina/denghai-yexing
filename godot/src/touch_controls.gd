@@ -3,8 +3,8 @@ extends CanvasLayer
 ## 触屏控件：左侧浮动虚拟摇杆（死区 14% + 加速曲线）、右下「闪」与「剑」键、右上暂停。
 ## 全部按 touch index 各自追踪（可多点同时按），位置自动避开安全区。
 
-const DEAD := 0.14
-const R := 104.0
+var DEAD: float = GameData.MV.joystick.deadzone
+var R: float = GameData.MV.joystick.radius
 
 var active := false          # 对局中且无弹窗时才响应
 var enabled := false
@@ -87,7 +87,8 @@ func release_all() -> void:
 func _curve(n: float) -> float:
 	if n <= 0.0:
 		return 0.0
-	return minf(1.0, 0.22 + 0.78 * pow(n, 1.25))
+	var J: Dictionary = GameData.MV.joystick
+	return minf(1.0, float(J.curveBase) + (1.0 - float(J.curveBase)) * pow(n, float(J.curvePow)))
 
 
 func _hit(which: String, p: Vector2) -> bool:

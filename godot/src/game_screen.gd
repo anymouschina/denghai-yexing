@@ -18,11 +18,20 @@ var ember_layer: Node2D
 var hit_stop := 0.0
 
 
-func start(p_touch: bool) -> void:
+var last_cp := 0
+var toast: Label
+var toast_t := 0.0
+
+
+func start(p_touch: bool, resume: Dictionary = {}) -> void:
 	touch_mode = p_touch
 	var sv := SaveData.load_save()
 	var seed_v: int = Playtest.seed_value if Playtest.seed_value != 0 else int(Time.get_ticks_usec() & 0x7fffffff)
+	if not resume.is_empty():
+		seed_v = int(resume.get("seed_v", seed_v))
 	sim = Sim.new(seed_v, {"emit": true, "touch": touch_mode, "meta": sv.meta})
+	if not resume.is_empty():
+		sim.from_save(resume)
 	view = WorldView.new()
 	view.name = "World"
 	add_child(view)
@@ -74,9 +83,32 @@ func _draw_embers(c: Node2D) -> void:
 		c.draw_texture_rect(g, Rect2(px - s / 2.0, py - s / 2.0, s, s), false, Color(1.0, 0.7, 0.3, 0.55))
 
 
+func save_run(manual: bool = false) -> bool:
+	if sim.phase != Sim.PH_SEG and sim.phase != Sim.PH_BREAK or sim.over:
+		if manual:
+			_toast("此处不可存档（副本/BOSS 战中），请在战斗段或段间存档")
+		return false
+	var sv := SaveData.load_save()
+	sv["run"] = sim.to_save()
+	SaveData.write_save(sv)
+	_toast("已存档" if manual else "自动存档")
+	return true
+
+
+func _toast(msg: String) -> void:
+	toast.text = msg
+	toast_t = 2.2
+
+
 func _process(delta: float) -> void:
 	if sim == null:
 		return
+	if toast != null and toast_t > 0.0:
+		toast_t -= delta
+		toast.modulate.a = clampf(toast_t / 0.5, 0.0, 1.0)
+	if sim.cp_serial != last_cp:
+		last_cp = sim.cp_serial
+		save_run()
 	# 余烬上飘
 	for e in embers:
 		e.y -= e.v * delta
@@ -142,6 +174,7 @@ func _save_result() -> void:
 	sv.soul = int(sv.soul) + int(r.soul)
 	sv.best = maxi(int(sv.best), int(r.time))
 	sv.runs = int(sv.runs) + 1
+	sv["run"] = {}
 	if r.victory:
 		sv.wins = int(sv.wins) + 1
 	SaveData.write_save(sv)
@@ -171,6 +204,14 @@ func _publish() -> void:
 	snap["sword"] = sim.sw_state
 	snap["wardenHp"] = int(sim.rift_warden.hp) if sim.rift_warden != null else 0
 	snap["rift_log"] = sim.rift_log.size()
+	var lvs := 0
+	for k in sim.levels:
+		lvs += int(sim.levels[k])
+	snap["lvsum"] = lvs
+	snap["relics"] = sim.relics.size()
+	snap["threat"] = sim.threat_next + sim.threat_cur
+	snap["break_idx"] = sim.break_idx
+	snap["breakT"] = snappedf(sim.break_t, 0.1)
 	snap["choices"] = sim.choice.options.size() if not sim.choice.is_empty() else 0
 	if Playtest.enabled:
 		# 只读信息：离主角最近的几只妖物 / 敌弹相对位置（试玩脚本据此“看”局面，不改变任何状态）
@@ -263,6 +304,10 @@ func toggle_mute() -> void:
 	var sv := SaveData.load_save()
 	sv.mute = Audio.muted
 	SaveData.write_save(sv)
+
+
+func manual_save() -> void:
+	save_run(true)
 
 
 func to_title() -> void:

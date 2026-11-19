@@ -139,3 +139,10 @@ tools/export_web.sh      # = godot --headless --path godot --export-release "Web
 ## 10. 已知问题（验收返工记录）
 - 返工修复：点到画布边缘/页面外后画布失焦，键盘事件到不了 Godot（点击后按 Enter/WASD 无反应）。`godot/web/shell.html` 现在在任何指针按下、窗口聚焦、按键时把焦点还给画布；回归脚本 `node tools/e2e_focus.mjs`（点画布右下角再按 Enter，应进入 play）。
 - 构建体积 52MB：其中 `index.wasm` 39.5MB 是官方 Web 导出模板，无法裁剪（需自编译精简模板），超出标准库 40MB 预算，未解决。
+
+## 11. v1.5.1 追加（移动手感 / 副本可见 / 存档 / 剑灵）
+- 手感外置 `godot/data/movement.json`：accelTime 0.07、decelTime 0.025、camFollow 30、摇杆 deadzone/radius/curve。`tests/movement.gd` 实测：斜/直速度比 1.000，松键 2 帧停（旧 1 帧瞬停，起步延迟 1 帧）。
+- 副本：段末 20 秒预告横幅、段间横幅提示、紫色光柱 + 屏幕边箭头指向裂隙。
+- 存档：自动（每段开场/进出副本/升级后）+ 暂停菜单「手动存档」；标题页「继续本局 / 清空存档 / 怎么玩·存档」。Web 存 localStorage 键 `denghai_yexing_save_v15`（同写 user://save.json）。`selftest.gd` 含存档往返断言。
+- 副本守关者改为专属「剑灵」（御剑环身、回鞘突刺后露破绽、剑雨），新素材 `boss_swordwarden.png`；玩家飞剑可击落灵剑。血量系数 `dungeon.json → warden.eff` 重新标定（×0.875），真人代理进 1 次实测 n=120：胜率 51.7%，副本通关率 50.4%。
+- **未完成/未验证**：完整自动化试玩与截图/录像（用户中途要求停止，`tools/e2e_full.mjs` 已写好但未跑通整链，桌面走位实测不可靠，因机器被其他进程占满）；进 0/2 次档与随机/瞄准机器人、3000 局满样本未重跑；性能、探索地图、遗物进化、彩虹葫芦、30 分钟时间轴等 design-v2 内容未做。

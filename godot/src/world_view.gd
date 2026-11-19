@@ -47,7 +47,7 @@ func setup(p_sim: Sim) -> void:
 	for n in ["field", "field2", "field3", "field_rift"]:
 		T[n] = load("res://assets/%s.jpg" % n)
 	for n in ["hero_run", "enemy_paperman", "enemy_foxfire", "enemy_lanternyokai", "enemy_jiangshi", "enemy_firecracker", "boss", "proj_talisman", "proj_flame",
-			"proj_ghostfire", "proj_sword", "fx_thunder", "fx_boom", "drop_soul", "drop_coin", "drop_oil", "drop_chest", "field_lantern", "rift_portal", "merchant"]:
+			"proj_ghostfire", "proj_sword", "boss_swordwarden", "fx_thunder", "fx_boom", "drop_soul", "drop_coin", "drop_oil", "drop_chest", "field_lantern", "rift_portal", "merchant"]:
 		T[n] = load("res://assets/%s.png" % n)
 	for k in SHEETS:
 		T[k] = load(SHEETS[k].tex)
@@ -90,7 +90,7 @@ func tick(delta: float) -> void:
 	var vis := get_viewport_rect().size
 	var target := Vector2(sim.px, sim.py - 30.0)
 	var arena := sim.phase == Sim.PH_RIFT
-	cam_pos = cam_pos.lerp(target, clampf(delta * 7.0, 0.0, 1.0))
+	cam_pos = cam_pos.lerp(target, 1.0 - exp(-delta * float(GameData.MV.camFollow)))
 	var half := vis / 2.0
 	var lo := Vector2(half.x, half.y)
 	var hi := Vector2(Sim.W - half.x, Sim.H - half.y)
@@ -278,6 +278,13 @@ func _consume_events() -> void:
 				Audio.play("thunder", 0.9)
 				_shake(120, 0.003)
 				burst(ev[1] + ev[3].x * 200.0, ev[2] + ev[3].y * 200.0, 14, Color("7fe3ff"), 360.0, 0.45, 0.5)
+			"clash":
+				burst(ev[1], ev[2], 16, Color("bfeaff"), 320.0, 0.4, 0.4)
+				Audio.play("crit")
+				_float(ev[1], ev[2] - 30.0, "击落灵剑", Color("9fe8ff"), 24)
+			"stagger":
+				_shake(150, 0.003)
+				Audio.play("boom", 0.6)
 			"sword_drop":
 				Audio.play("hurt", 0.8)
 				_float(sim.px, sim.py - 110.0, "飞剑坠地", Color("ff9a8a"), 26)
@@ -358,6 +365,7 @@ func _draw_ground_add(c: Node2D) -> void:
 		var rp := sim.break_pos("rift")
 		var pulse := 0.5 + sin(t_anim * 3.0) * 0.12
 		c.draw_texture_rect(g, Rect2(rp.x - 260, rp.y - 200, 520, 400), false, Color(0.75, 0.3, 1.0, pulse))
+		c.draw_texture_rect(g, Rect2(rp.x - 90, rp.y - 900, 180, 960), false, Color(0.7, 0.3, 1.0, 0.55 if sim.rift_state() == "ok" else 0.2))
 		var mp := sim.break_pos("merchant")
 		c.draw_texture_rect(g, Rect2(mp.x - 160, mp.y - 110, 320, 220), false, Color(1.0, 0.7, 0.3, 0.45))
 		var gp := sim.break_pos("gate")
@@ -456,6 +464,9 @@ func _draw_player() -> void:
 
 func _enemy_tex(e: SimEnemy) -> Array:
 	## 返回 [texture, src_rect(or null), frame_w, frame_h, sheet_scale]
+	if e.warden:
+		var wt: Texture2D = T.boss_swordwarden
+		return [wt, null, float(wt.get_width()), float(wt.get_height()), 1.0]
 	if e.boss:
 		var n := int(t_anim * 8.0) % 8
 		return [T.boss_idle, Rect2(n * 236, 0, 236, 384), 236.0, 384.0, 1.05]
@@ -492,8 +503,10 @@ func _draw_enemy(e: SimEnemy) -> void:
 		col = Color(1.0, 0.45, 0.45)
 	if e.state == "fuse":
 		col = Color(1.0, 0.3, 0.3) if int(e.timer * 14.0) % 2 == 0 else Color(1.0, 0.85, 0.85)
+	if e.warden and e.stagger_t > 0.0:
+		col = Color(1.0, 0.95, 0.5) if int(t_anim * 12.0) % 2 == 0 else Color(1.0, 0.8, 0.3)
 	if e.warden:
-		col = col.lerp(Color(0.85, 0.7, 1.0), 0.35)
+		_draw_warden_fx(e)
 	_draw_shadow(e.x, e.y, e.r * 1.3, e.r * 0.6)
 	var x0 := e.x - w / 2.0
 	var y0 := e.y - h * 0.95 - e.lift
@@ -521,6 +534,30 @@ func _draw_enemy(e: SimEnemy) -> void:
 			draw_line(Vector2(px - 4, py + 7), Vector2(px + 4, py - 7), Color(0.5, 0.92, 1.0), 3.0, true)
 	if e.elite or e.boss:
 		_draw_bar(e)
+
+
+func _draw_warden_fx(e: SimEnemy) -> void:
+	var C: Dictionary = GameData.DG.warden
+	var sw: Texture2D = T.proj_sword
+	if e.blades_t > 0.0:
+		for i in range(int(C.blades)):
+			if float(e.blade_down[i]) > 0.0:
+				continue
+			var bp := sim.warden_blade_pos(e, i)
+			var a := e.blade_ang + float(i) / float(C.blades) * TAU
+			var tang := atan2(cos(a) * float(C.bladeRy), -sin(a) * float(C.bladeRx))
+			draw_set_transform(bp, tang, Vector2.ONE)
+			draw_texture_rect(sw, Rect2(-sw.get_width() * 0.3, -sw.get_height() * 0.3, sw.get_width() * 0.6, sw.get_height() * 0.6), false, Color(0.75, 0.55, 1.0))
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if e.warn_t > 0.0:
+		var L: Dictionary = C.lunge
+		var o := Vector2(e.x, e.y - 20.0)
+		var k := 1.0 - e.warn_t / float(L.warn)
+		draw_line(o, o + e.lunge_dir * float(L.len), Color(1.0, 0.3, 0.25, 0.25 + 0.45 * k), float(L.width) * (0.5 + 0.5 * k), true)
+		draw_line(o, o + e.lunge_dir * float(L.len), Color(1.0, 0.8, 0.7, 0.9), 3.0, true)
+	if e.stagger_t > 0.0:
+		draw_string_outline(font, Vector2(e.x - 100, e.y - e.h - 40.0), "破绽！承伤+%d%%" % int((float(C.lunge.staggerTakenMul) - 1.0) * 100.0), HORIZONTAL_ALIGNMENT_CENTER, 200.0, 24, 6, UI.INK)
+		draw_string(font, Vector2(e.x - 100, e.y - e.h - 40.0), "破绽！承伤+%d%%" % int((float(C.lunge.staggerTakenMul) - 1.0) * 100.0), HORIZONTAL_ALIGNMENT_CENTER, 200.0, 24, Color(1.0, 0.9, 0.4))
 
 
 func _draw_bar(e: SimEnemy) -> void:

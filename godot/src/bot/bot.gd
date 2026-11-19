@@ -251,6 +251,18 @@ func _think(s: Sim) -> void:
 				var by: float = b.y + b.vy * ti
 				if (cx2 - bx) * (cx2 - bx) + (cy2 - by) * (cy2 - by) < 42.0 * 42.0:
 					thr += b.dmg * 0.4
+		for e2: SimEnemy in near:
+			if not e2.warden:
+				continue
+			if e2.blades_t > 0.0:
+				for bi in range(int(GameData.DG.warden.blades)):
+					if float(e2.blade_down[bi]) <= 0.0 and c1.distance_to(s.warden_blade_pos(e2, bi) + Vector2(0, 34)) < 70.0:
+						thr += 4.0
+			if e2.warn_t > 0.0 or e2.state == "lunge":
+				var rel := c1 - Vector2(e2.x, e2.y)
+				var along := rel.dot(e2.lunge_dir)
+				if along > -40.0 and along < 600.0 and absf(rel.x * e2.lunge_dir.y - rel.y * e2.lunge_dir.x) < 80.0:
+					thr += 7.0
 		for tl: SimTele in s.teles:
 			if tl.r > 0.0:
 				var td := c2.distance_to(Vector2(tl.x, tl.y))

@@ -3,6 +3,7 @@ extends CanvasLayer
 ## 标题页：主视觉 + Logo + 开始 / 灯坊强化 / 声音；点画面或 Enter / 空格 开始。
 
 signal start_pressed
+signal continue_pressed
 
 var touch_mode := false
 var root: Control
@@ -14,6 +15,7 @@ var press: Label
 var t := 0.0
 var logo2: Label
 var snd_btn: Button
+var run_exists := false
 
 
 func _ready() -> void:
@@ -50,7 +52,7 @@ func _ready() -> void:
 	_build_left()
 	_build_record()
 	Audio.music("title")
-	Playtest.publish({"scene": "title"})
+	Playtest.publish({"scene": "title", "has_run": run_exists})
 
 
 func _build_left() -> void:
@@ -77,7 +79,13 @@ func _build_left() -> void:
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0, 14)
 	col.add_child(gap)
-	var b1 := UI.button("开始夜行", Vector2(320, 62), true, 32)
+	var has_run: bool = save.has("run") and save.run is Dictionary and not (save.run as Dictionary).is_empty()
+	run_exists = has_run
+	if has_run:
+		var bc := UI.button("继续本局（第 %d 段 • Lv %d）" % [int(save.run.get("seg", 0)) + 1, int(save.run.get("level", 1))], Vector2(320, 62), true, 26)
+		bc.pressed.connect(_continue)
+		col.add_child(bc)
+	var b1 := UI.button("开始夜行" if not has_run else "新开一局", Vector2(320, 62), not has_run, 32)
 	b1.pressed.connect(_start)
 	col.add_child(b1)
 	var b2 := UI.button("灯坊 • 强化", Vector2(320, 62), false, 30)
@@ -86,6 +94,15 @@ func _build_left() -> void:
 	snd_btn = UI.button(_snd_label(), Vector2(320, 62), false, 30)
 	snd_btn.pressed.connect(_toggle_sound)
 	col.add_child(snd_btn)
+	var hr := HBoxContainer.new()
+	hr.add_theme_constant_override("separation", 10)
+	var bclr := UI.button("清空存档", Vector2(155, 46), false, 22)
+	bclr.pressed.connect(_clear_save)
+	hr.add_child(bclr)
+	var bhelp := UI.button("怎么玩 / 存档", Vector2(155, 46), false, 22)
+	bhelp.pressed.connect(_open_help)
+	hr.add_child(bhelp)
+	col.add_child(hr)
 	press = UI.label("— 轻点画面开始 —" if touch_mode else "— 点击画面或按 Enter / 空格 开始 —", 20, UI.GOLD, 5)
 	col.add_child(press)
 	if touch_mode:
@@ -148,6 +165,67 @@ func _toggle_sound() -> void:
 	Audio.play("click")
 
 
+func _primary() -> void:
+	if run_exists:
+		_continue()
+	else:
+		_start()
+
+
+func _continue() -> void:
+	if started:
+		return
+	started = true
+	Audio.play("click")
+	continue_pressed.emit()
+
+
+func _clear_save() -> void:
+	Audio.play("click")
+	SaveData.clear_all()
+	save = SaveData.defaults()
+	Audio.set_muted(false)
+	get_tree().reload_current_scene()
+
+
+func _open_help() -> void:
+	Audio.play("click")
+	if shop != null:
+		return
+	shop = Control.new()
+	shop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(shop)
+	var dim := ColorRect.new()
+	dim.color = Color(0.02, 0.03, 0.09, 0.9)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shop.add_child(dim)
+	var col := VBoxContainer.new()
+	col.set_anchors_preset(Control.PRESET_FULL_RECT)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 8)
+	shop.add_child(col)
+	var lines := [
+		["怎 么 玩 / 存 档", 46, UI.GOLD],
+		["移动：WASD/方向键（触屏：左半屏摇杆）  •  冲刺：空格（触屏「闪」）  •  飞剑：E/J（触屏「剑」）", 20, UI.PAPER],
+		["每段 160 秒，段末清场；场地中央出现紫色光柱的「灯骸裂隙」，站定 1 秒进入（耗 1 灯芯、放弃本段三选一）", 20, UI.PAPER],
+		["游商用灯芯换遗物；右侧「启程」领三选一馈赠后进入下一段；3 段之后是 BOSS", 20, UI.PAPER],
+		["怎么存档：每段开场/进出裂隙/升级选择后自动存档；暂停菜单有「手动存档」", 22, UI.GHOST],
+		["存在哪：Web 版存在浏览器 localStorage 键 denghai_yexing_save_v15（同时写 Godot 的 user://save.json）", 22, UI.GHOST],
+		["怎么续档：刷新或重开页面后，标题页点「继续本局」；从最近的检查点继续", 22, UI.GHOST],
+		["怎么清档：标题页点「清空存档」（会同时清掉魂火与强化，不可恢复）", 22, UI.GHOST],
+	]
+	for ln in lines:
+		var l := UI.label(ln[0], ln[1], ln[2], 5)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size = Vector2(1000, 0)
+		col.add_child(l)
+	var back := UI.button("返回", Vector2(240, 54), true, 26)
+	back.pressed.connect(_close_shop)
+	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(back)
+
+
 func _start() -> void:
 	if started:
 		return
@@ -172,14 +250,14 @@ func _input(ev: InputEvent) -> void:
 		if k == KEY_ESCAPE and shop != null:
 			_close_shop()
 		elif (k == KEY_ENTER or k == KEY_KP_ENTER or k == KEY_SPACE) and shop == null:
-			_start()
+			_primary()
 		elif k == KEY_M:
 			_toggle_sound()
 	elif ev is InputEventMouseButton and ev.pressed and shop == null:
 		# 点在空白处（没有被按钮等控件接住）才算“点击画面开始”
 		var hov := root.get_viewport().gui_get_hovered_control()
 		if not (hov is Button):
-			_start()
+			_primary()
 
 
 # ---------------- 灯坊（局外强化）----------------

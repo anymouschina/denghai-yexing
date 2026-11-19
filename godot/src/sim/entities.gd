@@ -51,6 +51,13 @@ var lift := 0.0
 var squash := 1.0
 var scale_mul := 1.0
 # 守关者词缀
+var stagger_t := 0.0
+var blades_t := 0.0
+var blade_ang := 0.0
+var blade_down: Array = [0.0, 0.0, 0.0]
+var blade_hit_cd := 0.0
+var lunge_dir := Vector2.RIGHT
+var lunge_hit := false
 var swift := false
 var quake := false
 var ember := false

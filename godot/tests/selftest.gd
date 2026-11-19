@@ -82,9 +82,23 @@ func _init() -> void:
 	ok(b.phase == Sim.PH_RIFT and b.rift_warden != null, "出现 1 个守关者")
 	ok(near(b.rift_warden.maxhp, dps * 55.0, 0.001), "守关者血量 = 当前 DPS × 55s（第一次）  [%.0f = %.1f×55]" % [b.rift_warden.maxhp, dps])
 	ok(b.rift_target == 55.0 and b.rift_limit == 70.0, "第一次：要求 55s 内击杀，限时 70s")
-	ok(near(b.rift_warden.r, GameData.EN.elites.jiangshi.scale * 0 + GameData.EN.jiangshi.r * 1.3, 0.001), "体型 1.3 倍（沿用跳尸王行为原型）")
-	ok(b.rift_warden.swift and b.rift_warden.quake and b.rift_warden.ember, "3 个词缀：迅捷 / 震地 / 灯焰")
-	ok(b.rift_warden.ai == "hop", "沿用现有怪物逻辑（跳尸 hop）")
+	ok(b.rift_warden.ai == "swordwarden" and b.rift_warden.def.tex == "boss_swordwarden", "守关者是专属「剑灵」（不再复用跳尸）")
+	ok(GameData.DG.warden.traits.size() == 3 and int(GameData.DG.warden.blades) == 3, "3 个专属机制：御剑环身 / 回鞘突刺 / 剑雨")
+	b.rift_warden.blades_t = 5.0
+	var bp := b.warden_blade_pos(b.rift_warden, 0)
+	b.px = bp.x; b.py = bp.y + 34.0; b.invuln = 0.0; b.dash_inv = 0.0
+	var hp_bl := b.hp
+	b.step(0.05)
+	ok(b.hp < hp_bl, "御剑：灵剑触碰玩家受伤")
+	b.rift_warden.stagger_t = 1.0
+	var wk0 := b.rift_warden.hp
+	b.damage(b.rift_warden, 100.0, "fu", {"noCrit": true, "pierce": true})
+	var d_st := wk0 - b.rift_warden.hp
+	b.rift_warden.stagger_t = 0.0
+	wk0 = b.rift_warden.hp
+	b.damage(b.rift_warden, 100.0, "fu", {"noCrit": true, "pierce": true})
+	ok(near(d_st / (wk0 - b.rift_warden.hp), float(GameData.DG.warden.lunge.staggerTakenMul), 0.001), "突刺后破绽：承伤 ×1.35")
+	b.px = Sim.W / 2.0 - 260.0; b.py = Sim.H / 2.0
 	# 副本内约束
 	b.dash_cd = 0.0
 	b.in_dash = true
@@ -271,6 +285,25 @@ func _init() -> void:
 	var r2 := _run_fixed(777)
 	ok(r1 == r2, "同种子两次模拟结果一致 (%s)" % r1)
 
+	print("== 存档往返 ==")
+	var sv1 := fresh(5)
+	to_break(sv1, 1)
+	sv1.levels = {"fu": 4, "lei": 2}
+	sv1.relics = ["mirror"]
+	sv1.wicks = 1
+	sv1.artifact = "sword"
+	sv1.rift_entries = 1
+	sv1.rift_sealed = {0: true}
+	sv1.hp = 77.0
+	sv1.level = 9
+	var blob := JSON.stringify(sv1.to_save())
+	var sv2 := Sim.new(5)
+	sv2.from_save(JSON.parse_string(blob))
+	ok(sv2.phase == Sim.PH_BREAK and sv2.seg == 1 and sv2.break_idx == 1, "段位/段间序号一致")
+	ok(near(sv2.hp, 77.0) and sv2.level == 9, "生命/等级一致")
+	ok(sv2.levels.get("fu") == 4 and sv2.levels.get("lei") == 2, "已选升级一致")
+	ok(sv2.relics == ["mirror"] and sv2.wicks == 1 and sv2.artifact == "sword", "遗物/灯芯/法宝一致")
+	ok(sv2.rift_entries == 1 and sv2.rift_sealed.has(0) and sv2.rift_state() != "none", "副本已用次数/封闭状态一致")
 	print("== 小结 ==")
 	print("通过 %d 项，失败 %d 项" % [passes, fails])
 	quit(1 if fails > 0 else 0)
