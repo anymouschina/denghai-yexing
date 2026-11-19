@@ -175,6 +175,8 @@ func _init() -> void:
 	ok(g.phase == Sim.PH_BREAK, "击杀守关者 〉 回到段间")
 	ok(g.artifact == "sword" and g.has_sword(), "拿到唯一法宝《飞剑术》")
 	ok(g.rift_state() == "ok", "成功不封闭裂隙入口（同段仍可…受 2 次上限约束）")
+	ok(not g.choice.is_empty() and g.choice.kind == "swb" and g.sw_stage == 2, "首次通关：确定性 +1 段（飞剑第 2 阶）并弹出分叉增益")
+	g.choose(0)
 	g.leave_break()
 	ok(g.choice.is_empty() and g.seg == 1, "进过副本：段间三选一已放弃，直接进入下一段")
 	ok(g.threat_cur == 1, "出副本后本段威胁预算 +1 档")
@@ -188,7 +190,7 @@ func _init() -> void:
 	ok(g.rift_target == 70.0 and g.rift_limit == 90.0, "第二次：70s 内击杀，限时 90s")
 	g.damage(g.rift_warden, 1e9, "fu", {"noCrit": true, "pierce": true})
 	g.step(0.05)
-	ok(g.artifact == "sword" and (g.pending_chest == 1 or (not g.choice.is_empty() and g.choice.kind == "chest")), "一局最多 1 件法宝：第二次通关改发宝箱")
+	ok(g.artifact == "sword" and (g.pending_chest == 1 or (not g.choice.is_empty() and g.choice.kind in ["chest", "swb"])), "一局最多 1 件法宝：第二次通关改发宝箱")
 	ok(g.relics.size() == 1, "…外加一件免费遗物")
 	to_break(g, 2)
 	ok(g.rift_state() == "max", "每局最多进 2 次")
@@ -280,6 +282,24 @@ func _init() -> void:
 	h4.hurt_player(3.0, h4.px - 10, h4.py, "paperman:contact")
 	ok(h4.sw_state == Sim.SW_ORBIT, "回旋期间受击不坠地（只有召回瞬间才会）")
 
+	print("== 飞剑阶段 / 融合 ==")
+	ok(g.sw_stage == 3, "第二次通关再 +1 段（第 3 阶）")
+	var q := fresh(9)
+	to_break(q, 1)
+	ok(q.pending_fusion == 1 and q.artifact == "sword" and q.sw_stage == 2, "融合保底：5:20 的段间必出融合，缺飞剑则遗赠第 2 阶")
+	q.step(0.05)
+	ok(q.choice.kind == "fusion" and q.choice.options.size() >= 1, "融合选择出现")
+	q.choose(0)
+	ok(q.fusion != "", "融合已生效：" + q.fusion)
+	q.sw_stage = 5
+	q.px = Sim.W / 2.0; q.py = Sim.H / 2.0
+	q.phase = Sim.PH_SEG
+	var dm := q.spawn_enemy("paperman", -1.0, -1.0, {"pos": Vector2(q.px + 120.0, q.py)})
+	dm.hp = 1e9; dm.maxhp = 1e9; dm.speed = 0.0
+	for i in range(120):
+		q.step(0.05)
+	ok(q.sw_wheel_pos.size() == 3, "阶段3 剑轮 3 把")
+	ok(float(q.dmg_by.get("sw_wheel", 0.0)) > 0.0 and float(q.dmg_by.get("sw_qi", 0.0)) > 0.0 and float(q.dmg_by.get("sw_array", 0.0)) > 0.0, "阶段3/4/5 的攻击方式都实际造成伤害")
 	print("== 确定性 ==")
 	var r1 := _run_fixed(777)
 	var r2 := _run_fixed(777)

@@ -1,0 +1,64 @@
+{
+ "when": "2026-11-19T14:32:16.346Z",
+ "results": [
+  {
+   "N": 50,
+   "size": "1280x720",
+   "gpu": "1",
+   "frames": 479,
+   "fps": 60,
+   "mean_ms": 16.67,
+   "p50_ms": 16.7,
+   "p95_ms": 16.8,
+   "p99_ms": 16.8,
+   "worst_ms": 16.8,
+   "over33_pct": 0,
+   "longtasks": 0,
+   "heap_mb_start": 28.6,
+   "heap_mb_end": 23.9,
+   "entities": {
+    "enemies": 50,
+    "bullets": 34,
+    "ebullets": 0,
+    "pickups": 302
+   },
+   "engine": {
+    "draw_calls": 331,
+    "nodes": 34,
+    "mem_mb": 0,
+    "tex_mb": 74.5,
+    "process_ms": 5.1
+   },
+   "parts": {
+    "fx_add_draw": {
+     "ms_per_call": -1,
+     "calls_per_frame": 0
+    },
+    "ground_add_draw": {
+     "ms_per_call": -0.2,
+     "calls_per_frame": 0
+    },
+    "hud_draw": {
+     "ms_per_call": 0,
+     "calls_per_frame": 0
+    },
+    "hud_tick": {
+     "ms_per_call": 0.2,
+     "calls_per_frame": 0
+    },
+    "sim_step": {
+     "ms_per_call": 1.1,
+     "calls_per_frame": 0
+    },
+    "view_tick": {
+     "ms_per_call": -1.1,
+     "calls_per_frame": 0
+    },
+    "world_draw": {
+     "ms_per_call": 4,
+     "calls_per_frame": 0
+    }
+   }
+  }
+ ]
+}

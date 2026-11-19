@@ -166,6 +166,24 @@ var sw_dir := Vector2.RIGHT
 var sw_hit: Dictionary = {}
 var sw_thrust_fx := 0.0
 var sw_drops := 0
+var sw_stage := 1
+var sw_kills := 0
+var sw_br: Dictionary = {"count": 0, "radius": 0, "cd": 0}
+var sw_log: Array = []
+var pending_sw := 0
+var pending_fusion := 0
+var fusion := ""
+var fusion_t := -1.0
+var sw_thrust2_t := -1.0
+var sw_thrust2_dir := Vector2.LEFT
+var sw_wheel_ang := 0.0
+var sw_wheel_pos: Array = []
+var sw_wheel_hit: Dictionary = {}
+var sw_qi: Array = []
+var sw_qi_t := 1.0
+var sw_array_t := 4.0
+var sw_array_fx := 0.0
+var sw_unlock_seen := 1
 var rift_log: Array = []     # 每次入副本的记录（供平衡统计）
 var rift_deaths := 0
 var rift_fails := 0
@@ -363,7 +381,13 @@ func step(dt: float) -> void:
 	in_dash = false
 	in_skill = false
 	if not over and choice.is_empty():
-		if pending_chest > 0 and phase != PH_RIFT:
+		if pending_fusion > 0 and phase != PH_RIFT:
+			pending_fusion -= 1
+			_open_choice("fusion")
+		elif pending_sw > 0 and phase != PH_RIFT:
+			pending_sw -= 1
+			_open_choice("swb")
+		elif pending_chest > 0 and phase != PH_RIFT:
 			pending_chest -= 1
 			_open_choice("chest")
 		elif pending_lv > 0 and phase != PH_RIFT:
@@ -373,6 +397,8 @@ func step(dt: float) -> void:
 
 
 func _step_combat(dt: float) -> void:
+	if phase != PH_RIFT and real_t >= float(GameData.DG.fusion.atRealSec):
+		_trigger_fusion()
 	if phase != PH_RIFT:
 		t += dt
 	_rebuild_grid()
@@ -764,6 +790,10 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 		return
 	e.alive = false
 	kills += 1
+	if has_sword() and sw_stage < 5:
+		sw_kills += 1
+		if sw_kills >= int(GameData.DG.sword.stages.kills[sw_stage - 1]):
+			_sword_advance("剑意(击杀)")
 	e.mark_t = 0.0
 	_ev("kill", e)
 	if e.warden:
@@ -1046,8 +1076,8 @@ func _update_sword(dt: float) -> void:
 		SW_ORBIT:
 			sw_t -= dt
 			sw_ang += sw.orbitW * dt
-			sw_x = px + cos(sw_ang) * sw.orbitRx
-			sw_y = py - 30.0 + sin(sw_ang) * sw.orbitRy
+			sw_x = px + cos(sw_ang) * sw.orbitRx * sw_rm()
+			sw_y = py - 30.0 + sin(sw_ang) * sw.orbitRy * sw_rm()
 			for e: SimEnemy in _near(sw_x, sw_y + 20.0, 80.0):
 				var last: float = sw_hit.get(e.uid, -10.0)
 				if real_t - last < sw.hitInterval:
@@ -1063,7 +1093,7 @@ func _update_sword(dt: float) -> void:
 				_ev("sword_recall")
 			elif sw_t <= 0.0:
 				sw_state = SW_CD
-				sw_t = sw.cd
+				sw_t = sw.cd * sw_cdm()
 				_ev("sword_back")
 		SW_RECALL:
 			sw_t -= dt
@@ -1073,7 +1103,7 @@ func _update_sword(dt: float) -> void:
 			if sw_t <= 0.0:
 				_sword_thrust()
 				sw_state = SW_CD
-				sw_t = sw.cd
+				sw_t = sw.cd * sw_cdm()
 		SW_DROP:
 			sw_t -= dt
 			if sw_t <= 0.0:
@@ -1087,20 +1117,29 @@ func _update_sword(dt: float) -> void:
 				sw_state = SW_STOW
 				sw_cd = 0.0
 	sw_thrust_fx = maxf(0.0, sw_thrust_fx - dt)
+	_update_sword_stages(dt)
 
 
-func _sword_strike(e: SimEnemy, base: float, thrust: bool) -> void:
+func _sword_strike(e: SimEnemy, base: float, thrust: bool, key: String = "sword", crit: bool = false) -> void:
 	var sw: Dictionary = GameData.DG.sword
 	# 先叠剑痕再结算：本次伤害就吃到新层（+6%/层，5 层封顶）
 	e.marks = mini(int(sw.markMax), e.marks + 1)
 	e.marks_t = sw.markLife
-	damage(e, base * (sw.thrustMul if thrust else 1.0), "sword", {"pierce": true, "kx": e.x - px, "ky": e.y - py, "kb": 60.0})
+	var o := {"pierce": true, "kx": e.x - px, "ky": e.y - py, "kb": 60.0}
+	if crit:
+		o["forceCrit"] = true
+	damage(e, base * (sw.thrustMul if thrust else 1.0), key, o)
 
 
-func _sword_thrust() -> void:
+func _sword_thrust(dir_override: Vector2 = Vector2.ZERO, key: String = "sword") -> void:
 	var sw: Dictionary = GameData.DG.sword
 	sw_thrust_fx = 0.25
-	var d := sw_dir.normalized()
+	var d := (dir_override if dir_override != Vector2.ZERO else sw_dir).normalized()
+	if key == "sword":
+		sw_thrust2_dir = -d
+		if sw_stage >= 2:
+			sw_thrust2_t = float(sw.stages.thrust2.delay)
+	var first := true
 	_ev("sword_thrust", px, py - 30.0, d)
 	var ox := px
 	var oy := py - 30.0
@@ -1115,7 +1154,10 @@ func _sword_thrust() -> void:
 		var perp := absf(vx * d.y - vy * d.x)
 		if perp > sw.thrustHalfW + e.r:
 			continue
-		_sword_strike(e, sw.dmg, true)
+		_sword_strike(e, sw.dmg * (float(sw.stages.thrust2.mul) if key != "sword" else 1.0), true, key)
+		if first and fusion == "lei" and e.alive:
+			first = false
+			_thunder(e, sw.dmg * 0.9, 2, {}, false)
 
 
 # ======================================================================
@@ -1653,6 +1695,10 @@ func _school_weapon(school: String) -> String:
 
 func _open_choice(kind: String) -> void:
 	var opts := roll_choices(kind == "chest")
+	if kind == "swb":
+		opts = swb_options()
+	elif kind == "fusion":
+		opts = fusion_options()
 	if kind == "gift":
 		opts = opts.filter(func(o): return o.kind != "heal")
 		if opts.size() < 3:
@@ -1751,6 +1797,14 @@ func choose(i: int) -> void:
 			hp += u.per.maxHp * (to - from)
 		if c.id == "lei" and from == 0:
 			w_lei = 0.3
+	elif c.kind == "swb":
+		sw_br[c.id] = int(sw_br.get(c.id, 0)) + 1
+		sw_log.append({"t": snappedf(real_t, 0.1), "branch": c.id})
+	elif c.kind == "fus":
+		fusion = c.id
+		fusion_t = real_t
+		sw_log.append({"t": snappedf(real_t, 0.1), "fusion": c.id})
+		_ev("banner", "融合 • %s" % GameData.DG.fusion.names[c.id], "#ffcf5a")
 	elif c.kind == "evo":
 		evo[c.weapon] = true
 		_ev("banner", "进化 • %s" % c.name, "#ffcf5a")
@@ -1773,7 +1827,7 @@ func choose(i: int) -> void:
 
 
 func reroll() -> bool:
-	if choice.is_empty() or rerolls <= 0:
+	if choice.is_empty() or rerolls <= 0 or choice.kind == "swb" or choice.kind == "fusion":
 		return false
 	rerolls -= 1
 	choice_serial += 1
@@ -1837,6 +1891,8 @@ func _start_break(k: int) -> void:
 		wicks += int(GameData.DG.wick.beforeBoss)
 		_ev("banner", "灯芯 +1 • 决战在即", "#ffc977")
 	_ev("break_start", k)
+	if k >= int(GameData.DG.fusion.atBreak):
+		_trigger_fusion()
 	_roll_shop()
 	_ev("banner", "灯骸裂隙已开启 · 走到场地中央的紫色光柱站定进入" if rift_state() == "ok" else ("灯弱，不可入裂隙（生命需不低于 60%）" if rift_state() == "weak" else "裂隙不可进入"), "#d9b8ff")
 	checkpoint()
@@ -2056,8 +2112,10 @@ func _rift_end(ok: bool, how: String, hp_ref: float) -> void:
 			sw_cd = 0.0
 			rec.artifact = "sword"
 			_ev("artifact", "sword")
+			_sword_advance("副本守关者")
 		else:
 			# 法宝一局最多 1 件 〉 第二次通关改发：宝箱 + 一件免费遗物
+			_sword_advance("副本守关者")
 			pending_chest += 1
 			rec.artifact = "chest"
 			var pool: Array = []
@@ -2178,7 +2236,7 @@ func duel_warden(build: Dictionary, entry: int, with_sword: bool) -> void:
 
 const SAVE_KEYS := ["seed_v", "phase", "t", "real_t", "seg", "kills", "coins", "level", "xp", "need", "pending_lv", "hp", "px", "py", "levels", "evo", "relics",
 	"wicks", "artifact", "rift_entries", "rift_clears", "rift_sealed", "threat_next", "threat_cur", "rerolls", "revive", "bonus_soul", "break_idx", "gift_pending", "shop",
-	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced"]
+	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw"]
 
 
 ## 检查点存档：只在「段/段间」两种阶段落档；恢复时妖物/弹幕清空，从该点继续（局内中断续档）
@@ -2238,6 +2296,215 @@ func from_save(d: Dictionary) -> void:
 	hold.clear()
 	shop_open = false
 	choice = {}
+
+
+func sw_rm() -> float:
+	return 1.0 + float(GameData.DG.sword.stages.branch.radius) * float(sw_br.get("radius", 0))
+
+
+func sw_cdm() -> float:
+	return maxf(0.4, 1.0 - float(GameData.DG.sword.stages.branch.cd) * float(sw_br.get("cd", 0)))
+
+
+func sword_unlocked() -> Array:
+	var names: Array = GameData.DG.sword.stages.names
+	return names.slice(0, sw_stage)
+
+
+func swb_options() -> Array:
+	var B: Dictionary = GameData.DG.sword.stages.branch
+	var mx := int(B.maxLv)
+	var opts: Array = []
+	for o in [["count", "剑数 +1", "剑气与剑轮各多一把剑"], ["radius", "回旋扩阔", "回旋/剑轮半径 +%d%%" % int(float(B.radius) * 100.0)], ["cd", "剑意疾速", "飞剑各冷却 -%d%%" % int(float(B.cd) * 100.0)]]:
+		if int(sw_br.get(o[0], 0)) < mx:
+			opts.append({"kind": "swb", "id": o[0], "icon": "sword", "name": o[1], "school": "gen", "rarity": "blue", "lvText": "飞剑分叉增益 Lv %d" % (int(sw_br.get(o[0], 0)) + 1), "desc": o[2]})
+	if opts.is_empty():
+		opts.append({"kind": "swb", "id": "count", "icon": "sword", "name": "剑数 +1", "school": "gen", "rarity": "blue", "lvText": "飞剑分叉增益", "desc": "剑气与剑轮各多一把剑"})
+	return opts
+
+
+func fusion_options() -> Array:
+	var opts: Array = []
+	for w in ["fu", "huanhuo", "lei"]:
+		if lv(w) >= 1 or opts.is_empty() and w == "lei":
+			var F: Dictionary = GameData.DG.fusion
+			opts.append({"kind": "fus", "id": w, "icon": GameData.UPS[w].icon, "name": F.names[w], "school": GameData.UPS[w].school, "rarity": "gold", "lvText": "飞剑 × %s 融合" % GameData.UPS[w].name, "desc": F.desc[w]})
+	if opts.is_empty():
+		var F2: Dictionary = GameData.DG.fusion
+		opts.append({"kind": "fus", "id": "fu", "icon": "fu", "name": F2.names.fu, "school": "fu", "rarity": "gold", "lvText": "飞剑 × 驱邪符 融合", "desc": F2.desc.fu})
+	return opts
+
+
+## 融合触发：局内 5:30（atRealSec）起，在战斗段/段间第一时间出现；缺飞剑则剑冢遗赠第 N 阶保底。每局只触发一次。
+func _trigger_fusion() -> void:
+	if fusion != "" or pending_fusion > 0 or fusion_t >= 0.0:
+		return
+	if artifact == "":
+		artifact = "sword"
+		sw_state = SW_STOW
+		sw_cd = 0.0
+		sw_stage = int(GameData.DG.fusion.guaranteeSwordStage)
+		sw_log.append({"t": snappedf(real_t, 0.1), "stage": sw_stage, "src": "融合保底(剑冢遗赠)"})
+		_ev("artifact", "sword")
+		_ev("banner", "剑冢遗赠 • 飞剑术（第 %d 阶）" % sw_stage, "#7fe3ff")
+	pending_fusion = 1
+
+
+func _sword_advance(src: String) -> void:
+	if not has_sword() or sw_stage >= 5:
+		return
+	sw_stage += 1
+	sw_log.append({"t": snappedf(real_t, 0.1), "stage": sw_stage, "src": src})
+	pending_sw += 1
+	_ev("sword_stage", sw_stage, src)
+
+
+func _update_sword_stages(dt: float) -> void:
+	var sw: Dictionary = GameData.DG.sword
+	var ST: Dictionary = sw.stages
+	sw_array_fx = maxf(0.0, sw_array_fx - dt)
+	# 阶段2：双剑交替——召回刺出后另一把剑反向再刺一次
+	if sw_thrust2_t > 0.0:
+		sw_thrust2_t -= dt
+		if sw_thrust2_t <= 0.0:
+			sw_thrust2_t = -1.0
+			_sword_thrust(sw_thrust2_dir, "sw_thrust2")
+	sw_wheel_pos.clear()
+	if sw_state == SW_DROP or phase == PH_BREAK:
+		return
+	# 阶段3：环身剑轮（贴身持续切割）
+	if sw_stage >= 3:
+		var W: Dictionary = ST.wheel
+		var n := int(W.blades) + int(sw_br.get("count", 0))
+		var rad: float = float(W.radius) * sw_rm()
+		sw_wheel_ang += float(W.spin) * dt
+		for i in range(n):
+			var a := sw_wheel_ang + float(i) / n * TAU
+			var wp := Vector2(px + cos(a) * rad, py - 30.0 + sin(a) * rad * 0.8)
+			sw_wheel_pos.append(wp)
+			for e: SimEnemy in _near(wp.x, wp.y + 20.0, 70.0):
+				var hk := e.uid * 16 + i
+				if real_t - float(sw_wheel_hit.get(hk, -10.0)) < float(W.hitCd):
+					continue
+				if Vector2(e.x - wp.x, e.y - e.h * 0.4 - wp.y).length() > e.r + float(W.hitR):
+					continue
+				sw_wheel_hit[hk] = real_t
+				_sword_strike(e, float(sw.dmg) * float(W.mul), false, "sw_wheel")
+				if fusion == "huanhuo" and e.alive:
+					_fusion_ignite(e)
+		if sw_wheel_hit.size() > 600:
+			sw_wheel_hit.clear()
+	# 阶段4：追踪剑气（自动锁定最近目标、穿透）
+	if sw_stage >= 4:
+		var Q: Dictionary = ST.qi
+		sw_qi_t -= dt
+		if sw_qi_t <= 0.0 and enemies.size() > 0:
+			var picked: Dictionary = {}
+			var fired := 0
+			for k in range(int(Q.count) + int(sw_br.get("count", 0))):
+				var best: SimEnemy = null
+				var bd := float(Q.range) * float(Q.range)
+				for e: SimEnemy in enemies:
+					if not e.alive or picked.has(e.uid):
+						continue
+					var d2 := (e.x - px) * (e.x - px) + (e.y - py) * (e.y - py)
+					if d2 < bd:
+						bd = d2
+						best = e
+				if best == null:
+					break
+				picked[best.uid] = true
+				_spawn_qi(float(Q.speed), atan2(best.y - best.h * 0.4 - (py - 30.0), best.x - px) + (rng.randf() - 0.5) * 0.5, float(sw.dmg) * float(Q.mul), float(Q.life), int(Q.pierce), false, "sw_qi", best)
+				fired += 1
+			if fired > 0:
+				sw_qi_t = float(Q.cd) * sw_cdm()
+				_ev("sword_qi")
+			else:
+				sw_qi_t = 0.3
+	# 阶段5：剑阵爆发（多剑齐射、必定暴击）
+	if sw_stage >= 5:
+		var A: Dictionary = ST.array
+		sw_array_t -= dt
+		if sw_array_t <= 0.0:
+			if nearest_enemy(px, py, float(A.range)) != null:
+				sw_array_t = float(A.cd) * sw_cdm()
+				sw_array_fx = 0.6
+				var n2 := int(A.count) + int(sw_br.get("count", 0)) * 2
+				for i in range(n2):
+					_spawn_qi(float(A.speed), float(i) / n2 * TAU, float(sw.dmg) * float(A.mul), float(A.life), 4, true, "sw_array", null)
+				_ev("sword_array")
+			else:
+				sw_array_t = 0.5
+	_update_qi(dt)
+
+
+func _spawn_qi(speed: float, ang: float, dmg: float, life: float, pierce: int, crit: bool, key: String, tgt: SimEnemy) -> void:
+	if sw_qi.size() >= int(GameData.DG.sword.stages.qi.cap) + 20:
+		return
+	var b := SimBullet.new()
+	b.x = px
+	b.y = py - 30.0
+	b.vx = cos(ang) * speed
+	b.vy = sin(ang) * speed
+	b.dmg = dmg
+	b.life = life
+	b.pierce = pierce
+	b.mark = crit
+	b.ang = ang
+	b.hits = {"key": key}
+	if tgt != null:
+		b.hits["e"] = tgt
+	sw_qi.append(b)
+
+
+func _update_qi(dt: float) -> void:
+	var Q: Dictionary = GameData.DG.sword.stages.qi
+	for i in range(sw_qi.size() - 1, -1, -1):
+		var b: SimBullet = sw_qi[i]
+		var key: String = b.hits.key
+		if key == "sw_qi":
+			var tgt: Variant = b.hits.get("e")
+			if tgt == null or not (tgt as SimEnemy).alive:
+				tgt = nearest_enemy(b.x, b.y, float(Q.range))
+				b.hits["e"] = tgt
+			if tgt != null:
+				var te: SimEnemy = tgt
+				var want := Vector2(te.x - b.x, te.y - te.h * 0.4 - b.y).normalized()
+				var cur := Vector2(b.vx, b.vy)
+				var nd := cur.normalized().lerp(want, clampf(float(Q.turn) * dt, 0.0, 1.0)).normalized() * cur.length()
+				b.vx = nd.x
+				b.vy = nd.y
+				b.ang = nd.angle()
+		b.x += b.vx * dt
+		b.y += b.vy * dt
+		b.life -= dt
+		var dead := b.life <= 0.0
+		if not dead:
+			for e: SimEnemy in _near(b.x, b.y, 70.0):
+				if b.hits.has(e.uid):
+					continue
+				if Vector2(e.x - b.x, e.y - e.h * 0.4 - b.y).length() > e.r + float(Q.hitR):
+					continue
+				b.hits[e.uid] = true
+				_sword_strike(e, b.dmg, false, key, b.mark)
+				if fusion == "fu" and e.alive and e.mark_t <= 0.0:
+					e.mark_t = GameData.EVOS.fu.stats.markDelay
+					e.mark_dmg = b.dmg
+				elif fusion == "huanhuo" and e.alive:
+					_fusion_ignite(e)
+				b.pierce -= 1
+				if b.pierce < 0:
+					dead = true
+					break
+		if dead:
+			sw_qi.remove_at(i)
+
+
+func _fusion_ignite(e: SimEnemy) -> void:
+	if e.burn_t <= 0.0:
+		e.burn_tick = GameData.BAL.burn.tick
+	e.burn_t = GameData.BAL.burn.time
+	e.burn_dps = maxf(s_burn_dps, 10.0)
 
 
 func snapshot() -> Dictionary:

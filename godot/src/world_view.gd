@@ -285,6 +285,19 @@ func _consume_events() -> void:
 			"stagger":
 				_shake(150, 0.003)
 				Audio.play("boom", 0.6)
+			"sword_stage":
+				Audio.play("levelup")
+				ring(sim.px, sim.py - 30.0, 260.0, Color("7fe3ff"))
+				burst(sim.px, sim.py - 40.0, 40, Color("9fe8ff"), 420.0, 0.6, 0.9)
+				if banner_cb.is_valid():
+					var nm: Array = GameData.DG.sword.stages.names
+					banner_cb.call("飞剑升至第 %d 阶 • 解锁「%s」（%s）" % [ev[1], nm[int(ev[1]) - 1], ev[2]], "#7fe3ff")
+			"sword_qi":
+				Audio.play("shoot", 0.7)
+			"sword_array":
+				Audio.play("thunder", 0.9)
+				_shake(160, 0.004)
+				ring(sim.px, sim.py - 30.0, 300.0, Color("bfeaff"))
 			"sword_drop":
 				Audio.play("hurt", 0.8)
 				_float(sim.px, sim.py - 110.0, "飞剑坠地", Color("ff9a8a"), 26)
@@ -347,6 +360,12 @@ func _lamps_lit() -> bool:
 
 
 func _draw_ground_add(c: Node2D) -> void:
+	var t_fx := Time.get_ticks_usec()
+	defer__draw_ground_add(c)
+	PerfStat.add("ground_add_draw", t_fx)
+
+
+func defer__draw_ground_add(c: Node2D) -> void:
 	var g: Texture2D = T.glow
 	# 主角脚下灯光
 	var lit := 0.26 + sin(t_anim * 3.1) * 0.03
@@ -383,30 +402,78 @@ func _draw_shadow(x: float, y: float, rx: float, ry: float, a: float = 0.4) -> v
 	draw_texture_rect(T.glow, Rect2(x - rx, y - ry * 0.5, rx * 2.0, ry), false, Color(0, 0, 0, a))
 
 
+var _keys := PackedInt64Array()
+var _objs: Array = []
+var _cull := Rect2()
+
+
+func _visible(x: float, y: float, margin: float) -> bool:
+	return x > _cull.position.x - margin and x < _cull.end.x + margin and y > _cull.position.y - margin and y < _cull.end.y + margin + 160.0
+
+
+func _push(y: float, kind: int, obj: Variant) -> void:
+	# 按 y 排序：key = (y*4 取整 + 偏移) << 20 | (kind << 16... 下标)，用原生 PackedInt64Array.sort（无闭包、无逐帧数组分配）
+	_keys.append((int(y * 4.0) + 40000) << 20 | _objs.size())
+	_objs.append(obj)
+	_kinds.append(kind)
+
+
+var _kinds := PackedInt32Array()
+
+
 func _draw() -> void:
-	items.clear()
+	var t_draw := Time.get_ticks_usec()
+	# 视口裁剪：只处理镜头范围内（含边距）的实体，屏外不提交绘制
+	var vis := get_viewport_rect().size / maxf(0.01, cam.zoom.x)
+	_cull = Rect2(cam.position - vis / 2.0, vis)
+	_keys.resize(0)
+	_objs.clear()
+	_kinds.resize(0)
 	for lp in _lamp_positions():
-		items.append([lp.y, 0, lp])
+		if _visible(lp.x, lp.y, 200.0):
+			_push(lp.y, 0, lp)
 	for e: SimEnemy in sim.enemies:
-		items.append([e.y, 1, e])
-	items.append([sim.py, 2, null])
+		if e.boss or e.elite or _visible(e.x, e.y, 130.0):
+			_push(e.y, 1, e)
+	_push(sim.py, 2, null)
 	for k: SimPickup in sim.pickups:
-		items.append([k.y + 40.0, 3, k])
+		if _visible(k.x, k.y, 60.0):
+			_push(k.y + 40.0, 3, k)
 	if sim.phase == Sim.PH_BREAK:
-		items.append([sim.break_pos("rift").y, 4, "rift"])
-		items.append([sim.break_pos("merchant").y, 4, "merchant"])
-		items.append([sim.break_pos("gate").y, 4, "gate"])
-	items.sort_custom(func(a, b): return a[0] < b[0])
+		_push(sim.break_pos("rift").y, 4, "rift")
+		_push(sim.break_pos("merchant").y, 4, "merchant")
+		_push(sim.break_pos("gate").y, 4, "gate")
+	_keys.sort()
 	_draw_teles()
-	for it in items:
-		match it[1]:
-			0: _draw_lamp(it[2])
-			1: _draw_enemy(it[2])
+	# 阴影单独一遍：同一张贴图连续提交，Godot 自动合批（原先“阴影-精灵”交替提交，每只妖物打断两次批次，绘制调用 1142@300 只）
+	var t_s := Time.get_ticks_usec()
+	_draw_shadow(sim.px, sim.py, 28.0, 14.0)
+	for e: SimEnemy in sim.enemies:
+		if e.boss or e.elite or _visible(e.x, e.y, 130.0):
+			_draw_shadow(e.x, e.y, e.r * 1.3, e.r * 0.6)
+	PerfStat.add("d_shadow", t_s)
+	for key in _keys:
+		var idx := int(key & 0xFFFFF)
+		var o: Variant = _objs[idx]
+		match _kinds[idx]:
+			0: _draw_lamp(o)
+			1:
+				var t_e := Time.get_ticks_usec()
+				_draw_enemy(o)
+				PerfStat.add("d_enemy", t_e)
 			2: _draw_player()
-			3: _draw_pickup(it[2])
-			4: _draw_zone(it[2])
+			3:
+				var t_k := Time.get_ticks_usec()
+				_draw_pickup(o)
+				PerfStat.add("d_pickup", t_k)
+			4: _draw_zone(o)
+	var t_p := Time.get_ticks_usec()
 	_draw_projectiles()
+	PerfStat.add("d_proj", t_p)
+	var t_f := Time.get_ticks_usec()
 	_draw_floaters()
+	PerfStat.add("d_float", t_f)
+	PerfStat.add("world_draw", t_draw)
 
 
 func _draw_lamp(p: Vector2) -> void:
@@ -449,7 +516,6 @@ func _draw_player() -> void:
 		rot = sin(t_anim * 18.0) * 0.04 + sim.in_move.x * 0.06
 	else:
 		wob = 1.0 + sin(t_anim * 4.0) * 0.025
-	_draw_shadow(sim.px, sim.py, 28.0, 14.0)
 	var w := fw * sc
 	var h := fh * sc * wob
 	draw_set_transform(Vector2(sim.px, sim.py), rot, Vector2.ONE)
@@ -515,7 +581,6 @@ func _draw_enemy(e: SimEnemy) -> void:
 		col = Color(1.0, 0.95, 0.5) if int(t_anim * 12.0) % 2 == 0 else Color(1.0, 0.8, 0.3)
 	if e.warden:
 		_draw_warden_fx(e)
-	_draw_shadow(e.x, e.y, e.r * 1.3, e.r * 0.6)
 	var y0 := e.y - h * 0.95 - e.lift
 	var dst := Anchors.rect(e.x, y0, w, h, _anchor_key(e), flip)
 	if info[1] != null:
@@ -661,6 +726,17 @@ func _draw_projectiles() -> void:
 		draw_set_transform(Vector2(b.x, b.y), t_anim * 6.0, Vector2.ONE)
 		draw_texture_rect(eg, Rect2(-w2 / 2.0, -h2 / 2.0, w2, h2), false, Color.WHITE)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# 剑轮 / 剑气（阶段3-5）
+	var swt: Texture2D = T.proj_sword
+	for wp: Vector2 in sim.sw_wheel_pos:
+		var wa := atan2(wp.y - (sim.py - 30.0), wp.x - sim.px) + PI / 2.0
+		draw_set_transform(wp, wa, Vector2.ONE)
+		draw_texture_rect(swt, Rect2(-swt.get_width() * 0.2, -swt.get_height() * 0.2, swt.get_width() * 0.4, swt.get_height() * 0.4), false, Color(0.8, 1.0, 1.0))
+	for qb: SimBullet in sim.sw_qi:
+		draw_set_transform(Vector2(qb.x, qb.y), qb.ang, Vector2.ONE)
+		var big: float = 0.42 if qb.hits.key == "sw_array" else 0.32
+		draw_texture_rect(swt, Rect2(-swt.get_width() * big / 2.0, -swt.get_height() * big / 2.0, swt.get_width() * big, swt.get_height() * big), false, Color(1.0, 0.9, 0.6) if qb.hits.key == "sw_array" else Color(0.6, 1.0, 1.0))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var fl: Texture2D = T.proj_flame
 	for o in sim.orb_pos:
 		var s := 0.5 + sin(t_anim * 14.0) * 0.05
@@ -696,6 +772,12 @@ func _draw_floaters() -> void:
 
 
 func _draw_fx_add(c: Node2D) -> void:
+	var t_fx := Time.get_ticks_usec()
+	defer__draw_fx_add(c)
+	PerfStat.add("fx_add_draw", t_fx)
+
+
+func defer__draw_fx_add(c: Node2D) -> void:
 	var g: Texture2D = T.glow
 	for gh in ghosts:
 		var a: float = clampf(gh.life / 0.32, 0.0, 1.0) * 0.55
@@ -715,6 +797,14 @@ func _draw_fx_add(c: Node2D) -> void:
 		c.draw_texture_rect(g, Rect2(b.x - 30, b.y - 30, 60, 60), false, Color(0.5, 1.0, 0.7, 0.55))
 	for o in sim.orb_pos:
 		c.draw_texture_rect(g, Rect2(o.x - 44, o.y - 44, 88, 88), false, Color(1.0, 0.55, 0.2, 0.8))
+	# 剑轮/剑气光 + 剑阵环
+	for wp2: Vector2 in sim.sw_wheel_pos:
+		c.draw_texture_rect(g, Rect2(wp2.x - 40, wp2.y - 40, 80, 80), false, Color(0.4, 0.9, 1.0, 0.55))
+	for qb2: SimBullet in sim.sw_qi:
+		c.draw_texture_rect(g, Rect2(qb2.x - 32, qb2.y - 32, 64, 64), false, Color(1.0, 0.85, 0.4, 0.7) if qb2.hits.key == "sw_array" else Color(0.4, 0.95, 1.0, 0.6))
+	if sim.sw_array_fx > 0.0:
+		var ka := sim.sw_array_fx / 0.6
+		c.draw_arc(Vector2(sim.px, sim.py - 30.0), 340.0 * (1.2 - ka), 0, TAU, 64, Color(1.0, 0.9, 0.5, ka), 8.0 * ka + 2.0, true)
 	# 飞剑光
 	if sim.has_sword() and (sim.sw_state == Sim.SW_ORBIT or sim.sw_state == Sim.SW_RECALL):
 		c.draw_texture_rect(g, Rect2(sim.sw_x - 56, sim.sw_y - 56, 112, 112), false, Color(0.4, 0.9, 1.0, 0.7))

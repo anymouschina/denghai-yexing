@@ -99,6 +99,80 @@
   "thrustHalfW": 52,
   "dropTime": 3.0,
   "cd": 2.5,
-  "pierce": true
+  "pierce": true,
+  "stages": {
+   "kills": [
+    300,
+    1000,
+    2400,
+    4800
+   ],
+   "names": [
+    "回旋 • 召回刺出",
+    "双剑交替 • 二次伤害",
+    "环身剑轮",
+    "追踪剑气",
+    "剑阵爆发"
+   ],
+   "need": [
+    "起始",
+    "剑意 300 或击败副本守关者",
+    "剑意 1000 或击败副本守关者",
+    "剑意 2400 或击败副本守关者",
+    "剑意 4800 或击败副本守关者"
+   ],
+   "thrust2": {
+    "delay": 0.22,
+    "mul": 1.0
+   },
+   "wheel": {
+    "blades": 3,
+    "radius": 95,
+    "spin": 6.5,
+    "hitCd": 0.3,
+    "mul": 0.4,
+    "hitR": 34
+   },
+   "qi": {
+    "cd": 2.2,
+    "count": 2,
+    "speed": 720,
+    "life": 1.4,
+    "pierce": 3,
+    "mul": 0.3,
+    "hitR": 30,
+    "turn": 9.0,
+    "range": 650,
+    "cap": 28
+   },
+   "array": {
+    "cd": 10.0,
+    "count": 10,
+    "mul": 0.4,
+    "range": 480,
+    "speed": 800,
+    "life": 1.0
+   },
+   "branch": {
+    "radius": 0.2,
+    "cd": 0.15,
+    "maxLv": 3
+   }
+  }
+ },
+ "fusion": {
+  "atBreak": 1,
+  "names": {
+   "fu": "符剑合璧",
+   "huanhuo": "灯剑合璧",
+   "lei": "雷剑合璧"
+  },
+  "desc": {
+   "fu": "剑气命中留下符印，稍后炸开",
+   "huanhuo": "剑气/剑轮命中点燃妖物",
+   "lei": "召回刺出时引天雷连锁"
+  },
+  "guaranteeSwordStage": 1,
+  "atRealSec": 330
  }
 }

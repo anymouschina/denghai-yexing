@@ -5,6 +5,7 @@ var enabled := false
 var seed_value := 0
 var time_scale := 1.0
 var touch_forced := false
+var bench := 0   # ?bench=N：压测模式（仅试玩桥开启时），把同屏妖物维持在 N 只，满级构筑，玩家不死
 var _last := ""
 
 
@@ -17,6 +18,9 @@ func _ready() -> void:
 	var s := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('seed') || ''", true))
 	if s != "":
 		seed_value = int(s)
+	var bn := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('bench') || ''", true))
+	if enabled and bn != "":
+		bench = clampi(int(bn), 0, 2000)
 	var ts := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('ts') || ''", true))
 	if enabled and ts != "":
 		time_scale = clampf(float(ts), 0.5, 6.0)

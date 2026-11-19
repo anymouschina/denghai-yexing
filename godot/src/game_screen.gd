@@ -103,6 +103,7 @@ func _toast(msg: String) -> void:
 func _process(delta: float) -> void:
 	if sim == null:
 		return
+	PerfStat.frame_done()
 	if toast != null and toast_t > 0.0:
 		toast_t -= delta
 		toast.modulate.a = clampf(toast_t / 0.5, 0.0, 1.0)
@@ -151,21 +152,54 @@ func _process(delta: float) -> void:
 			dt = 0.0
 		if sim.over:
 			dt = delta
+		if Playtest.bench > 0:
+			_bench_keepalive()
 		var ts := Playtest.time_scale
 		var steps := 1
 		if ts > 1.0:
 			steps = int(ceil(ts))
+		var t_sim := Time.get_ticks_usec()
 		for i in range(steps):
 			if dt > 0.0:
 				sim.step(dt * (ts / steps) if ts > 1.0 else dt)
+		PerfStat.add("sim_step", t_sim)
 		if sim.phase == Sim.PH_BOSS and Audio.music_cur != "boss":
 			Audio.music("boss")
 	else:
 		sim.in_dash = false
 		sim.in_skill = false
+	var t_v := Time.get_ticks_usec()
 	view.tick(delta if run else 0.0)
+	PerfStat.add("view_tick", t_v)
+	var t_h := Time.get_ticks_usec()
 	hud.tick(delta)
+	PerfStat.add("hud_tick", t_h)
 	_publish()
+
+
+## 压测：同屏妖物恒为 N（混合种类，含远程/自爆），满级三武器+进化+飞剑，玩家无敌且不升级。只在 ?bench=N 且试玩桥开启时生效。
+func _bench_keepalive() -> void:
+	sim.max_en = Playtest.bench + 40
+	sim.invuln = 1e9
+	sim.pending_lv = 0
+	sim.pending_chest = 0
+	sim.hp = sim.maxhp
+	if sim.t > 140.0:
+		sim.t = 60.0
+	if sim.lv("lei") < 5:
+		sim.levels = {"fu": 5, "huanhuo": 5, "lei": 5, "jishu": 5, "zhongfu": 3, "zhuohun": 5, "tianyou": 3, "leiyin": 3, "tiangang": 5, "taomu": 5}
+		sim.evo = {"fu": true, "huanhuo": true, "lei": true}
+		sim.artifact = "sword"
+		sim.sw_state = Sim.SW_STOW
+		sim._recalc()
+	if sim.t > 20.0 or sim.real_t > 20.0:
+		sim.in_move = Vector2(cos(sim.real_t * 0.5), sin(sim.real_t * 0.7))
+	var types := ["paperman", "foxfire", "paperman", "lantern", "jiangshi", "firecracker", "paperman", "foxfire"]
+	var n := 0
+	while sim.enemies.size() < Playtest.bench and n < 12:
+		sim.spawn_enemy(types[sim.uid_n % types.size()], -1.0, 520.0 + float(sim.uid_n % 7) * 40.0)
+		n += 1
+	# 玩家的无敌不影响敌弹的生成/碰撞逻辑，只是 hurt_player 直接返回（与正常对局同一份更新代码）
 
 
 func _save_result() -> void:
@@ -180,7 +214,18 @@ func _save_result() -> void:
 	SaveData.write_save(sv)
 
 
+var _pub_t := 0.0
+
+
 func _publish() -> void:
+	if not Playtest.enabled:
+		return
+	var now := Time.get_ticks_msec()
+	if now - _pub_t < 150.0 and Playtest.bench == 0 and sim.choice.is_empty():
+		pass
+	elif now - _pub_t < 150.0:
+		return
+	_pub_t = now
 	var scene := "play"
 	if sim.ended:
 		scene = "result"
@@ -231,6 +276,21 @@ func _publish() -> void:
 			if bx * bx + by * by < 300.0 * 300.0:
 				bl.append([int(bx), int(by)])
 		snap["bul"] = bl.slice(0, 8)
+	if Playtest.bench > 0:
+		var pm := {}
+		pm["draw_calls"] = int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+		pm["objects"] = int(Performance.get_monitor(Performance.OBJECT_COUNT))
+		pm["nodes"] = int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
+		pm["mem_mb"] = snappedf(Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0, 0.1)
+		pm["tex_mb"] = snappedf(Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) / 1048576.0, 0.1)
+		pm["process_ms"] = snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.01)
+		pm["fps"] = int(Performance.get_monitor(Performance.TIME_FPS))
+		pm["parts"] = PerfStat.avg
+		snap["perf"] = pm
+		snap["bench_en"] = sim.enemies.size()
+		snap["bench_bul"] = sim.bullets.size()
+		snap["bench_ebul"] = sim.ebullets.size()
+		snap["bench_pk"] = sim.pickups.size()
 	Playtest.publish(snap)
 
 

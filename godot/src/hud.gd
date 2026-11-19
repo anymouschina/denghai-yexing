@@ -140,6 +140,12 @@ var portrait: Texture2D
 
 
 func _draw_hud() -> void:
+	var t_hd := Time.get_ticks_usec()
+	_draw_hud_inner()
+	PerfStat.add("hud_draw", t_hd)
+
+
+func _draw_hud_inner() -> void:
 	var vw := get_viewport().get_visible_rect().size
 	if hurt_flash > 0.0:
 		var a := clampf(hurt_flash / 0.3, 0.0, 1.0) * 0.28
@@ -262,6 +268,18 @@ func _draw_hud() -> void:
 		if touch_mode:
 			st = st.replace("（E / J 出鞘）", "").replace("（再按召回刺出）", "")
 		_text(Vector2(rx, ry + 24 * k), st, _fs(17), UI.GHOST if sim.sw_state != Sim.SW_DROP else UI.BLOOD)
+		# 阶段：第 N 阶 + 已解锁攻击方式 + 下一阶需求
+		var SS: Dictionary = GameData.DG.sword.stages
+		var nms: Array = SS.names
+		var line := "飞剑 第 %d / 5 阶 • 已解锁：%s" % [sim.sw_stage, " / ".join(PackedStringArray(sim.sword_unlocked()))]
+		_text(Vector2(L, ry + 52 * k), line, _fs(16), UI.GOLD)
+		if sim.sw_stage < 5:
+			var nxt := "下一阶「%s」：剑意 %d / %d（击杀）或击败副本守关者" % [nms[sim.sw_stage], sim.sw_kills, int(SS.kills[sim.sw_stage - 1])]
+			_text(Vector2(L, ry + 74 * k), nxt, _fs(15), Color(0.8, 0.9, 1.0))
+		else:
+			_text(Vector2(L, ry + 74 * k), "飞剑已臻圆满", _fs(15), Color(0.8, 0.9, 1.0))
+	if sim.fusion != "":
+		_text(Vector2(L, T + 190 * k), "融合 • %s" % GameData.DG.fusion.names[sim.fusion], _fs(17), Color(1.0, 0.85, 0.4))
 
 
 func _icon(id: String) -> Texture2D:
@@ -353,6 +371,12 @@ func _build_choice() -> void:
 	if ch.kind == "chest":
 		title = "宝 箱 开 启"
 		sub = "精英遗宝 • 已有构筑一次 +%d 级 • 选择一项" % int(GameData.BAL.drops.chestLevels)
+	elif ch.kind == "swb":
+		title = "剑 意 分 叉"
+		sub = "飞剑进阶 • 选择一项可选增益（不影响主干）"
+	elif ch.kind == "fusion":
+		title = "融 合"
+		sub = "飞剑与武器合璧 • 选择一种融合效果"
 	elif ch.kind == "gift":
 		title = "启 程 馈 赠"
 		sub = "段间馈赠 • 选择一项后出发（进裂隙则放弃它）"

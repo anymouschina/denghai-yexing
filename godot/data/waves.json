@@ -104,7 +104,7 @@
  "bossTrickle": 2.6,
  "late": {
   "from": 150,
-  "hpPerMin": 1.12,
+  "hpPerMin": 1.2,
   "batchPerMin": 0.8,
   "intervalMulPerMin": 0.95
  }
