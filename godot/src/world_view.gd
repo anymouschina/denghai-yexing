@@ -44,14 +44,16 @@ const SHEETS := {
 func setup(p_sim: Sim) -> void:
 	sim = p_sim
 	font = UI.font()
-	for n in ["field", "field2", "field3", "field_rift"]:
-		T[n] = load("res://assets/%s.jpg" % n)
-	for n in ["hero_run", "enemy_paperman", "enemy_foxfire", "enemy_lanternyokai", "enemy_jiangshi", "enemy_firecracker", "boss", "proj_talisman", "proj_flame",
+	for n in ["hero_run", "enemy_atlas", "boss", "proj_talisman", "proj_flame",
 			"proj_ghostfire", "proj_sword", "boss_swordwarden", "fx_thunder", "fx_boom", "drop_soul", "drop_coin", "drop_oil", "drop_chest", "field_lantern", "rift_portal", "merchant"]:
 		T[n] = load("res://assets/%s.png" % n)
 	for k in SHEETS:
 		T[k] = load(SHEETS[k].tex)
 	T.glow = Fx.glow()
+	var ar: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/enemy_atlas.json"))
+	for k in ar:
+		var r: Array = ar[k]
+		_enemy_cache[k] = [T.enemy_atlas, Rect2(r[0], r[1], r[2], r[3]), float(r[2]), float(r[3]), 1.0]
 	cam = Camera2D.new()
 	cam.position_smoothing_enabled = false
 	add_child(cam)
@@ -325,10 +327,14 @@ func _consume_events() -> void:
 # ======================================================================
 # 绘制
 # ======================================================================
+## 背景按当前段/秘境按需加载（其余卸载），1280×720 一张，镜像无缝平铺铺满整图
 func _bg_tex() -> Texture2D:
-	if sim.phase == Sim.PH_RIFT:
-		return T.field_rift
-	return T[["field", "field2", "field3"][mini(sim.seg, 2)]]
+	var key: String = "field_rift" if sim.phase == Sim.PH_RIFT else String(["field", "field2", "field3"][mini(sim.seg, 2)])
+	if not T.has(key):
+		for k in ["field", "field2", "field3", "field_rift"]:
+			T.erase(k)
+		T[key] = load("res://assets/%s.jpg" % key)
+	return T[key]
 
 
 func _draw_bg(c: Node2D) -> void:
@@ -338,7 +344,15 @@ func _draw_bg(c: Node2D) -> void:
 		tint = Color(tt[0], tt[1], tt[2])
 	else:
 		tint = Color(0.9, 0.82, 1.0)
-	c.draw_texture_rect(_bg_tex(), Rect2(0, 0, Sim.W, Sim.H), false, tint)
+	var bt := _bg_tex()
+	var tw := float(bt.get_width())
+	var th := float(bt.get_height())
+	var tx_n := int(ceil(Sim.W / tw))
+	var ty_n := int(ceil(Sim.H / th))
+	for iy in range(ty_n):
+		for ix in range(tx_n):
+			# 奇数格镜像（负尺寸 = 翻转，位置不变），相邻瓦片边缘连续
+			c.draw_texture_rect(bt, Rect2(ix * tw, iy * th, -tw if ix % 2 == 1 else tw, -th if iy % 2 == 1 else th), false, tint)
 	c.draw_rect(Rect2(0, 0, Sim.W, Sim.H), Color(0.23, 0.16, 0.36, 0.16))
 	if sim.phase == Sim.PH_RIFT:
 		var cc := Vector2(Sim.W / 2.0, Sim.H / 2.0)
@@ -405,6 +419,8 @@ func _draw_shadow(x: float, y: float, rx: float, ry: float, a: float = 0.4) -> v
 var _keys := PackedInt64Array()
 var _objs: Array = []
 var _cull := Rect2()
+var _vis_enemies: Array = []
+var _enemy_cache: Dictionary = {}   # 小怪 → [图集, 区域, w, h, 1.0]，常量查表，无逐帧分配
 
 
 func _visible(x: float, y: float, margin: float) -> bool:
@@ -427,6 +443,7 @@ func _draw() -> void:
 	var vis := get_viewport_rect().size / maxf(0.01, cam.zoom.x)
 	_cull = Rect2(cam.position - vis / 2.0, vis)
 	_keys.resize(0)
+	_vis_enemies.clear()
 	_objs.clear()
 	_kinds.resize(0)
 	for lp in _lamp_positions():
@@ -435,6 +452,7 @@ func _draw() -> void:
 	for e: SimEnemy in sim.enemies:
 		if e.boss or e.elite or _visible(e.x, e.y, 130.0):
 			_push(e.y, 1, e)
+			_vis_enemies.append(e)
 	_push(sim.py, 2, null)
 	if sim.phase == Sim.PH_BREAK:
 		_push(sim.break_pos("rift").y, 4, "rift")
@@ -471,6 +489,9 @@ func _draw() -> void:
 				_draw_pickup(o)
 				PerfStat.add("d_pickup", t_k)
 			4: _draw_zone(o)
+	for e2: SimEnemy in _vis_enemies:
+		if e2.mark_t > 0.0 or e2.marks > 0 or e2.elite or e2.boss:
+			_draw_enemy_overlays(e2)
 	var t_p := Time.get_ticks_usec()
 	_draw_projectiles()
 	PerfStat.add("d_proj", t_p)
@@ -556,8 +577,7 @@ func _enemy_tex(e: SimEnemy) -> Array:
 		elif ph < 0.8:
 			fr = 7
 		return [T.jiangshi_hop, Rect2(fr * 119, 0, 119, 200), 119.0, 200.0, 1.35]
-	var tx: Texture2D = T[e.def.tex]
-	return [tx, null, float(tx.get_width()), float(tx.get_height()), 1.0]
+	return _enemy_cache[e.def.tex]
 
 
 func _draw_enemy(e: SimEnemy) -> void:
@@ -593,6 +613,10 @@ func _draw_enemy(e: SimEnemy) -> void:
 		draw_texture_rect(tx, dst, false, col)
 	if e.flash > 0.0:
 		flash_list.append([tx, dst, info[1]])
+
+
+## 叠加循环：血条/剑痕/符印在所有实体画完之后统一提交（线条/圆弧与贴图混排会不断打断合批）
+func _draw_enemy_overlays(e: SimEnemy) -> void:
 	if e.mark_t > 0.0:
 		var k: float = 1.0 - e.mark_t / float(GameData.EVOS.fu.stats.markDelay)
 		var cy := e.y - e.h * 0.45
@@ -645,8 +669,11 @@ func _draw_bar(e: SimEnemy) -> void:
 	draw_rect(Rect2(x, y, w * clampf(e.hp / e.maxhp, 0.0, 1.0), 6), Color("ff5a4a") if e.warden else Color("ff9a3c"))
 
 
+const PICKUP_TEX := {"soul": "drop_soul", "coin": "drop_coin", "oil": "drop_oil", "chest": "drop_chest"}
+
+
 func _draw_pickup(k: SimPickup) -> void:
-	var tx: Texture2D = T[{"soul": "drop_soul", "coin": "drop_coin", "oil": "drop_oil", "chest": "drop_chest"}[k.kind]]
+	var tx: Texture2D = T[PICKUP_TEX[k.kind]]
 	var sc := 0.42
 	var col := Color.WHITE
 	match k.kind:

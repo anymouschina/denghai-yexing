@@ -1,0 +1,32 @@
+{
+ "enemy_paperman": [
+  0,
+  0,
+  190,
+  256
+ ],
+ "enemy_foxfire": [
+  192,
+  0,
+  219,
+  256
+ ],
+ "enemy_lanternyokai": [
+  413,
+  0,
+  159,
+  256
+ ],
+ "enemy_jiangshi": [
+  574,
+  0,
+  189,
+  256
+ ],
+ "enemy_firecracker": [
+  765,
+  0,
+  191,
+  256
+ ]
+}
