@@ -43,7 +43,7 @@ func _init() -> void:
 		var r := {"seed": seed_v, "win": s.victory, "t": snappedf(s.t, 0.1), "real": snappedf(s.real_t, 0.1), "lv": s.level, "kills": s.kills, "cause": s.death_cause,
 			"seg": s.seg, "phase": s.phase, "boss_time": snappedf(s.boss_time, 0.1), "rift": s.rift_log, "relics": s.relics, "art": s.artifact,
 			"wicks": s.wicks, "ms": Time.get_ticks_msec() - t0, "sword_drops": s.sw_drops, "hp": snappedf(s.hp, 0.1), "maxhp": s.maxhp,
-			"dmg_by": s.dmg_by, "levels": s.levels, "evo": s.evo}
+			"sw_stage": s.sw_stage, "rift_clears": s.rift_clears, "dmg_by": s.dmg_by, "levels": s.levels, "evo": s.evo}
 		print("RES ", JSON.stringify(r))
 	quit()
 

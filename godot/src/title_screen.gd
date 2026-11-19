@@ -176,10 +176,7 @@ func _toggle_sound() -> void:
 
 
 func _primary() -> void:
-	if run_exists:
-		_continue()
-	else:
-		_start()
+	_start()   # Enter / 点空白处 永远新开一局；「继续本局」是单独按钮
 
 
 func _continue() -> void:

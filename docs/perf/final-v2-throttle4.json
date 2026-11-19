@@ -1,0 +1,157 @@
+{
+ "when": "2026-11-19T18:49:37.962Z",
+ "results": [
+  {
+   "N": 300,
+   "throttle": 4,
+   "size": "1280x720",
+   "gpu": "1",
+   "frames": 709,
+   "fps": 58.8,
+   "mean_ms": 17,
+   "p50_ms": 16.7,
+   "p95_ms": 16.8,
+   "p99_ms": 33.3,
+   "worst_ms": 33.4,
+   "over33_pct": 0.4,
+   "longtasks": 0,
+   "heap_mb_start": 30.2,
+   "heap_mb_end": 26.5,
+   "entities": {
+    "enemies": 285,
+    "bullets": 20,
+    "ebullets": 0,
+    "pickups": 294
+   },
+   "engine": {
+    "draw_calls": 342,
+    "nodes": 63,
+    "mem_mb": 0,
+    "tex_mb": 38.4,
+    "process_ms": 18.1
+   },
+   "parts": {
+    "d_enemy": {
+     "ms_per_frame": 2.942,
+     "calls_per_frame": 237
+    },
+    "d_float": {
+     "ms_per_frame": 0.218,
+     "calls_per_frame": 1
+    },
+    "d_pickup": {
+     "ms_per_frame": 1.716,
+     "calls_per_frame": 1
+    },
+    "d_proj": {
+     "ms_per_frame": 0.082,
+     "calls_per_frame": 1
+    },
+    "d_shadow": {
+     "ms_per_frame": 0.832,
+     "calls_per_frame": 1
+    },
+    "fx_add_draw": {
+     "ms_per_frame": 1.134,
+     "calls_per_frame": 1
+    },
+    "ground_add_draw": {
+     "ms_per_frame": 0.1,
+     "calls_per_frame": 1
+    },
+    "hud_draw": {
+     "ms_per_frame": 1.615,
+     "calls_per_frame": 1
+    },
+    "hud_tick": {
+     "ms_per_frame": 0.04,
+     "calls_per_frame": 1
+    },
+    "view_tick": {
+     "ms_per_frame": 1.043,
+     "calls_per_frame": 1
+    },
+    "world_draw": {
+     "ms_per_frame": 8.419,
+     "calls_per_frame": 1
+    }
+   }
+  },
+  {
+   "N": 500,
+   "throttle": 4,
+   "size": "1280x720",
+   "gpu": "1",
+   "frames": 587,
+   "fps": 48.6,
+   "mean_ms": 20.58,
+   "p50_ms": 16.7,
+   "p95_ms": 33.4,
+   "p99_ms": 33.4,
+   "worst_ms": 33.5,
+   "over33_pct": 2.7,
+   "longtasks": 0,
+   "heap_mb_start": 22.7,
+   "heap_mb_end": 32.6,
+   "entities": {
+    "enemies": 483,
+    "bullets": 17,
+    "ebullets": 0,
+    "pickups": 298
+   },
+   "engine": {
+    "draw_calls": 320,
+    "nodes": 63,
+    "mem_mb": 0,
+    "tex_mb": 38.4,
+    "process_ms": 21.8
+   },
+   "parts": {
+    "d_enemy": {
+     "ms_per_frame": 5.019,
+     "calls_per_frame": 417
+    },
+    "d_float": {
+     "ms_per_frame": 0.189,
+     "calls_per_frame": 1
+    },
+    "d_pickup": {
+     "ms_per_frame": 1.745,
+     "calls_per_frame": 1
+    },
+    "d_proj": {
+     "ms_per_frame": 0.082,
+     "calls_per_frame": 1
+    },
+    "d_shadow": {
+     "ms_per_frame": 1.386,
+     "calls_per_frame": 1
+    },
+    "fx_add_draw": {
+     "ms_per_frame": 0.956,
+     "calls_per_frame": 1
+    },
+    "ground_add_draw": {
+     "ms_per_frame": 0.092,
+     "calls_per_frame": 1
+    },
+    "hud_draw": {
+     "ms_per_frame": 1.559,
+     "calls_per_frame": 1
+    },
+    "hud_tick": {
+     "ms_per_frame": 0.033,
+     "calls_per_frame": 1
+    },
+    "view_tick": {
+     "ms_per_frame": 1.02,
+     "calls_per_frame": 1
+    },
+    "world_draw": {
+     "ms_per_frame": 12.315,
+     "calls_per_frame": 1
+    }
+   }
+  }
+ ]
+}

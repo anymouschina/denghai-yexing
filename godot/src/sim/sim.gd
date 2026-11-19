@@ -335,8 +335,15 @@ func _relic_sum(stat: String) -> float:
 	return s
 
 
+var _sets_cache: Array = []
+var _sets_dirty := true
+
+
 func has_set(id: String) -> bool:
-	return active_sets().has(id)
+	if _sets_dirty:
+		_sets_cache = active_sets()
+		_sets_dirty = false
+	return _sets_cache.has(id)
 
 
 func _on_kill_sets(e: SimEnemy) -> void:
@@ -366,6 +373,7 @@ func has_part(id: String) -> bool:
 
 
 func _recalc() -> void:
+	_sets_dirty = true
 	var P: Dictionary = GameData.BAL.player
 	var T: Dictionary = GameData.BAL.touch
 	maxhp = P.hp + meta.maxHp + _per("yupei", "maxHp") + _relic_sum("maxHp")
@@ -1286,7 +1294,9 @@ func _sword_strike(e: SimEnemy, base: float, thrust: bool, key: String = "sword"
 	var o := {"pierce": true, "kx": e.x - px, "ky": e.y - py, "kb": 60.0}
 	if crit:
 		o["forceCrit"] = true
-	damage(e, base * (sw.thrustMul if thrust else 1.0), key, o)
+	# 阶段与剑冢通关带来的剑意增益（加算，随飞剑成长）：+30%/阶 +25%/次剑冢通关
+	var grow := 1.0 + 0.3 * float(sw_stage - 1) + 0.25 * float(rift_clears)
+	damage(e, base * grow * (sw.thrustMul if thrust else 1.0), key, o)
 
 
 func _sword_thrust(dir_override: Vector2 = Vector2.ZERO, key: String = "sword") -> void:
@@ -2147,12 +2157,12 @@ func poi_state(i: int) -> String:
 func _gen_pois() -> void:
 	# 大地图上两处剑冢裂隙入口（东北 / 西南），战斗中靠近站定即可进入；出生点旁刷一只古灯宝箱
 	var c := Vector2(W / 2.0, H / 2.0)
-	pois = [{"kind": "sword", "x": c.x + 1000.0, "y": c.y - 700.0, "name": "剑冢裂隙 • 东北"}, {"kind": "sword", "x": c.x - 1100.0, "y": c.y + 720.0, "name": "剑冢裂隙 • 西南"},
-		{"kind": "merchant", "x": c.x - 650.0, "y": c.y - 420.0, "name": "游商灯摊"},
-		{"kind": "vine", "x": c.x + 420.0, "y": c.y + 380.0, "name": "葫芦灵藤"}, {"kind": "vine", "x": c.x - 1300.0, "y": c.y - 300.0, "name": "葫芦灵藤"},
+	pois = [{"kind": "sword", "x": c.x + 450.0, "y": c.y - 300.0, "name": "剑冢裂隙 • 东北"}, {"kind": "sword", "x": c.x - 1100.0, "y": c.y + 720.0, "name": "剑冢裂隙 • 西南"},
+		{"kind": "merchant", "x": c.x - 300.0, "y": c.y - 200.0, "name": "游商灯摊"},
+		{"kind": "vine", "x": c.x + 300.0, "y": c.y + 250.0, "name": "葫芦灵藤"}, {"kind": "vine", "x": c.x - 1300.0, "y": c.y - 300.0, "name": "葫芦灵藤"},
 		{"kind": "gourd", "x": c.x + 1300.0, "y": c.y + 650.0, "name": "古药葫芦秘境"}, {"kind": "vault", "x": c.x - 400.0, "y": c.y - 950.0, "name": "镇魂宝库"}]
 	explored.resize(36 * 24)
-	_spawn_pickup("chest", c.x + 230.0, c.y - 110.0, 1)
+	_spawn_pickup("chest", c.x + 160.0, c.y + 90.0, 1)
 
 
 func _mark_explored() -> void:

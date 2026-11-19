@@ -102,23 +102,25 @@ func _pick(s: Sim) -> void:
 
 # ---------------- 游商 ----------------
 func _shop(s: Sim) -> void:
-	var reserve := _reserve(s)
-	var bought := false
-	if kind == Kind.RANDOM:
-		if s.wicks > reserve and s.shop.size() > 0 and rng.randf() < 0.7:
-			s.buy_relic(rng.randi() % s.shop.size())
-			bought = true
-	else:
-		while s.wicks > reserve and s.shop.size() > 0:
-			var bi := -1
-			var br := 99
-			for i in range(s.shop.size()):
-				var rk := RELIC_ORDER.find(s.shop[i])
-				if rk < br:
-					br = rk
-					bi = i
-			s.buy_relic(bi)
-			bought = true
+	# 铜钱商店：优先买进化配件(金)，其次买得起的最贵一件；买不起就走人（避免死循环）
+	var guard := 0
+	while s.shop.size() > 0 and guard < 6:
+		guard += 1
+		var bi := -1
+		var bp := -1
+		for i in range(s.shop.size()):
+			var rid: String = s.shop[i]
+			var pr := s.price_of(rid)
+			if pr > s.coins:
+				continue
+			var pri := pr + (1000 if GameData.RELIC_BY_ID[rid].has("part") else 0)
+			if kind == Kind.RANDOM:
+				pri = int(rng.randi() % 100)
+			if pri > bp:
+				bp = pri
+				bi = i
+		if bi < 0 or not s.buy_relic(bi):
+			break
 	s.close_shop()
 	done_shop[s.break_idx] = true
 
@@ -137,7 +139,7 @@ func _break(s: Sim, _dt: float) -> void:
 	var k := s.break_idx
 	if plan.has(k) and not entered.has(k) and s.rift_state() == "ok":
 		zone = "rift"
-	elif not done_shop.has(k) and s.wicks > _reserve(s) and s.shop.size() > 0:
+	elif not done_shop.has(k) and s.coins >= 50 and s.shop.size() > 0:
 		zone = "merchant"
 	target_zone = zone
 	var tp := s.break_pos(zone)

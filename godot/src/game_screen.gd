@@ -103,6 +103,8 @@ func _toast(msg: String) -> void:
 func _process(delta: float) -> void:
 	if sim == null:
 		return
+	if Playtest.enabled and Playtest.bench == 0 and not sim.choice.is_empty() and sim.choice.kind == "level" and sim.level > 2 + Playtest.autopick_after:
+		on_choose(0)
 	PerfStat.frame_done()
 	if toast != null and toast_t > 0.0:
 		toast_t -= delta

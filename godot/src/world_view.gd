@@ -660,15 +660,15 @@ func _draw_enemy_overlays(e: SimEnemy) -> void:
 		var k: float = 1.0 - e.mark_t / float(GameData.EVOS.fu.stats.markDelay)
 		var cy := e.y - e.h * 0.45
 		var rr := 16.0 + e.r * 0.4
-		draw_arc(Vector2(e.x, cy), rr, 0, TAU, 24, Color(1, 0.83, 0.42, 0.5), 2.0, true)
-		draw_arc(Vector2(e.x, cy), rr, -PI / 2.0, -PI / 2.0 + k * TAU, 24, Color(1, 0.9, 0.66, 0.95), 4.0, true)
+		draw_arc(Vector2(e.x, cy), rr, 0, TAU, 24, Color(1, 0.83, 0.42, 0.5), 2.0, false)
+		draw_arc(Vector2(e.x, cy), rr, -PI / 2.0, -PI / 2.0 + k * TAU, 24, Color(1, 0.9, 0.66, 0.95), 4.0, false)
 	if e.marks > 0:
 		# 剑痕：头顶青色斜痕，层数 = 痕数
 		var cx := e.x - (e.marks - 1) * 6.0
 		for i in range(e.marks):
 			var px := cx + i * 12.0
 			var py := e.y - e.h - 6.0 - e.lift
-			draw_line(Vector2(px - 4, py + 7), Vector2(px + 4, py - 7), Color(0.5, 0.92, 1.0), 3.0, true)
+			draw_line(Vector2(px - 4, py + 7), Vector2(px + 4, py - 7), Color(0.5, 0.92, 1.0), 3.0, false)
 	if e.elite or e.boss:
 		_draw_bar(e)
 
@@ -880,7 +880,9 @@ func _draw_projectiles() -> void:
 
 
 func _draw_floaters() -> void:
-	for f in floaters:
+	var from_i := maxi(0, floaters.size() - 24)   # 飘字最多同时画 24 条
+	for fi in range(from_i, floaters.size()):
+		var f: Dictionary = floaters[fi]
 		var a := clampf(f.life / 0.4, 0.0, 1.0)
 		var col: Color = f.col
 		col.a = a

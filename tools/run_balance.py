@@ -71,7 +71,7 @@ def summarize(runs):
     bt = [r["boss_time"] for r in runs if r["boss_time"] > 0]
     res["boss_time_mean"] = round(statistics.mean(bt), 1) if bt else None
     res["boss_reached"] = sum(1 for r in runs if r["boss_time"] > 0 or r["phase"] == 3 or (r["seg"] == 2 and r["t"] >= 478))
-    rl = [e for r in runs for e in r["rift"]]
+    rl = [e for r in runs for e in r["rift"] if "entry" in e]   # 只统计剑冢裂隙（秘境 gourd/vault 记录无 entry 字段）
     res["rift_entries"] = len(rl)
     if rl:
         ok = [e for e in rl if e["ok"]]
@@ -91,6 +91,10 @@ def summarize(runs):
     no_boss = [r["boss_time"] for r in runs if r["boss_time"] > 0 and r["art"] != "sword"]
     res["boss_time_sword"] = round(statistics.mean(sw_boss), 1) if sw_boss else None
     res["boss_time_nosword"] = round(statistics.mean(no_boss), 1) if no_boss else None
+    for lab, cond in (("rc0", lambda r: r.get("rift_clears", 0) == 0), ("rc1p", lambda r: r.get("rift_clears", 0) >= 1)):
+        bt2 = [r["boss_time"] for r in runs if r["boss_time"] > 0 and cond(r)]
+        res["boss_time_" + lab] = round(statistics.mean(bt2), 1) if bt2 else None
+        res["boss_n_" + lab] = len(bt2)
     res["ms_per_run"] = round(statistics.mean(r["ms"] for r in runs))
     return res
 

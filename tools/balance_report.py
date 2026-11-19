@@ -155,7 +155,7 @@ def main():
             chk(f"真人代理 · {TIER_NAMES[tier]} 胜率 {int(lo*100)}%–{int(hi*100)}%", lo <= s["win_rate"] <= hi, fmt_pct(s["win_rate"]))
         chk("真人代理 · 进 2 次 胜率不得 >65%", cells[("proxy", 2)][0]["win_rate"] <= 0.65, fmt_pct(cells[("proxy", 2)][0]["win_rate"]))
         ents = sum(cells[("proxy", t)][0]["rift_entries"] for t in (1, 2))
-        deaths = sum(1 for t in (1, 2) for r in cells[("proxy", t)][1] for e in r["rift"] if e["how"] == "death")
+        deaths = sum(1 for t in (1, 2) for r in cells[("proxy", t)][1] for e in r["rift"] if e.get("how") == "death" and "entry" in e)
         chk("副本内死亡率 ≤12%（真人代理，进 1/2 次合并）", ents > 0 and deaths / ents <= 0.12, f"{deaths}/{ents} = {fmt_pct(deaths / max(1, ents))}")
     if sw_red is not None:
         chk("拿到飞剑术后 BOSS 战时长下降 25%–35%", 0.25 <= sw_red <= 0.35, fmt_pct(sw_red))
