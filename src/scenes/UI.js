@@ -5,6 +5,7 @@ import BAL from '../data/balance.json';
 import { TF, BF, NF, INK } from '../fonts.js';
 import { sfx, setMuted, isMuted } from '../audio.js';
 import { loadSave, writeSave } from '../save.js';
+import { touch, setTouchVisible, setDashProgress } from '../touch.js';
 import { makeButton, popIn, drawPanel, drawBox, keycap, bump, countUp, fmtTime as fmt, fmtNum } from '../widgets.js';
 
 const hex = (c) => Phaser.Display.Color.HexStringToColor(c).color;
@@ -32,9 +33,17 @@ export class UI extends Phaser.Scene {
     this.makeTextures();
     this.buildHud();
     this.input.keyboard.on('keydown', (e) => this.onKey(e));
+    // 切后台 / 失去焦点 / 竖屏 → 自动暂停，回来停在暂停面板里，进度原样保留
     const onVis = () => { if (document.hidden) this.openPause(); };
     document.addEventListener('visibilitychange', onVis);
-    this.events.once('shutdown', () => document.removeEventListener('visibilitychange', onVis));
+    window.addEventListener('pagehide', onVis);
+    touch.onPause = () => { if (!this.modal) this.openPause(); else if (this.modal.kind === 'pause') this.resumeGame(); };
+    this.events.once('shutdown', () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pagehide', onVis);
+      touch.onPause = null;
+      setTouchVisible(false);
+    });
   }
 
   makeTextures() {
@@ -96,6 +105,19 @@ export class UI extends Phaser.Scene {
     this.dashKey.x = 670 + this.dashLabel.width + 8 + this.dashKey.w / 2;
     this.dashReady = true;
 
+    // 触屏暂停键：画在 Phaser 画布里（不用 DOM 覆盖层），按下即触发，击杀/魂火两行之下
+    if (touch.enabled) {
+      const pb = this.add.container(1226, 128).setDepth(40);
+      const pg = this.add.graphics();
+      pg.fillStyle(INK_N, 0.9).fillCircle(0, 0, 31).fillStyle(0x1b2148, 0.85).fillCircle(0, 0, 27);
+      pg.lineStyle(3, 0xff9a3c, 0.7).strokeCircle(0, 0, 29);
+      pg.fillStyle(0xf3e6c8).fillRoundedRect(-9, -11, 6, 22, 2).fillRoundedRect(3, -11, 6, 22, 2);
+      pb.add(pg);
+      pb.setSize(96, 96).setInteractive(new Phaser.Geom.Circle(48, 48, 48), Phaser.Geom.Circle.Contains);
+      pb.on('pointerdown', () => { if (touch.onPause) touch.onPause(); });
+      this.pauseBtn = pb;
+    }
+
     // Boss
     this.bossName = this.add.text(640, 112, '', st(24, '#ffb0a0', TF, { strokeThickness: 6 })).setOrigin(0.5).setVisible(false);
     this.bossPhaseText = this.add.text(948, 140, '', st(13, '#ff7a6a', BF, { fontStyle: 'bold', strokeThickness: 4 })).setOrigin(0, 0.5).setVisible(false);
@@ -112,6 +134,12 @@ export class UI extends Phaser.Scene {
     if (!g || !g.p || !g.p.stats) return;
     const p = g.p;
     const h = this.hudG.clear();
+    if (touch.enabled) {
+      if (touch.portrait && !this.modal) this.openPause();
+      setTouchVisible(!this.modal && !g.over);
+      if (this.pauseBtn) this.pauseBtn.setVisible(!this.modal && !g.over);
+      setDashProgress(Phaser.Math.Clamp(1 - p.dashCdLeft / p.stats.dashCd, 0, 1));
+    }
 
     // 经验通栏
     const xpk = Phaser.Math.Clamp(g.xp / g.need, 0, 1);
@@ -171,7 +199,7 @@ export class UI extends Phaser.Scene {
     this.soulIcon.x = 1258 - this.stat[1].num.width - 15;
 
     // 冲刺冷却环：有弹窗（三选一/暂停/结算）时整组隐藏，不和卡片抢视线
-    const showDash = !this.modal;
+    const showDash = !this.modal && !touch.enabled; // 触屏用 DOM 闪避键自带冷却环
     this.dashLabel.setVisible(showDash);
     this.dashKey.setVisible(showDash);
     const k = Phaser.Math.Clamp(1 - p.dashCdLeft / p.stats.dashCd, 0, 1);
@@ -351,7 +379,7 @@ export class UI extends Phaser.Scene {
     drawCards(choices, false);
 
     const rb = makeButton(this, 640, 646, 300, 50, '', () => this.doReroll(), { size: 20, font: BF });
-    const rk = keycap(this, 640 + 150 + 22, 646, 'R');
+    const rk = keycap(this, 640 + 150 + 22, 646, 'R').setVisible(!touch.enabled);
     const setRb = (n) => { rb.setLabel(`换一批（剩 ${n} 次）`).setEnabled(n > 0); rk.setAlpha(n > 0 ? 1 : 0.4); };
     setRb(rerolls);
     c.add([rb, rk]);
@@ -408,14 +436,19 @@ export class UI extends Phaser.Scene {
     }).setOrigin(0.5, 0);
     if (desc.height > 110) desc.setFontSize(14).setLineSpacing(5);
     card.add(desc);
-    card.add(keycap(this, 0, 168, String(i + 1)));
+    if (!touch.enabled) card.add(keycap(this, 0, 168, String(i + 1)));
 
     const hit = this.add.rectangle(0, 0, 300, 388, 0, 0.001).setInteractive({ useHandCursor: true });
     let pressed = false;
     const to = (scale, dy, d = 110, ease = 'Quad.easeOut') => (card.setAlpha(1), this.tweens.killTweensOf(card), this.tweens.add({ targets: card, scale, y: y + dy, duration: d, ease }));
     hit.on('pointerover', () => { if (!this.modal || this.modal.locked) return; card.parentContainer.bringToTop(card); to(1.05, -8); sfx('pickup', 0.4); });
     hit.on('pointerout', () => { pressed = false; to(1, 0); });
-    hit.on('pointerdown', () => { pressed = true; to(0.96, 0, 60); });
+    hit.on('pointerdown', () => {
+      pressed = true;
+      // 触屏：按下即选（瞬时轻点时 down/up 可能挤在同一帧；pick 自带防重复锁）
+      if (touch.enabled) { pressed = false; onPick(); return; }
+      to(0.96, 0, 60);
+    });
     hit.on('pointerup', () => {
       if (!pressed) return;
       pressed = false;
@@ -465,7 +498,7 @@ export class UI extends Phaser.Scene {
     const snd = makeButton(this, bx, 84, 260, 58, isMuted() ? '声音：关' : '声音：开', () => this.toggleMute());
     this.pauseSnd = snd;
     panel.add(snd);
-    panel.add(this.add.text(bx, 160, 'Esc 继续 · M 静音', { fontFamily: BF, fontSize: '14px', color: '#7f86b8' }).setOrigin(0.5));
+    panel.add(this.add.text(bx, 160, touch.enabled ? '切后台会自动暂停' : 'Esc 继续 · M 静音', { fontFamily: BF, fontSize: '14px', color: '#7f86b8' }).setOrigin(0.5));
 
     // 分隔线
     const dg = this.add.graphics();
@@ -580,7 +613,7 @@ export class UI extends Phaser.Scene {
     // 按钮
     P.add(makeButton(this, -140, 190, 240, 60, '再来一局', () => this.restart(), { primary: true }));
     P.add(makeButton(this, 140, 190, 240, 60, '回标题', () => this.toTitle()));
-    P.add(this.add.text(0, 234, 'Enter 再来一局', { fontFamily: BF, fontSize: '13px', color: '#7f86b8' }).setOrigin(0.5));
+    P.add(this.add.text(0, 234, touch.enabled ? '' : 'Enter 再来一局', { fontFamily: BF, fontSize: '13px', color: '#7f86b8' }).setOrigin(0.5));
     c.add(this.add.text(1258, 706, `种子 ${r.seed.toString(16).toUpperCase().padStart(8, '0')}`, { fontFamily: NF, fontSize: '12px', color: '#6f77a8' }).setOrigin(1, 1));
     popIn(this, P, 80);
     this.modal = { kind: 'result', c, at: this.time.now };

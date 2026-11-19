@@ -1,4 +1,5 @@
 {
+  "touch": { "dmgMul": 0.72, "invulnAdd": 0.35, "speedMul": 1.07, "dashCdMul": 0.85, "dashInvulnAdd": 0.1, "pickupMul": 1.2, "spawnIntervalMul": 1.15 },
   "worldScale": 1.25,
   "worldMargin": 170,
   "player": {

@@ -3,6 +3,7 @@ import META from '../data/meta.json';
 import { TF, BF, NF, INK } from '../fonts.js';
 import { loadSave, writeSave } from '../save.js';
 import { sfx, music, unlockAudio, setMuted, isMuted } from '../audio.js';
+import { touch } from '../touch.js';
 import { makeButton, popIn, drawPanel, hintRow, bump, fmtTime, fmtNum } from '../widgets.js';
 
 const INK_N = 0x0b0d18;
@@ -46,14 +47,19 @@ export class Title extends Phaser.Scene {
     ];
     this.buttons.forEach((b, i) => popIn(this, b, 120 + i * 80));
 
-    const press = this.add.text(80, 566, '— 点击画面或按 Enter / 空格 开始 —', { fontFamily: BF, fontSize: '16px', color: '#ffc977', stroke: INK, strokeThickness: 4 });
+    const press = this.add.text(80, 566, touch.enabled ? '— 轻点画面开始 —' : '— 点击画面或按 Enter / 空格 开始 —', { fontFamily: BF, fontSize: '16px', color: '#ffc977', stroke: INK, strokeThickness: 4 });
     this.tweens.add({ targets: press, alpha: 0.3, duration: 900, yoyo: true, repeat: -1 });
 
-    hintRow(this, 80, 628, [
-      { key: 'W' }, { key: 'A' }, { key: 'S' }, { key: 'D' }, { text: '/ 方向键 移动' },
-      { key: '空格' }, { text: '冲刺' }, { key: 'Esc' }, { text: '暂停' }, { key: 'M' }, { text: '静音' },
-    ]);
-    hintRow(this, 80, 668, [{ text: '攻击全自动 · 升级时用' }, { key: '1' }, { key: '2' }, { key: '3' }, { text: '或鼠标选择' }]);
+    if (touch.enabled) {
+      hintRow(this, 80, 628, [{ text: '左侧拖动摇杆移动 · 右下「闪」键冲刺 · 右上 ❚❚ 暂停' }]);
+      hintRow(this, 80, 668, [{ text: '攻击全自动 · 升级时点卡片选择' }]);
+    } else {
+      hintRow(this, 80, 628, [
+        { key: 'W' }, { key: 'A' }, { key: 'S' }, { key: 'D' }, { text: '/ 方向键 移动' },
+        { key: '空格' }, { text: '冲刺' }, { key: 'Esc' }, { text: '暂停' }, { key: 'M' }, { text: '静音' },
+      ]);
+      hintRow(this, 80, 668, [{ text: '攻击全自动 · 升级时用' }, { key: '1' }, { key: '2' }, { key: '3' }, { text: '或鼠标选择' }]);
+    }
 
     this.buildRecord();
 

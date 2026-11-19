@@ -1,0 +1,31 @@
+mode=touch viewport=932x430@2 canvas={"x":83,"y":0,"w":764.4375,"h":430} touchEnabled=true scale=0.597
+shot touch-932x430-01-title.png
+shot touch-932x430-02-start.png
+controls {"dash":{"x":857,"y":357,"w":98,"h":98,"disp":"block"},"pause":{"x":887,"y":93,"w":52,"h":52,"disp":"block"},"zoneVisible":"block"}
+PASS 触摸控件在对局中显示
+PASS 闪避键够大(98px)且在视口内
+move {"from":[1720,960],"to":[1816,896],"stick":1}
+PASS 摇杆右上拖 → 角色向右上移动
+shot touch-932x430-03-move-joystick.png
+dash {"cdBefore":0,"cdAfter":2.13,"stickStillHeld":1}
+PASS 触屏闪避键触发技能（冷却开始）
+PASS 摇杆未松时第二指按闪避，两者同时生效（多点触控）
+attack {"kills":0,"enemies":1,"t":1.6}
+PASS 自动攻击击杀 6 只 → 升级三选一(Lv2)
+shot touch-932x430-04-levelup.png
+PASS 三选一时触摸控件隐藏
+PASS 点卡片选择后回到对局
+shot touch-932x430-05-after-pick.png
+shot touch-932x430-06-pause.png
+PASS 触屏暂停按钮 → 暂停面板
+PASS 点「继续」恢复对局
+PASS 切后台(visibilitychange)自动暂停，进度保留 t=22
+shot touch-932x430-07-result.png
+PASS 死亡结算页出现（用时 17.375s）
+shot touch-932x430-08-restart.png
+PASS 再来一局成功
+shot touch-932x430-09-portrait-rotate-hint.png
+PASS 竖屏显示「请横屏」引导层
+PASS 竖屏自动暂停对局
+pageErrors []
+PASS 页面无未捕获错误

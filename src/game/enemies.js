@@ -4,6 +4,7 @@ import Phaser from 'phaser';
 import { UP, EN, WV, BAL, META, UPS, EVOS, CELL, TAU, FX_TINT } from './shared.js';
 import { loadSave, writeSave } from '../save.js';
 import { sfx, music } from '../audio.js';
+import { touch } from '../touch.js';
 
 const BOSS_AT = (WV.events.find((ev) => ev.kind === 'boss') || { at: Infinity }).at;
 
@@ -18,10 +19,10 @@ export const enemiesMethods = {
     if (this.boss || this.t >= BOSS_AT) return;
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
-      this.spawnT = Math.max(WV.minInterval, WV.baseInterval * Math.pow(WV.intervalMulPerMin, min));
+      this.spawnT = Math.max(WV.minInterval, WV.baseInterval * Math.pow(WV.intervalMulPerMin, min)) * (touch.enabled ? BAL.touch.spawnIntervalMul : 1);
       const batch = 1 + Math.floor(min * WV.batchPerMin);
       const pool = [...WV.pools].reverse().find((pl) => this.t >= pl.from).weights;
-      for (let i = 0; i < batch && this.enemies.length < WV.maxEnemies; i++) this.spawnEnemy(this.pickWeighted(pool));
+      for (let i = 0; i < batch && this.enemies.length < this.maxEn; i++) this.spawnEnemy(this.pickWeighted(pool));
     }
     if (this.t >= WV.packs.from) {
       this.packT -= dt;
@@ -30,7 +31,7 @@ export const enemiesMethods = {
         const [a, b] = WV.packs.size;
         const n = a + Math.floor(this.rng() * (b - a + 1)) + Math.floor(min);
         const ang = this.rng() * TAU;
-        for (let i = 0; i < n && this.enemies.length < WV.maxEnemies; i++) {
+        for (let i = 0; i < n && this.enemies.length < this.maxEn; i++) {
           this.spawnEnemy(WV.packs.type, ang + (this.rng() - 0.5) * 0.4, WV.spawnDist + this.rng() * 80);
         }
       }

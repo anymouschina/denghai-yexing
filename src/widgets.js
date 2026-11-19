@@ -1,5 +1,6 @@
 import { TF, BF, NF, INK } from './fonts.js';
 import { sfx } from './audio.js';
+import { touch } from './touch.js';
 
 const INK_N = 0x0b0d18;
 
@@ -28,7 +29,7 @@ export function makeButton(scene, x, y, w, h, label, onClick, opts = {}) {
     txt.setColor(fg);
     txt.y = -2 + dy;
   };
-  const hit = scene.add.rectangle(0, 0, w, h + 6, 0x000000, 0.001).setInteractive({ useHandCursor: true });
+  const hit = scene.add.rectangle(0, 0, touch.enabled ? w + 24 : w, touch.enabled ? Math.max(h + 6, 74) : h + 6, 0x000000, 0.001).setInteractive({ useHandCursor: true });
   c.add([g, txt, hit]);
   c.label = txt;
   c.hover = false;

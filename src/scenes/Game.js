@@ -9,6 +9,8 @@ import { enemiesMethods } from '../game/enemies.js';
 import { combatMethods } from '../game/combat.js';
 import { progressionMethods } from '../game/progression.js';
 import { fxMethods } from '../game/fx.js';
+import { touch } from '../touch.js';
+import { perf, LOW_ENEMY_CAP } from '../perf.js';
 
 // 对局场景：只放创建、主循环、空间网格与数值汇总；各系统见 src/game/*.js
 export class Game extends Phaser.Scene {
@@ -16,7 +18,8 @@ export class Game extends Phaser.Scene {
 
   create() {
     this.save = loadSave();
-    this.seed = (Math.random() * 0xffffffff) >>> 0;
+    const urlSeed = Number(new URLSearchParams(location.search).get('seed'));
+    this.seed = urlSeed ? urlSeed >>> 0 : (Math.random() * 0xffffffff) >>> 0;
     this.rng = mulberry32(this.seed);
     this.cameras.main.fadeIn(450, 5, 6, 18);
 
@@ -140,6 +143,11 @@ export class Game extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
     this.cameras.main.centerOn(this.player.x, this.player.y);
 
+    // 低端机：降同屏上限、关余烬与雾层；运行中帧率持续偏低时也会降档（见 update）
+    this.maxEn = WV.maxEnemies;
+    this.fpsAcc = 0; this.fpsN = 0;
+    if (perf.low) this.applyLowPerf();
+
     this.scene.launch('UI');
     this.ui = this.scene.get('UI');
     music.play('battle');
@@ -170,7 +178,12 @@ export class Game extends Phaser.Scene {
 
   lv(id) { return this.levels[id] || 0; }
 
-  lv(id) { return this.levels[id] || 0; }
+  applyLowPerf() {
+    this.maxEn = Math.min(WV.maxEnemies, LOW_ENEMY_CAP);
+    this.pEmbers.stop().setVisible(false);
+    for (const f of this.fogs) f.setVisible(false);
+    perf.low = true;
+  }
 
   wstat(id) { return UPS[id].stats[this.lv(id) - 1]; }
 
@@ -185,12 +198,12 @@ export class Game extends Phaser.Scene {
     const per = (id, k) => this.lv(id) * (UPS[id].per[k] || 0);
     const s = {
       maxHp: P.hp + this.meta.maxHp + per('yupei', 'maxHp'),
-      speed: P.speed * (1 + this.meta.speed + per('caolv', 'speed')),
-      pickup: P.pickup * (1 + this.meta.pickup + per('hundai', 'pickup')),
+      speed: P.speed * (1 + this.meta.speed + per('caolv', 'speed')) * (touch.enabled ? BAL.touch.speedMul : 1),
+      pickup: P.pickup * (1 + this.meta.pickup + per('hundai', 'pickup')) * (touch.enabled ? BAL.touch.pickupMul : 1),
       dmgMul: 1 + this.meta.dmg + per('taomu', 'dmg'),
       crit: P.crit + per('tiangang', 'crit'),
       critMul: P.critMul + per('tiangang', 'critMul'),
-      dashCd: P.dashCd * (1 - per('jingxin', 'dashCd')),
+      dashCd: P.dashCd * (1 - per('jingxin', 'dashCd')) * (touch.enabled ? BAL.touch.dashCdMul : 1),
       fuCdMul: 1 - per('jishu', 'fuCd'),
       fuSpeedMul: 1 + per('jishu', 'fuSpeed'),
       fuCount: per('zhongfu', 'fuCount'),
@@ -216,6 +229,11 @@ export class Game extends Phaser.Scene {
       this.hitStop -= deltaMs;
       this.drawWorld(0);
       return;
+    }
+    // 触屏实测帧率：每 3 秒平均 < 42fps 就一次性降档（只降不升，避免来回抖动）
+    if (touch.enabled && !perf.low && !this.over) {
+      this.fpsAcc += deltaMs; this.fpsN++;
+      if (this.fpsAcc > 3000) { if (1000 / (this.fpsAcc / this.fpsN) < 42 && this.t > 5) this.applyLowPerf(); this.fpsAcc = 0; this.fpsN = 0; }
     }
     dt *= this.slowmo;
     if (!this.over) this.t += dt;

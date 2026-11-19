@@ -3,6 +3,7 @@
 import Phaser from 'phaser';
 import { BAL } from './shared.js';
 import { sfx } from '../audio.js';
+import { touch } from '../touch.js';
 
 export const playerMethods = {
   updatePlayer(dt) {
@@ -12,19 +13,24 @@ export const playerMethods = {
     const P = BAL.player;
     let mx = (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
     let my = (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);
-    const len = Math.hypot(mx, my);
-    if (len > 0) { mx /= len; my /= len; }
+    let len = Math.hypot(mx, my);
+    let analog = 1;
+    if (len > 0) { mx /= len; my /= len; } else if (touch.mag > 0) {
+      // 触屏摇杆：方向 + 力度（已含死区与加速曲线）；键盘有输入时以键盘为准
+      mx = touch.mx; my = touch.my; len = 1; analog = touch.mag;
+    }
     p.moving = len > 0;
     if (mx !== 0) p.faceX = mx > 0 ? 1 : -1;
 
     p.dashCdLeft = Math.max(0, p.dashCdLeft - dt);
     p.invuln = Math.max(0, p.invuln - dt);
     p.dashInv = Math.max(0, p.dashInv - dt);
-    if ((Phaser.Input.Keyboard.JustDown(k.SPACE) || Phaser.Input.Keyboard.JustDown(k.SHIFT)) && p.dashCdLeft <= 0) {
+    const tDash = touch.consumeDash();
+    if ((Phaser.Input.Keyboard.JustDown(k.SPACE) || Phaser.Input.Keyboard.JustDown(k.SHIFT) || tDash) && p.dashCdLeft <= 0) {
       const dx = p.moving ? mx : p.faceX;
       const dy = p.moving ? my : 0;
       p.dashT = P.dashTime;
-      p.dashInv = P.dashInvuln;
+      p.dashInv = P.dashInvuln + (touch.enabled ? BAL.touch.dashInvulnAdd : 0);
       p.dashCdLeft = p.stats.dashCd;
       p.dashDir = [dx, dy];
       p.ghostT = 0;
@@ -32,7 +38,7 @@ export const playerMethods = {
       this.cameras.main.shake(90, P.shakeDash);
       this.ringFx(p.x, p.y - 6, 46, 0x7fe3ff);
     }
-    let sp = p.stats.speed;
+    let sp = p.stats.speed * (p.dashT > 0 ? 1 : analog);
     if (p.dashT > 0) {
       p.dashT -= dt;
       mx = p.dashDir[0];
@@ -86,8 +92,10 @@ export const playerMethods = {
     const p = this.p;
     const P = BAL.player;
     if (this.over || p.invuln > 0 || p.dashInv > 0) return;
+    // 触屏难度校准：摇杆+触屏技能比键鼠粗，伤害降一档、受击无敌帧延长
+    if (touch.enabled) dmg *= BAL.touch.dmgMul;
     p.hp -= dmg;
-    p.invuln = P.invuln;
+    p.invuln = P.invuln + (touch.enabled ? BAL.touch.invulnAdd : 0);
     sfx('hurt');
     this.cameras.main.shake(160, P.shakeHurt);
     this.player.setTintFill(0xff5050);
