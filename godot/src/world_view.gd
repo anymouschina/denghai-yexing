@@ -44,7 +44,7 @@ const SHEETS := {
 func setup(p_sim: Sim) -> void:
 	sim = p_sim
 	font = UI.font()
-	for n in ["hero_run", "enemy_atlas", "boss", "proj_talisman", "proj_flame",
+	for n in ["hero_run", "enemy_atlas", "proj_talisman", "proj_flame",
 			"proj_ghostfire", "proj_sword", "boss_swordwarden", "boss_swordlord", "boss_sedan", "boss_hundredlamps", "pet_huluwa", "fx_thunder", "fx_boom", "drop_soul", "drop_coin", "drop_oil", "drop_chest", "field_lantern", "rift_portal", "merchant"]:
 		T[n] = load("res://assets/%s.png" % n)
 	for k in SHEETS:
@@ -470,7 +470,7 @@ func _draw() -> void:
 	_kinds.resize(0)
 	for lp in _lamp_positions():
 		if _visible(lp.x, lp.y, 200.0):
-			_push(lp.y, 0, lp)
+			_draw_lamp(lp)   # 路灯是地面装饰：先于实体统一画，不再穿插进妖物的 y 排序里打断合批
 	for e: SimEnemy in sim.enemies:
 		if e.boss or e.elite or _visible(e.x, e.y, 130.0):
 			_push(e.y, 1, e)
@@ -752,7 +752,7 @@ func _draw_poi(i: int) -> void:
 		var mh := 150.0
 		var mw := mt.get_width() * mh / mt.get_height()
 		draw_texture_rect(mt, Rect2(mp2.x - mw / 2.0, mp2.y - mh * 0.95, mw, mh), false, Color.WHITE)
-		_draw_zone_text(mp2 + Vector2(0, -mh - 4.0), String(sim.pois[i].name), "站定 1 秒打开商店（灯芯换遗物）", UI.GOLD)
+		_draw_zone_text(mp2 + Vector2(0, -mh - 4.0), String(sim.pois[i].name), "站定 1 秒打开商店（铜钱换遗物）", UI.GOLD)
 		return
 	var pp := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
 	var tx: Texture2D = T.rift_portal
@@ -823,21 +823,26 @@ func _draw_zone_text(p: Vector2, title: String, sub: String, col: Color) -> void
 	draw_string(font, p + Vector2(-260, 6), sub, HORIZONTAL_ALIGNMENT_CENTER, 520.0, 20, col)
 
 
+## 旋转贴图一次提交（四顶点 + UV），不调 draw_set_transform，避免打断合批
+func _quad(tx: Texture2D, c: Vector2, ang: float, w: float, h: float, col: Color) -> void:
+	var ca := cos(ang)
+	var sa := sin(ang)
+	var hx := Vector2(ca, sa) * (w * 0.5)
+	var hy := Vector2(-sa, ca) * (h * 0.5)
+	draw_primitive(PackedVector2Array([c - hx - hy, c + hx - hy, c + hx + hy, c - hx + hy]), PackedColorArray([col, col, col, col]), PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]), tx)
+
+
 func _draw_projectiles() -> void:
 	var tx: Texture2D = T.proj_talisman
 	for b: SimBullet in sim.bullets:
 		var w := tx.get_width() * 0.48
 		var h := tx.get_height() * 0.48
-		draw_set_transform(Vector2(b.x, b.y), b.ang, Vector2.ONE)
-		draw_texture_rect(tx, Rect2(-w / 2.0, -h / 2.0, w, h), false, Color.WHITE)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		_quad(tx, Vector2(b.x, b.y), b.ang, w, h, Color.WHITE)
 	var eg: Texture2D = T.proj_ghostfire
 	for b: SimBullet in sim.ebullets:
 		var w2 := eg.get_width() * 0.42
 		var h2 := eg.get_height() * 0.42
-		draw_set_transform(Vector2(b.x, b.y), t_anim * 6.0, Vector2.ONE)
-		draw_texture_rect(eg, Rect2(-w2 / 2.0, -h2 / 2.0, w2, h2), false, Color.WHITE)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		_quad(eg, Vector2(b.x, b.y), t_anim * 6.0, w2, h2, Color.WHITE)
 	if sim.pet_on and sim.pet_dead_t <= 0.0:
 		var pp := sim.pet_pos
 		var pt: Texture2D = T.pet_huluwa
@@ -848,13 +853,10 @@ func _draw_projectiles() -> void:
 	var swt: Texture2D = T.proj_sword
 	for wp: Vector2 in sim.sw_wheel_pos:
 		var wa := atan2(wp.y - (sim.py - 30.0), wp.x - sim.px) + PI / 2.0
-		draw_set_transform(wp, wa, Vector2.ONE)
-		draw_texture_rect(swt, Rect2(-swt.get_width() * 0.2, -swt.get_height() * 0.2, swt.get_width() * 0.4, swt.get_height() * 0.4), false, Color(0.8, 1.0, 1.0))
+		_quad(swt, wp, wa, swt.get_width() * 0.4, swt.get_height() * 0.4, Color(0.8, 1.0, 1.0))
 	for qb: SimBullet in sim.sw_qi:
-		draw_set_transform(Vector2(qb.x, qb.y), qb.ang, Vector2.ONE)
 		var big: float = 0.42 if qb.hits.key == "sw_array" else 0.32
-		draw_texture_rect(swt, Rect2(-swt.get_width() * big / 2.0, -swt.get_height() * big / 2.0, swt.get_width() * big, swt.get_height() * big), false, Color(1.0, 0.9, 0.6) if qb.hits.key == "sw_array" else Color(0.6, 1.0, 1.0))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		_quad(swt, Vector2(qb.x, qb.y), qb.ang, swt.get_width() * big, swt.get_height() * big, Color(1.0, 0.9, 0.6) if qb.hits.key == "sw_array" else Color(0.6, 1.0, 1.0))
 	var fl: Texture2D = T.proj_flame
 	for o in sim.orb_pos:
 		var s := 0.5 + sin(t_anim * 14.0) * 0.05
@@ -880,15 +882,18 @@ func _draw_projectiles() -> void:
 
 
 func _draw_floaters() -> void:
-	var from_i := maxi(0, floaters.size() - 24)   # 飘字最多同时画 24 条
-	for fi in range(from_i, floaters.size()):
-		var f: Dictionary = floaters[fi]
-		var a := clampf(f.life / 0.4, 0.0, 1.0)
-		var col: Color = f.col
-		col.a = a
-		var pos := Vector2(f.x - 100.0, f.y)
-		draw_string_outline(font, pos, f.text, HORIZONTAL_ALIGNMENT_CENTER, 200.0, f.size, 6, Color(UI.INK, a))
-		draw_string(font, pos, f.text, HORIZONTAL_ALIGNMENT_CENTER, 200.0, f.size, col)
+	var from_i := maxi(0, floaters.size() - 12)   # 飘字最多同时画 12 条；描边与正文分两遍提交
+	for pass_i in range(2):
+		for fi in range(from_i, floaters.size()):
+			var f: Dictionary = floaters[fi]
+			var a := clampf(f.life / 0.4, 0.0, 1.0)
+			var pos := Vector2(f.x - 100.0, f.y)
+			if pass_i == 0:
+				draw_string_outline(font, pos, f.text, HORIZONTAL_ALIGNMENT_CENTER, 200.0, f.size, 6, Color(UI.INK, a))
+			else:
+				var col: Color = f.col
+				col.a = a
+				draw_string(font, pos, f.text, HORIZONTAL_ALIGNMENT_CENTER, 200.0, f.size, col)
 
 
 func _draw_fx_add(c: Node2D) -> void:

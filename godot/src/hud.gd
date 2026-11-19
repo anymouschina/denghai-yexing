@@ -47,8 +47,8 @@ func setup(p_game: Node, p_sim: Sim, p_touch: bool) -> void:
 	banner = UI.label("", 44, UI.GOLD, 8)
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	banner.custom_minimum_size = Vector2(900, 60)
-	banner.position = Vector2(-450, 120)
+	banner.custom_minimum_size = Vector2(720, 60)
+	banner.position = Vector2(-360, 220)
 	banner.modulate.a = 0.0
 	root.add_child(banner)
 	refresh_inset()
@@ -91,7 +91,7 @@ func tick(delta: float) -> void:
 		hurt_flash = 0.3
 	last_hp = sim.hp
 	var vw := get_viewport().get_visible_rect().size
-	banner.position = Vector2(vw.x / 2.0 - 450.0, 110.0 + inset.y)
+	banner.position = Vector2(vw.x / 2.0 - 360.0, 220.0 + inset.y)
 	# 三选一
 	if not sim.choice.is_empty():
 		if shown_choice != sim.choice_serial:
@@ -129,11 +129,36 @@ func _bar(rect: Rect2, k: float, fill: Color, back: Color = Color(0.05, 0.06, 0.
 	canvas.draw_rect(Rect2(rect.position, Vector2(rect.size.x * clampf(k, 0.0, 1.0), rect.size.y * 0.4)), Color(1, 1, 1, 0.16))
 
 
+var _q_texts: Array = []
+
+
+## 文字先入队，帧末统一两遍提交（先全部描边、再全部正文），避免文字与矩形/圆交替切换着色器打断合批
 func _text(pos: Vector2, s: String, size: int, col: Color, w: float = -1.0, align: int = HORIZONTAL_ALIGNMENT_LEFT) -> void:
-	canvas.draw_string_outline(font, pos, s, align, w, size, 6, UI.INK)
-	canvas.draw_string(font, pos, s, align, w, size, col)
+	_q_texts.append([pos, s, _snap(size), col, w, align])
 
 
+func _snap(size: int) -> int:
+	# 字号收敛为 4 档（16/20/26/44），减少动态字体的字形图集页数
+	if size <= 17:
+		return 16
+	if size <= 22:
+		return 20
+	if size <= 32:
+		return 26
+	return 44
+
+
+func _flush_texts() -> void:
+	_q_texts.sort_custom(func(a, b): return a[2] < b[2])
+	for q in _q_texts:
+		canvas.draw_string_outline(font, q[0], q[1], q[5], q[4], q[2], 6, UI.INK)
+	for q in _q_texts:
+		canvas.draw_string(font, q[0], q[1], q[5], q[4], q[2], q[3])
+	_q_texts.clear()
+
+
+var mm_tex: ImageTexture = null
+var mm_n := -1
 var owned_cache: Array = []
 var owned_hash := -1
 var portrait: Texture2D
@@ -141,7 +166,9 @@ var portrait: Texture2D
 
 func _draw_hud() -> void:
 	var t_hd := Time.get_ticks_usec()
+	_q_texts.clear()
 	_draw_hud_inner()
+	_flush_texts()
 	PerfStat.add("hud_draw", t_hd)
 
 
@@ -202,11 +229,10 @@ func _draw_hud_inner() -> void:
 		canvas.draw_texture_rect(_icon("sword"), Rect2(rx + 6, ry - 2, 34 * k, 34 * k), false)
 		rx += 46.0 * k
 	# 铜钱 / 葫芦进度珠 / 小金刚 / 套装
-	_text(Vector2(rx, ry + 100 * k), "铜钱 %d" % sim.coins, _fs(24), Color("ffd36a"))
 	var gcols := {"red": Color("ff4a3a"), "orange": Color("ff9a3c"), "yellow": Color("ffe04a"), "green": Color("5ade6a"), "cyan": Color("4adfe0"), "blue": Color("4a7aff"), "purple": Color("b05aff")}
-	_text(Vector2(L, ry + 104 * k), "彩虹葫芦 %d/7" % sim.gourds.size(), _fs(20), Color("ffcf5a"))
+	_text(Vector2(L, ry + 138 * k), "彩虹葫芦 %d/7" % sim.gourds.size(), _fs(20), Color("ffcf5a"))
 	var bx2 := L + 160.0
-	var by2 := ry + 108 * k
+	var by2 := ry + 132 * k
 	for gp in GameData.GD.pieces:
 		var got: bool = sim.gourds.has(gp.id)
 		canvas.draw_circle(Vector2(bx2 + 11, by2), 12.0, UI.INK)
@@ -225,11 +251,12 @@ func _draw_hud_inner() -> void:
 		var nms: Array = []
 		for sid in asets:
 			nms.append(GameData.SET_BY_ID[sid].name)
-		_text(Vector2(L, by2 + 30), "套装：" + " / ".join(PackedStringArray(nms)), _fs(15), Color("9fe8ff"))
+		_text(Vector2(L, by2 + 44), "套装：" + " / ".join(PackedStringArray(nms)), _fs(15), Color("9fe8ff"))
 	# 右上：击杀 / 魂火
 	var rr := vw.x - inset.z - (110.0 if touch_mode else 24.0)
 	_text(Vector2(rr - 240, T + 24 * k), "击杀  %d" % sim.kills, _fs(22), UI.PAPER, 240.0, HORIZONTAL_ALIGNMENT_RIGHT)
 	_text(Vector2(rr - 240, T + 52 * k), "魂火  %d" % sim.soul_payout(), _fs(22), UI.GHOST, 240.0, HORIZONTAL_ALIGNMENT_RIGHT)
+	_text(Vector2(rr - 240, T + 80 * k), "铜钱  %d" % sim.coins, _fs(22), Color("ffd36a"))
 	# 顶部中央：大计时 + 段名
 	var cx := vw.x / 2.0
 	var tt := sim.clock if sim.phase != Sim.PH_RIFT else sim.rift_t
@@ -260,7 +287,7 @@ func _draw_hud_inner() -> void:
 		_bar(Rect2(cx - 280, yb + 12, 560, 18), b.hp / maxf(1.0, b.maxhp), Color("b36bff"))
 		_text(Vector2(cx - 300, yb + 50), "灯骸老祖", _fs(20), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER)
 	elif sim.phase == Sim.PH_BREAK:
-		_text(Vector2(cx - 420, yb + 22), "站定「启程」领三选一馈赠；站定「灯骸裂隙」则放弃它 • 游商用灯芯换遗物", _fs(17), UI.PAPER, 840.0, HORIZONTAL_ALIGNMENT_CENTER)
+		_text(Vector2(cx - 420, yb + 22), "站定「启程」领三选一馈赠；站定「灯骸裂隙」则放弃它 • 游商用铜钱换遗物", _fs(17), UI.PAPER, 840.0, HORIZONTAL_ALIGNMENT_CENTER)
 	# 段间：指向裂隙的箭头（离得远时）+ 状态牌
 	if sim.phase == Sim.PH_BREAK:
 		var rp := sim.break_pos("rift")
@@ -292,7 +319,7 @@ func _draw_hud_inner() -> void:
 			var ctr2 := Vector2(vw.x / 2.0, vw.y / 2.0)
 			var ap2 := ctr2 + Vector2(dn.x * (vw.x * 0.5 - 70.0), dn.y * (vw.y * 0.5 - 60.0))
 			if ap2.x > vw.x - inset.z - 230.0 and ap2.y < inset.y + 230.0:
-				ap2.y = inset.y + 250.0   # 避开右上角小地图
+				ap2.y = inset.y + 295.0   # 避开右上角小地图
 			var perp2 := Vector2(-dn.y, dn.x)
 			canvas.draw_colored_polygon(PackedVector2Array([ap2 + dn * 20.0, ap2 - dn * 10.0 + perp2 * 14.0, ap2 - dn * 10.0 - perp2 * 14.0]), Color(0.85, 0.6, 1.0, 0.9))
 			_text(ap2 - Vector2(70, -34) if dn.y > 0 else ap2 - Vector2(70, 20), "剑冢裂隙 %dm" % int(bdist / 10.0), 15, Color(0.9, 0.75, 1.0), 140.0, HORIZONTAL_ALIGNMENT_CENTER)
@@ -333,14 +360,20 @@ func _draw_minimap(vw: Vector2) -> void:
 	var mw := 190.0 if not touch_mode else 170.0
 	var mh := mw * Sim.H / Sim.W
 	var x0 := vw.x - inset.z - mw - 14.0
-	var y0 := inset.y + (84.0 if touch_mode else 96.0)
+	var y0 := inset.y + (100.0 if touch_mode else 112.0)
 	canvas.draw_rect(Rect2(x0 - 3, y0 - 3, mw + 6, mh + 6), Color(0.04, 0.05, 0.12, 0.7))
-	var cw := mw / 36.0
-	var ch := mh / 24.0
-	for gy in range(24):
-		for gx in range(36):
-			if sim.explored.size() == 864 and sim.explored[gy * 36 + gx] == 1:
-				canvas.draw_rect(Rect2(x0 + gx * cw, y0 + gy * ch, cw, ch), Color(0.35, 0.45, 0.75, 0.35))
+	if sim.explored.size() == 864:
+		if mm_tex == null or mm_n != sim.explored_n:
+			mm_n = sim.explored_n
+			var img := Image.create(36, 24, false, Image.FORMAT_RGBA8)
+			for gy in range(24):
+				for gx in range(36):
+					img.set_pixel(gx, gy, Color(0.35, 0.45, 0.75, 0.35) if sim.explored[gy * 36 + gx] == 1 else Color(0, 0, 0, 0))
+			if mm_tex == null:
+				mm_tex = ImageTexture.create_from_image(img)
+			else:
+				mm_tex.update(img)
+		canvas.draw_texture_rect(mm_tex, Rect2(x0, y0, mw, mh), false)
 	canvas.draw_rect(Rect2(x0, y0, mw, mh), UI.ORANGE, false, 2.0)
 	for pp in sim.pois:
 		var st_: Color = {"sword": Color(0.8, 0.45, 1.0), "merchant": Color(1.0, 0.8, 0.3), "vine": Color(0.4, 1.0, 0.5), "gourd": Color(0.5, 1.0, 0.8), "vault": Color(1.0, 0.4, 0.3)}[pp.kind]
@@ -560,6 +593,32 @@ func show_pause(on: bool) -> void:
 			var r: Dictionary = GameData.RELIC_BY_ID[rid]
 			rl.append({"icon": r.icon, "lv": "", "name": r.name})
 		col.add_child(_build_row(rl, "遗物"))
+	var guide: Array = []
+	for ev in GameData.UP.evolutions:
+		var w: Dictionary = GameData.UPS[ev.weapon]
+		var nd: Dictionary = GameData.UPS[ev.needs]
+		var wl := sim.lv(ev.weapon)
+		if wl > 0:
+			var done: bool = sim.evo.has(ev.weapon)
+			guide.append("%s Lv%d/%d  配对「%s」%s  〉「%s」%s" % [w.name, wl, int(w.max), nd.name, "（已持有）" if sim.lv(ev.needs) > 0 else "（缺）", ev.name, "（已进化）" if done else ""])
+	if sim.has_sword():
+		var nms: Array = GameData.DG.sword.stages.names
+		var nxt := "已圆满" if sim.sw_stage >= 5 else "下一阶「%s」：剑意 %d/%d 或击败守关者" % [nms[sim.sw_stage], sim.sw_kills, int(GameData.DG.sword.stages.kills[sim.sw_stage - 1])]
+		guide.append("飞剑 第 %d/5 阶 • %s" % [sim.sw_stage, nxt])
+	guide.append("彩虹葫芦 %d/7%s" % [sim.gourds.size(), "  • 小金刚已合成" if sim.pet_on else ""])
+	var sc := sim.set_counts()
+	var sparts: Array = []
+	for st in GameData.SETS:
+		var n := int(sc.get(st.id, 0))
+		if n >= 2:
+			sparts.append("%s 已激活" % st.name)
+		elif n == 1:
+			sparts.append("%s 1/2（差 1 件）" % st.name)
+	guide.append("套装：" + ("、".join(PackedStringArray(sparts)) if sparts.size() > 0 else "暂无"))
+	for gl in guide:
+		var gx := UI.label(gl, 20, Color("c9e8ff"), 4)
+		gx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(gx)
 	var info := UI.label("灯芯 ×%d  •  已入裂隙 %d / %d 次%s" % [sim.wicks, sim.rift_entries, int(GameData.DG.rift.maxEntries), "  •  法宝：飞剑术" if sim.artifact == "sword" else ""], 22, UI.GOLD, 4)
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(info)
@@ -661,8 +720,11 @@ func show_result(r: Dictionary) -> void:
 
 
 func _cause_name(c: String) -> String:
-	var names := {"paperman": "纸扎人", "foxfire": "狐火", "lantern": "破灯笼妖", "jiangshi": "跳尸", "firecracker": "爆竹鬼", "boss": "灯骸老祖", "warden": "守关者", "elite_jiangshi": "跳尸王", "elite_lantern": "破灯笼王"}
+	var names := {"paperman": "纸扎人", "foxfire": "狐火", "lantern": "破灯笼妖", "jiangshi": "跳尸", "firecracker": "爆竹鬼", "boss": "灯骸老祖", "warden": "剑灵", "elite_jiangshi": "跳尸王", "elite_lantern": "破灯笼王", "swordlord": "剑冢真主", "sedan": "纸轿冥娘", "lamps": "百灯鬼王", "x": "未知"}
+	var hows := {"contact": "撞击", "bullet": "鬼火", "slam": "震击", "blast": "爆炸", "blade": "灵剑", "lunge": "突刺", "rain": "剑雨", "ring": "剑阵", "charge": "冲锋", "paper": "纸钱", "lamp": "鬼灯", "beam": "鬼火射线"}
+	if c == "abandon":
+		return "主动撤离"
 	var p := c.split(":")
-	var base: String = names.get(p[0], p[0])
-	var how: String = {"contact": "撞击", "bullet": "鬼火", "slam": "震击", "blast": "爆炸"}.get(p[1] if p.size() > 1 else "", "")
+	var base: String = names.get(p[0], "妖物")
+	var how: String = hows.get(p[1] if p.size() > 1 else "", "")
 	return base + how

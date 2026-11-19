@@ -32,7 +32,10 @@ func _ready() -> void:
 	for name in meta:
 		var arr: Array = []
 		for v in range(2):
-			var st: Variant = load(SFX_DIR + "%s_%d.wav" % [name, v])
+			var sp := SFX_DIR + "%s_%d.wav" % [name, v]
+			if not ResourceLoader.exists(sp):
+				continue
+			var st: Variant = load(sp)
 			if st != null:
 				arr.append(st)
 		streams[name] = arr

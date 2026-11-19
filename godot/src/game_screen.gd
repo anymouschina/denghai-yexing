@@ -32,6 +32,8 @@ func start(p_touch: bool, resume: Dictionary = {}) -> void:
 	sim = Sim.new(seed_v, {"emit": true, "touch": touch_mode, "meta": sv.meta, "mode": String(resume.get("mode", sv.get("mode", "full")))})
 	if not resume.is_empty():
 		sim.from_save(resume)
+	if Playtest.enabled and Playtest.bench == 0 and resume.is_empty():
+		sim.coins = 120   # 试玩桥：起始 120 铜钱（仅用于让剧本能在 3 分钟内演示商店购买；正常游玩为 0）
 	view = WorldView.new()
 	view.name = "World"
 	add_child(view)
@@ -103,7 +105,7 @@ func _toast(msg: String) -> void:
 func _process(delta: float) -> void:
 	if sim == null:
 		return
-	if Playtest.enabled and Playtest.bench == 0 and not sim.choice.is_empty() and sim.choice.kind == "level" and sim.level > 2 + Playtest.autopick_after:
+	if Playtest.enabled and Playtest.bench == 0 and not sim.choice.is_empty() and ((sim.choice.kind == "level" and sim.level > 2) or sim.choice.kind in ["chest", "swb", "fusion", "gift"]):
 		on_choose(0)
 	PerfStat.frame_done()
 	if toast != null and toast_t > 0.0:

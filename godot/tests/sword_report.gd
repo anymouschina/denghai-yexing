@@ -11,7 +11,7 @@ func _init() -> void:
 	for x in str(args.get("plan", "0")).split(","):
 		if x != "": plan.append(int(x))
 	var sd := int(args.get("seed", 1))
-	var s := Sim.new(sd)
+	var s := Sim.new(sd, {"mode": str(args.get("mode", "classic"))})
 	var b2 := Bot.new(Bot.Kind.PROXY, sd, plan)
 	var g := 0
 	var qi_n := 0
@@ -27,5 +27,5 @@ func _init() -> void:
 	for r in s.rift_log:
 		rifts.append({"ok": r.ok, "how": r.how, "dur": snappedf(r.t, 0.1)})
 	print("SW ", JSON.stringify({"seed": sd, "plan": plan, "win": s.victory, "end_real_s": snappedf(s.real_t, 1), "cause": s.death_cause, "sword_log": s.sw_log, "sword_stage": s.sw_stage, "sword_kills": s.sw_kills,
-		"dmg_share_pct": by, "rifts": rifts, "fusion": s.fusion, "fusion_t": snappedf(s.fusion_t, 0.1), "level": s.level}))
+		"dmg_share_pct": by, "rifts": rifts, "fusion": s.fusion, "fusion_t": snappedf(s.fusion_t, 0.1), "level": s.level, "mode": s.mode, "clock_end": snappedf(s.clock, 1), "gourds": s.gourds.size(), "pet": s.pet_on, "relics": s.relics, "mini_idx": s.mini_idx, "sets": s.active_sets(), "boss_time": snappedf(s.boss_time, 1)}))
 	quit()

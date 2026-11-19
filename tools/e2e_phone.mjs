@@ -75,6 +75,7 @@ const stickMove = async (dx, dy) => { // dx,dy 单位向量；null 松手
 const sc = h / 720; const vw = w / sc;
 const dashBtn = { x: (vw - 120) * sc, y: (720 - 120) * sc };
 const skillBtn = { x: (vw - 290) * sc, y: (720 - 90) * sc };
+const escKey = async () => { await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }); await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }); };
 const tapAbs = async (x, y) => { await touchEv('touchStart', [{ x, y, id: 9 }]); await sleep(60); await touchEv('touchEnd', []); };
 
 const CX = 1250, CY = 697;
@@ -100,7 +101,7 @@ for (let i = 0; i < 120 && s.scene !== 'title'; i++) { await sleep(500); s = awa
 if (s.scene !== 'title') { note('标题页没出现'); process.exit(2); }
 await sleep(800);
 await shot('title');
-await tap(0.2, 0.44, '开始夜行');
+await tap(0.85, 0.4, '开始夜行（点空白）');
 for (let i = 0; i < 40 && s.scene !== 'play'; i++) { await sleep(300); s = await snap(); }
 await sleep(600); await shot('start-joystick-and-buttons');
 const seen = { levelup: false, break_: false, rift: false, sword: false, result: false, restart: false, gift: false, pause: false };
@@ -119,7 +120,7 @@ while (Date.now() < deadline) {
   if (sc2 === 'result') {
     await stickMove(null); await sleep(800); await shot('result-death'); seen.result = true; break;
   }
-  if (sc2 === 'paused') { await tap(0.345, 0.632); await sleep(500); continue; }
+  if (sc2 === 'paused') { await escKey(); await sleep(500); continue; }
   if (sc2 === 'dying') { await stickMove(null); await sleep(400); continue; }
   const ph = s.phase;
   if (ph !== undefined && String(ph) + (s.seg ?? '') !== phaseNote) { phaseNote = String(ph) + (s.seg ?? ''); note(`阶段 phase=${ph} seg=${s.seg} t=${s.t} hp=${s.hp}/${s.maxHp} wicks=${s.wicks} rift_state=${s.rift_state}`); }
@@ -149,7 +150,7 @@ while (Date.now() < deadline) {
       if (Date.now() - (lastShot.swordT ||= 0) > 2600) { lastShot.swordT = Date.now(); await tapAbs(skillBtn.x, skillBtn.y); if (!lastShot.swordShot) { lastShot.swordShot = true; await sleep(700); await shot('sword-out-orbiting'); } }
     }
     // 暂停/继续验证一次
-    if (!seen.pause && Number(s.t) > 25) { seen.pause = true; await stickMove(null); await tapAbs((vw - 54) * sc, 54 * sc); await sleep(700); await shot('paused'); await tap(0.345, 0.632); await sleep(400); continue; }
+    if (!seen.pause && Number(s.t) > 25) { seen.pause = true; await stickMove(null); await tapAbs((vw - 54) * sc, 54 * sc); await sleep(700); await shot('paused'); await escKey(); await sleep(400); continue; }
     // 打到足够久后停手等死（拿到飞剑术之后，且过了第 2 段），否则继续跑位生存
     const wantDie = seen.sword && Number(s.t) > 190;
     if (wantDie) { await stickMove(null); await sleep(500); continue; }

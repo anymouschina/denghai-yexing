@@ -15,6 +15,8 @@ def run_chunk(args, frm, n):
            f"--bot={args.bot}", f"--tier={args.tier}", f"--from={frm}", f"--n={n}", f"--dt={args.dt}"]
     if args.set:
         cmd.append(f"--set={args.set}")
+    if getattr(args, "mode", "classic") != "classic":
+        cmd.append(f"--mode={args.mode}")
     if args.touch:
         cmd.append("--touch")
     if args.plan is not None:
@@ -109,6 +111,7 @@ def main():
     ap.add_argument("--dt", type=float, default=0.0666667)
     ap.add_argument("--set", default="")
     ap.add_argument("--plan", default=None)
+    ap.add_argument("--mode", default="classic")
     ap.add_argument("--touch", action="store_true")
     ap.add_argument("--out", default="")
     args = ap.parse_args()

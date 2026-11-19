@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/boss_sedan.png-cb0e04a753035f20fa09c4e995a87f
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.62
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

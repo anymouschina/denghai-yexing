@@ -21,5 +21,31 @@ for bot in ("proxy", "random"):
         top = "、".join(f"{k}×{v}" for k, v in list(s["death_causes"].items())[:3])
         fm = lambda x: "-" if x is None else x
         out.append(f"| {names[bot]} | {tiers[t]} | {s['n']} | {wr:.1f}% | {ci[0]*100:.1f}–{ci[1]*100:.1f}% | {lo}–{hi}% | {ok} | {s['mean_t']} | {s.get('rift_clear_rate','-')} | {s.get('rift_death_rate','-')} | {fm(s.get('boss_time_rc0'))} | {fm(s.get('boss_time_rc1p'))} | {top} |")
-open(os.path.join(os.path.dirname(D.rstrip('/')) if False else "docs", "balance-report.md"), "w").write("\n".join(out) + "\n")
+
+import statistics as st
+def load(n):
+    f = os.path.join(D, n)
+    return json.load(open(f)) if os.path.exists(f) else None
+runs = []
+for t in range(3):
+    d = load(f"f_proxy_t{t}.json")
+    if d: runs += d["runs"]
+out += ["", "## 飞剑降时（真人代理三档合并，按剑冢通关次数分组的 BOSS 击杀时长）", "", "| 剑冢通关次数 | 样本 | 平均 BOSS 时长(s) | 相对 0 次下降 | 目标 |", "|---|---|---|---|---|"]
+base = None
+for c in range(3):
+    b = [r["boss_time"] for r in runs if r["boss_time"] > 0 and r.get("rift_clears", 0) == c]
+    if not b: continue
+    m = st.mean(b)
+    if c == 0: base = m
+    red = "-" if c == 0 or base is None else f"{(1 - m / base) * 100:.1f}%"
+    tg = "-" if c == 0 else ("25–35%（1 次）" if c == 1 else "25–35%（2 次）")
+    out.append(f"| {c} | {len(b)} | {m:.1f} | {red} | {tg} |")
+for name, lab in (("f_aim_t0.json", "瞄准机器人(克隆试射) 不进副本"), ("f_quick_t1.json", "疾速模式(10分钟) 进 1 次，真人代理"), ("f_full_t1.json", "完整模式(30分钟) 进 1 次，真人代理")):
+    d = load(name)
+    if d:
+        s2 = d["summary"]; out.append(f"\n* {lab}：{s2['n']} 局，胜率 {s2['win_rate']*100:.1f}%，平均战斗时钟(节奏钟) {s2['mean_t']}，BOSS 平均时长 {s2.get('boss_time_sword')}。")
+ev = os.path.join(D, "events_full.txt")
+if os.path.exists(ev):
+    out += ["", "## 完整模式 3 局事件日志（`tests/sword_report.gd --mode=full`）", "", "```"] + [l.strip()[:900] for l in open(ev)] + ["```"]
+open("docs/balance-report.md", "w").write("\n".join(out) + "\n")
 print("\n".join(out))

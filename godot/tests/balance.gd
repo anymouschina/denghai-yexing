@@ -32,7 +32,7 @@ func _init() -> void:
 	var out: Array = []
 	for i in range(n):
 		var seed_v := from + i + 1
-		var s := Sim.new(seed_v, {"touch": args.has("touch")})
+		var s := Sim.new(seed_v, {"touch": args.has("touch"), "mode": str(args.get("mode", "classic"))})
 		var b := Bot.new(kind, seed_v, plan)
 		var guard := 0
 		var t0 := Time.get_ticks_msec()

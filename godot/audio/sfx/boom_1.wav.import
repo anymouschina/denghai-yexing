@@ -13,9 +13,9 @@ dest_files=["res://.godot/imported/boom_1.wav-a7d980296adaa8406c0e4ff81c7b8750.s
 [params]
 
 force/8_bit=false
-force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/mono=true
+force/max_rate=true
+force/max_rate_hz=16000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0

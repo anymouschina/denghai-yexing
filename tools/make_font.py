@@ -11,9 +11,12 @@ OUT = os.path.join(ROOT, "godot/fonts/MaShanZheng-subset.ttf")
 
 # 需要的字符：工程文本 + 常用标点 + ASCII
 chars = set(chr(c) for c in range(0x20, 0x7f))
-for pat in ("godot/src/**/*.gd", "godot/data/*.json", "godot/tests/*.gd"):
-    for f in glob.glob(os.path.join(ROOT, pat), recursive=True):
-        chars |= set(open(f, encoding="utf-8").read())
+import re as _re
+for f in glob.glob(os.path.join(ROOT, "godot/src/**/*.gd"), recursive=True):
+    for lit in _re.findall(r'"((?:[^"\\\n]|\\.)*)"', open(f, encoding="utf-8").read()):   # 只取双引号字符串字面量（排除注释里的汉字）
+        chars |= set(lit)
+for f in glob.glob(os.path.join(ROOT, "godot/data/*.json")):
+    chars |= set(open(f, encoding="utf-8").read())
 chars |= set("，。、；：？！“”‘’（）【】《》…—·×→←↑↓★☆●○◆◇■□▲△▼▽❚⏸▶◀✕✓" "０１２３４５６７８９")
 chars = {c for c in chars if not c.isspace() or c == " "}
 
@@ -29,6 +32,8 @@ for f in slices:
     covered |= want
     opts = subset.Options()
     opts.layout_features = []
+    opts.hinting = False
+    opts.desubroutinize = True
     opts.name_IDs = [1, 2]
     opts.notdef_outline = True
     opts.drop_tables += ["DSIG"]

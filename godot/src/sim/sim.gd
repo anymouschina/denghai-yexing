@@ -165,6 +165,7 @@ var set_army_n := 0
 var rift_poi := -1
 var pois: Array = []          # 大地图上的“剑冢裂隙”入口：{x,y,name}
 var poi_hold: Dictionary = {}
+var explored_n := 0
 var explored := PackedByteArray()   # 36×24 格探索足迹（小地图）
 var break_idx := -1          # 当前段间序号 0/1/2
 var break_t := 0.0
@@ -1295,7 +1296,7 @@ func _sword_strike(e: SimEnemy, base: float, thrust: bool, key: String = "sword"
 	if crit:
 		o["forceCrit"] = true
 	# 阶段与剑冢通关带来的剑意增益（加算，随飞剑成长）：+30%/阶 +25%/次剑冢通关
-	var grow := 1.0 + 0.3 * float(sw_stage - 1) + 0.25 * float(rift_clears)
+	var grow: float = 1.0 + 0.3 * float(sw_stage - 1) + float([0.0, 0.5, 0.6][mini(rift_clears, 2)])
 	damage(e, base * grow * (sw.thrustMul if thrust else 1.0), key, o)
 
 
@@ -2175,7 +2176,9 @@ func _mark_explored() -> void:
 			var x := gx + dx
 			var y := gy + dy
 			if x >= 0 and x < 36 and y >= 0 and y < 24:
-				explored[y * 36 + x] = 1
+				if explored[y * 36 + x] == 0:
+					explored[y * 36 + x] = 1
+					explored_n += 1
 
 
 func _update_pois(dt: float) -> void:
@@ -2569,7 +2572,7 @@ func _finish() -> void:
 	if sw_drops >= 0 and float(dmg_by.get("sword", 0.0)) > float(dmg_by.get(top, 0.0)):
 		top_name = "飞剑术"
 	_ev("result")
-	result = {"victory": victory, "time": t, "level": level, "kills": kills, "top": top_name, "soul": soul_payout(), "build": owned(), "seed": seed_v,
+	result = {"victory": victory, "time": clock, "level": level, "kills": kills, "top": top_name, "soul": soul_payout(), "build": owned(), "seed": seed_v,
 		"cause": death_cause, "rift": rift_log, "relics": relics.duplicate(), "artifact": artifact, "boss_time": boss_time}
 
 
