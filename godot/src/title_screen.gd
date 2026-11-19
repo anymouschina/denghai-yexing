@@ -178,9 +178,8 @@ func _input(ev: InputEvent) -> void:
 	elif ev is InputEventMouseButton and ev.pressed and shop == null:
 		# 点在空白处（没有被按钮等控件接住）才算“点击画面开始”
 		var hov := root.get_viewport().gui_get_hovered_control()
-		if hov == null or not (hov is Button):
-			if hov == null or hov.get_parent() == root or hov is TextureRect:
-				_start()
+		if not (hov is Button):
+			_start()
 
 
 # ---------------- 灯坊（局外强化）----------------

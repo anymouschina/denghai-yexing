@@ -16,7 +16,7 @@ const snap = async () => { const r = await call('Runtime.evaluate', { expression
 for (let i = 0; i < 60 && (await snap()) !== 'title'; i++) await sleep(500);
 await sleep(1000);
 const mouse = async (x, y) => { await call('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 }); await call('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 }); };
-await mouse(1279, 799); await sleep(500);
+await mouse(640, 400); await sleep(2500); console.log("after center click:", await snap());
 const key = async (k, code, vk) => { await call('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk }); await call('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk }); };
 await key('Enter', 'Enter', 13); await sleep(2000);
 const s1 = await snap(); console.log('after corner click + Enter:', s1);

@@ -123,7 +123,7 @@ main.tscn::PackedScene::-1::1795069674::0::1::::<><><>0<>0<><>::res://src/main.g
 playtest.gd::GDScript::5105864974144378499::1795079134::0::1::::<>Node<><>0<>0<><>::
 safe_area.gd::GDScript::8726924202053501644::1795079134::0::1::::SafeArea<>RefCounted<><>0<>0<><>::
 save_data.gd::GDScript::6176806468185351870::1795079134::0::1::::SaveData<>RefCounted<><>0<>0<><>::
-title_screen.gd::GDScript::5241048727099278937::1795079134::0::1::::TitleScreen<>CanvasLayer<><>0<>0<><>::
+title_screen.gd::GDScript::5241048727099278937::1795081891::0::1::::TitleScreen<>CanvasLayer<><>0<>0<><>::
 touch_controls.gd::GDScript::1360383277566358580::1795079134::0::1::::TouchControls<>CanvasLayer<><>0<>0<><>::
 ui.gd::GDScript::3315220040751457337::1795079134::0::1::::UI<>RefCounted<><>0<>0<><>::
 world_view.gd::GDScript::9154994667086359920::1795079134::0::1::::WorldView<>Node2D<><>0<>0<><>::
