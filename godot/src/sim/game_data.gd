@@ -12,6 +12,7 @@ static var DG: Dictionary
 static var RELICS: Array
 static var SEG: Dictionary
 static var MV: Dictionary
+static var ANCH: Dictionary
 static var UPS: Dictionary = {}
 static var EVOS: Dictionary = {}
 static var RELIC_BY_ID: Dictionary = {}
@@ -38,6 +39,7 @@ static func load_all() -> void:
 	RELICS = _read("relics")
 	SEG = _read("segments")
 	MV = _read("movement")
+	ANCH = _read("anchors")
 	for u in UP.list:
 		UPS[u.id] = u
 	for e in UP.evolutions:

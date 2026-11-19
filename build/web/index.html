@@ -59,7 +59,7 @@ body { position: fixed; inset: 0; width: 100%; }
 <noscript>需要启用 JavaScript。</noscript>
 <script src="index.js"></script>
 <script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":14346448,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":14348032,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 (function () {
@@ -88,6 +88,16 @@ const engine = new Engine(GODOT_CONFIG);
   window.addEventListener('focus', refocus);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refocus(); });
   window.addEventListener('keydown', (e) => { if (document.activeElement !== cv) refocus(); }, true);
+  // 按住的键在失焦（截图/切窗口/系统弹窗）时收不到 keyup 会“卡住”：失焦时补发 keyup
+  const downKeys = new Map();
+  window.addEventListener('keydown', (e) => { downKeys.set(e.code, e); }, true);
+  window.addEventListener('keyup', (e) => { downKeys.delete(e.code); }, true);
+  const releaseAll = () => {
+    downKeys.forEach((e) => { cv.dispatchEvent(new KeyboardEvent('keyup', { key: e.key, code: e.code, keyCode: e.keyCode, which: e.which, bubbles: true })); });
+    downKeys.clear();
+  };
+  window.addEventListener('blur', releaseAll);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
   const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
   if (missing.length) { fail(new Error('当前浏览器缺少运行所需特性：\n' + missing.join('\n'))); return; }
   engine.startGame({

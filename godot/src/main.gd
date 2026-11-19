@@ -52,3 +52,15 @@ func _start_game() -> void:
 	g.request_restart.connect(_start_game)
 	_swap(g)
 	g.start(touch_mode)
+
+
+## 截图/切窗口/弹系统对话框时浏览器收不到 keyup，按键会“卡住”（例如 D 卡住则无法左转）：失焦时释放全部输入动作
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		release_inputs()
+
+
+static func release_inputs() -> void:
+	for a in ["move_left", "move_right", "move_up", "move_down", "dash", "skill", "pause", "accept"]:
+		Input.action_release(a)
+	Input.flush_buffered_events()

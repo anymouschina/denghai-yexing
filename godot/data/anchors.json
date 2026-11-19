@@ -1,0 +1,13 @@
+{
+ "enemy_paperman": 0.4079,
+ "enemy_foxfire": 0.4452,
+ "enemy_lanternyokai": 0.5,
+ "enemy_jiangshi": 0.6376,
+ "enemy_firecracker": 0.4764,
+ "boss": 0.5093,
+ "boss_swordwarden": 0.4979,
+ "merchant": 0.4928,
+ "hero_run": 0.4368,
+ "boss_idle": 0.534,
+ "jiangshi_hop": 0.5428
+}

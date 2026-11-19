@@ -454,12 +454,20 @@ func _draw_player() -> void:
 	var h := fh * sc * wob
 	draw_set_transform(Vector2(sim.px, sim.py), rot, Vector2.ONE)
 	var src := Rect2((fr % 6) * fw, (fr / 6) * fh, fw, fh)
-	var dst := Rect2(-w / 2.0, -h * 0.92, w, h)
-	if sim.face_x < 0:
-		dst = Rect2(w / 2.0, -h * 0.92, -w, h)
+	var dst := Anchors.rect(0.0, -h * 0.92, w, h, "hero_run", sim.face_x < 0)
 	draw_texture_rect_region(tx, dst, src, col)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	# 冲刺残影在加色层画
+
+
+func _anchor_key(e: SimEnemy) -> String:
+	if e.warden:
+		return "boss_swordwarden"
+	if e.boss:
+		return "boss_idle"
+	if e.elite and e.type == "jiangshi":
+		return "jiangshi_hop"
+	return String(e.def.tex)
 
 
 func _enemy_tex(e: SimEnemy) -> Array:
@@ -508,11 +516,8 @@ func _draw_enemy(e: SimEnemy) -> void:
 	if e.warden:
 		_draw_warden_fx(e)
 	_draw_shadow(e.x, e.y, e.r * 1.3, e.r * 0.6)
-	var x0 := e.x - w / 2.0
 	var y0 := e.y - h * 0.95 - e.lift
-	var dst := Rect2(x0, y0, w, h)
-	if flip:
-		dst = Rect2(x0 + w, y0, -w, h)
+	var dst := Anchors.rect(e.x, y0, w, h, _anchor_key(e), flip)
 	if info[1] != null:
 		draw_texture_rect_region(tx, dst, info[1], col)
 	else:
@@ -701,9 +706,7 @@ func _draw_fx_add(c: Node2D) -> void:
 		var h := fh * 0.44
 		var fr: int = gh.fr
 		var src := Rect2((fr % 6) * fw, (fr / 6) * fh, fw, fh)
-		var dst := Rect2(gh.x - w / 2.0, gh.y - h * 0.92, w, h)
-		if gh.flip:
-			dst = Rect2(gh.x + w / 2.0, gh.y - h * 0.92, -w, h)
+		var dst := Anchors.rect(gh.x, gh.y - h * 0.92, w, h, "hero_run", gh.flip)
 		c.draw_texture_rect_region(tx, dst, src, Color(0.5, 0.89, 1.0, a))
 	# 子弹辉光
 	for b: SimBullet in sim.bullets:
