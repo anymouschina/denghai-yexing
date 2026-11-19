@@ -286,7 +286,7 @@ func _init() -> void:
 	ok(g.sw_stage == 3, "第二次通关再 +1 段（第 3 阶）")
 	var q := fresh(9)
 	to_break(q, 1)
-	ok(q.pending_fusion == 1 and q.artifact == "sword" and q.sw_stage == 2, "融合保底：5:20 的段间必出融合，缺飞剑则遗赠第 2 阶")
+	ok(q.pending_fusion == 1 and q.artifact == "sword" and q.sw_stage == int(GameData.DG.fusion.guaranteeSwordStage), "融合保底：段间必出融合，缺飞剑则剑冢遗赠（阶数取 fusion.guaranteeSwordStage）")
 	q.step(0.05)
 	ok(q.choice.kind == "fusion" and q.choice.options.size() >= 1, "融合选择出现")
 	q.choose(0)

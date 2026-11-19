@@ -436,15 +436,19 @@ func _draw() -> void:
 		if e.boss or e.elite or _visible(e.x, e.y, 130.0):
 			_push(e.y, 1, e)
 	_push(sim.py, 2, null)
-	for k: SimPickup in sim.pickups:
-		if _visible(k.x, k.y, 60.0):
-			_push(k.y + 40.0, 3, k)
 	if sim.phase == Sim.PH_BREAK:
 		_push(sim.break_pos("rift").y, 4, "rift")
 		_push(sim.break_pos("merchant").y, 4, "merchant")
 		_push(sim.break_pos("gate").y, 4, "gate")
 	_keys.sort()
 	_draw_teles()
+	# 掉落物在地面：不参与 y 排序，按贴图种类分批画（同贴图连续提交，批次不再被妖物打断）
+	var t_pk := Time.get_ticks_usec()
+	for kind in ["soul", "coin", "oil", "chest"]:
+		for k: SimPickup in sim.pickups:
+			if k.kind == kind and _visible(k.x, k.y, 60.0):
+				_draw_pickup(k)
+	PerfStat.add("d_pickup", t_pk)
 	# 阴影单独一遍：同一张贴图连续提交，Godot 自动合批（原先“阴影-精灵”交替提交，每只妖物打断两次批次，绘制调用 1142@300 只）
 	var t_s := Time.get_ticks_usec()
 	_draw_shadow(sim.px, sim.py, 28.0, 14.0)
