@@ -1,0 +1,50 @@
+[
+ {
+  "id": "mirror",
+  "name": "护身铜镜",
+  "icon": "r_mirror",
+  "desc": "受到的伤害 -8%",
+  "stat": "dmgTaken",
+  "per": -0.08
+ },
+ {
+  "id": "bell",
+  "name": "引魂铃",
+  "icon": "r_bell",
+  "desc": "拾取范围 +35%",
+  "stat": "pickup",
+  "per": 0.35
+ },
+ {
+  "id": "coin",
+  "name": "铜钱剑穗",
+  "icon": "r_coin",
+  "desc": "暴击率 +8%",
+  "stat": "crit",
+  "per": 0.08
+ },
+ {
+  "id": "shade",
+  "name": "灯罩",
+  "icon": "r_shade",
+  "desc": "最大生命 +20",
+  "stat": "maxHp",
+  "per": 20
+ },
+ {
+  "id": "horse",
+  "name": "纸马",
+  "icon": "r_horse",
+  "desc": "移动速度 +8%",
+  "stat": "speed",
+  "per": 0.08
+ },
+ {
+  "id": "talisman",
+  "name": "破阵符",
+  "icon": "r_talisman",
+  "desc": "所有伤害 +8%（与进化、剑痕加算）",
+  "stat": "dmg",
+  "per": 0.08
+ }
+]

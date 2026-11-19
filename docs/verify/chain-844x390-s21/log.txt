@@ -1,0 +1,46 @@
+[9.1s] 截图 01-title.png  状态 {"scene":"title"}
+[10.7s] 点按 开始夜行 (169,172)
+[15.0s] 截图 02-start-joystick-and-buttons.png  状态 {"scene":"play","hp":100,"lv":1,"t":1.4,"seg":0,"wicks":2,"art":""}
+[15.1s] 阶段 phase=0 seg=0 t=1.5 hp=100/100 wicks=2 rift_state=none
+[24.3s] 截图 03-moving-and-auto-attacking.png  状态 {"scene":"play","hp":100,"lv":1,"t":6.9,"seg":0,"wicks":2,"art":""}
+[108.6s] 截图 04-levelup-choose-one-of-three.png  状态 {"scene":"levelup","hp":100,"lv":2,"t":21.2,"seg":0,"wicks":2,"art":""}
+[113.8s] 点按 选第 1 张卡 (245,195)
+[147.8s] 截图 05-paused.png  状态 {"scene":"paused","hp":100,"lv":2,"t":25.8,"seg":0,"wicks":2,"art":""}
+[164.1s] 点按 选第 1 张卡 (245,195)
+[195.4s] 点按 选第 1 张卡 (245,195)
+[225.9s] 点按 选第 1 张卡 (245,195)
+[252.6s] 点按 选第 1 张卡 (245,195)
+[289.2s] 点按 选第 1 张卡 (245,195)
+[336.7s] 点按 选第 1 张卡 (245,195)
+[345.4s] 点按 选第 1 张卡 (245,195)
+[354.7s] 点按 选第 1 张卡 (245,195)
+[363.5s] 点按 选第 1 张卡 (245,195)
+[365.0s] 点按 选第 1 张卡 (245,195)
+[365.7s] 阶段 phase=1 seg=0 t=160 hp=58/100 wicks=2 rift_state=weak
+[367.4s] 截图 06-break-field-cleared-rift-appears.png  状态 {"scene":"levelup","hp":58,"lv":12,"t":160,"seg":0,"wicks":2,"art":""}
+[369.0s] 点按 选第 1 张卡 (245,195)
+[384.3s] 截图 07-gift-choice.png  状态 {"scene":"gift","hp":58,"lv":12,"t":160,"seg":0,"wicks":2,"art":""}
+[384.7s] 点按 选馈赠 (245,195)
+[385.4s] 阶段 phase=0 seg=1 t=161.3 hp=58/100 wicks=2 rift_state=none
+[396.7s] 点按 选第 1 张卡 (245,195)
+[403.8s] 点按 选第 1 张卡 (245,195)
+[407.7s] 截图 08-result-death.png  状态 {"scene":"result","hp":0,"lv":14,"t":193.2,"seg":1,"wicks":2,"art":""}
+[408.5s] 点按 再来一局 (354,273)
+[410.6s] 截图 09-restart-new-run.png  状态 {"scene":"play","hp":100,"lv":1,"t":3.9,"seg":0,"wicks":2,"art":""}
+{
+ "viewport": "844x390",
+ "seed": "21",
+ "ts": "2",
+ "seen": {
+  "levelup": true,
+  "break_": true,
+  "rift": false,
+  "sword": false,
+  "result": true,
+  "restart": true,
+  "gift": true,
+  "pause": true
+ },
+ "errors": [],
+ "finalScene": "play"
+}

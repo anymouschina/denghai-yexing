@@ -1,0 +1,111 @@
+{
+ "baseInterval": 1.2,
+ "intervalMulPerMin": 0.76,
+ "minInterval": 0.22,
+ "batchPerMin": 0.85,
+ "hpMulPerMin": 1.27,
+ "maxEnemies": 260,
+ "spawnDist": 790,
+ "pools": [
+  {
+   "from": 0,
+   "weights": {
+    "paperman": 1
+   }
+  },
+  {
+   "from": 60,
+   "weights": {
+    "paperman": 5,
+    "foxfire": 1
+   }
+  },
+  {
+   "from": 150,
+   "weights": {
+    "paperman": 5,
+    "foxfire": 2,
+    "jiangshi": 1
+   }
+  },
+  {
+   "from": 180,
+   "weights": {
+    "paperman": 5,
+    "foxfire": 2,
+    "jiangshi": 1,
+    "lantern": 1.2
+   }
+  },
+  {
+   "from": 240,
+   "weights": {
+    "paperman": 4,
+    "foxfire": 2,
+    "jiangshi": 1.4,
+    "lantern": 1.4,
+    "firecracker": 1.5
+   }
+  },
+  {
+   "from": 360,
+   "weights": {
+    "paperman": 3,
+    "foxfire": 3,
+    "jiangshi": 2,
+    "lantern": 1.6,
+    "firecracker": 2
+   }
+  }
+ ],
+ "packs": {
+  "type": "foxfire",
+  "from": 35,
+  "every": 12,
+  "size": [
+   5,
+   8
+  ]
+ },
+ "events": [
+  {
+   "at": 60,
+   "kind": "banner",
+   "text": "狐火成群出没"
+  },
+  {
+   "at": 120,
+   "kind": "elite",
+   "type": "jiangshi",
+   "text": "精英 • 跳尸王"
+  },
+  {
+   "at": 180,
+   "kind": "banner",
+   "text": "破灯笼妖飘来了"
+  },
+  {
+   "at": 240,
+   "kind": "banner",
+   "text": "爆竹鬼引信已燃"
+  },
+  {
+   "at": 360,
+   "kind": "elite",
+   "type": "lantern",
+   "text": "精英 • 破灯笼王"
+  },
+  {
+   "at": 480,
+   "kind": "boss",
+   "text": "灯骸老祖 降临"
+  }
+ ],
+ "bossTrickle": 2.6,
+ "late": {
+  "from": 150,
+  "hpPerMin": 1.12,
+  "batchPerMin": 0.8,
+  "intervalMulPerMin": 0.95
+ }
+}
