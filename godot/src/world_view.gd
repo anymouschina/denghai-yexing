@@ -749,8 +749,10 @@ func _draw_poi(i: int) -> void:
 	var w := tx.get_width() * sc
 	var h := tx.get_height() * sc
 	draw_texture_rect(T.glow, Rect2(pp.x - 200, pp.y - 260, 400, 300), false, Color(0.7, 0.3, 1.0, 0.45 if st == "ok" else 0.15))
-	draw_texture_rect(tx, Rect2(pp.x - w / 2.0, pp.y - h * 0.75, w, h), false, Color.WHITE if st == "ok" else Color(0.55, 0.5, 0.62))
-	var sub: String = "站定进入 • 消耗灯芯×1" if st == "ok" else {"weak": "灯弱，不可入", "nowick": "灯芯不足", "sealed": "裂隙已闭合", "max": "本局已入两次"}.get(st, "")
+	var is_ar: bool = sim.pois[i].kind == "gourd" or sim.pois[i].kind == "vault"
+	var tint2 := Color(0.6, 1.0, 0.6) if sim.pois[i].kind == "gourd" else (Color(1.0, 0.7, 0.4) if sim.pois[i].kind == "vault" else Color.WHITE)
+	draw_texture_rect(tx, Rect2(pp.x - w / 2.0, pp.y - h * 0.75, w, h), false, tint2 if st == "ok" else Color(0.55, 0.5, 0.62))
+	var sub: String = ("站定进入 • 限时挑战" if is_ar else "站定进入 • 消耗灯芯×1") if st == "ok" else {"weak": "灯弱，不可入", "nowick": "灯芯不足", "sealed": "裂隙已闭合", "max": "本局已入两次"}.get(st, "")
 	_draw_zone_text(pp + Vector2(0, -h * 0.75 - 10.0), String(sim.pois[i].name), sub, UI.GOLD if st == "ok" else Color("ff8a7a"))
 	var zr: float = GameData.SEG["break"].zoneR
 	var hv: float = float(sim.poi_hold.get(i, 0.0))
@@ -802,6 +804,7 @@ func _draw_zone(which: String) -> void:
 
 
 func _draw_zone_text(p: Vector2, title: String, sub: String, col: Color) -> void:
+	draw_rect(Rect2(p.x - 190, p.y - 52, 380, 70), Color(0.03, 0.04, 0.1, 0.6))
 	draw_string_outline(font, p + Vector2(-200, -22), title, HORIZONTAL_ALIGNMENT_CENTER, 400.0, 34, 6, UI.INK)
 	draw_string(font, p + Vector2(-200, -22), title, HORIZONTAL_ALIGNMENT_CENTER, 400.0, 34, UI.PAPER)
 	draw_string_outline(font, p + Vector2(-260, 6), sub, HORIZONTAL_ALIGNMENT_CENTER, 520.0, 20, 5, UI.INK)

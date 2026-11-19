@@ -313,7 +313,7 @@ func _init() -> void:
 	print("== 大地图 / 战斗中裂隙入口 ==")
 	var mp := fresh(21)
 	ok(Sim.W == 3600.0 and Sim.H == 2400.0, "主战场 3600×2400")
-	ok(mp.pois.size() == 5 and mp.poi_state(0) == "ok", "大地图 2 剑冢裂隙 + 1 游商灯摊 + 2 葫芦灵藤（kind 字段）")
+	ok(mp.pois.size() == 7 and mp.poi_state(0) == "ok", "大地图 2 剑冢 + 游商 + 2 灵藤 + 古药葫芦 + 镇魂宝库（kind 字段）")
 	ok(mp.pickups.size() >= 1 and mp.pickups[0].kind == "chest" and Vector2(mp.pickups[0].x - mp.px, mp.pickups[0].y - mp.py).length() < 350.0, "出生点 350px 内刷古灯宝箱")
 	var mw0 := mp.wicks
 	mp.px = float(mp.pois[0].x); mp.py = float(mp.pois[0].y)
@@ -399,6 +399,53 @@ func _init() -> void:
 	var old := Sim.new(36)
 	old.from_save({"phase": 1, "seg": 1, "hp": 50.0, "level": 5, "ver": 2})
 	ok(old.gourds.is_empty() and not old.pet_on and old.seg == 1, "旧存档（无葫芦/小金刚字段）读取不报错并补默认值")
+	print("== C2：秘境 / 套装机制 / 旧存档 clock ==")
+	for kind in ["gourd", "vault"]:
+		var ar := fresh(41)
+		var idx := 5 if kind == "gourd" else 6
+		ar.px = float(ar.pois[idx].x); ar.py = float(ar.pois[idx].y)
+		var hp0 := ar.hp
+		var co0 := ar.coins
+		for i in range(40):
+			ar.step(0.05)
+			if ar.phase == Sim.PH_RIFT:
+				break
+		ok(ar.phase == Sim.PH_RIFT and ar.rift_kind == kind, kind + " 秘境站定 1 秒进入")
+		ar.invuln = 1e9
+		var gi := 0
+		while ar.phase == Sim.PH_RIFT and gi < 4000:
+			for e in ar.enemies:
+				if e.alive:
+					e.hp = 0.0
+					ar._kill(e, "fu")
+			ar.pickups.clear()
+			ar.step(0.1)
+			gi += 1
+		ok(ar.phase == Sim.PH_SEG and absf(ar.px - float(ar.pois[idx].x)) < 1.0 and ar.rift_sealed.has(100 + idx), kind + " 通关后传回原位并封闭")
+		if kind == "gourd":
+			ok(ar.gourds.size() == 1, "古药葫芦秘境必得 1 片散件")
+		else:
+			ok(ar.relics.size() == 1 and ar.pickups.size() > 0, "镇魂宝库给高阶遗物与铜钱")
+	var sm := fresh(42)
+	sm.relics = ["coin", "thunder", "talisman", "ember", "horse", "blade", "bell", "purse", "mirror", "shade", "gold1", "gold2", "soul1", "soul2", "army1", "army2"]
+	sm._recalc()
+	ok(sm.active_sets().size() == 8, "8 组套装全部可激活")
+	var bt := sm.spawn_enemy("paperman", -1.0, -1.0, {"pos": Vector2(sm.px + 100.0, sm.py)})
+	bt.burn_t = 3.0
+	var nb := sm.spawn_enemy("paperman", -1.0, -1.0, {"pos": Vector2(sm.px + 160.0, sm.py)})
+	nb.hp = 1e6
+	sm.set_ward_cd = 0.0
+	bt.hp = 0.0
+	sm._rebuild_grid()
+	sm._kill(bt, "fu")
+	ok(nb.burn_t > 0.0, "烈焰焚魂：灼烧怪死亡传染周围")
+	sm.ebullets.append(SimBullet.new())
+	sm.invuln = 0.0; sm.dash_inv = 0.0
+	sm.hurt_player(1.0, sm.px, sm.py, "x")
+	ok(sm.ebullets.is_empty() and sm.set_ward_cd > 0.0, "镇煞护心：受击反震清弹幕")
+	var oc := Sim.new(43)
+	oc.from_save({"phase": 0, "seg": 0, "t": 89.9, "stretch": 3.75, "ver": 2})
+	ok(oc.clock > 300.0, "旧存档缺 clock 由 t×stretch 回推")
 	print("== 确定性 ==")
 	var r1 := _run_fixed(777)
 	var r2 := _run_fixed(777)

@@ -204,7 +204,8 @@ func _draw_hud_inner() -> void:
 	# 铜钱 / 葫芦进度珠 / 小金刚 / 套装
 	_text(Vector2(rx, ry + 100 * k), "铜钱 %d" % sim.coins, _fs(18), Color("ffd36a"))
 	var gcols := {"red": Color("ff4a3a"), "orange": Color("ff9a3c"), "yellow": Color("ffe04a"), "green": Color("5ade6a"), "cyan": Color("4adfe0"), "blue": Color("4a7aff"), "purple": Color("b05aff")}
-	var bx2 := L
+	_text(Vector2(L, ry + 104 * k), "彩虹葫芦 %d/7" % sim.gourds.size(), _fs(14), Color("ffcf5a"))
+	var bx2 := L + 120.0
 	var by2 := ry + 108 * k
 	for gp in GameData.GD.pieces:
 		var got: bool = sim.gourds.has(gp.id)
@@ -335,12 +336,13 @@ func _draw_minimap(vw: Vector2) -> void:
 				canvas.draw_rect(Rect2(x0 + gx * cw, y0 + gy * ch, cw, ch), Color(0.35, 0.45, 0.75, 0.35))
 	canvas.draw_rect(Rect2(x0, y0, mw, mh), UI.ORANGE, false, 2.0)
 	for pp in sim.pois:
-		var st_ := Color(0.8, 0.45, 1.0) if pp.kind == "sword" else Color(1.0, 0.8, 0.3)
+		var st_: Color = {"sword": Color(0.8, 0.45, 1.0), "merchant": Color(1.0, 0.8, 0.3), "vine": Color(0.4, 1.0, 0.5), "gourd": Color(0.5, 1.0, 0.8), "vault": Color(1.0, 0.4, 0.3)}[pp.kind]
 		canvas.draw_circle(Vector2(x0 + float(pp.x) / Sim.W * mw, y0 + float(pp.y) / Sim.H * mh), 5.0, st_)
 	for k in sim.pickups:
 		if k.kind == "chest":
 			canvas.draw_rect(Rect2(x0 + k.x / Sim.W * mw - 3, y0 + k.y / Sim.H * mh - 3, 6, 6), Color(1.0, 0.85, 0.3))
 	canvas.draw_circle(Vector2(x0 + sim.px / Sim.W * mw, y0 + sim.py / Sim.H * mh), 4.0, Color(0.5, 1.0, 1.0))
+	_text(Vector2(x0, y0 + mh + 16), "紫剑 绿藤 金商 青葫 赤宝", 12, Color(0.85, 0.85, 0.95), mw, HORIZONTAL_ALIGNMENT_CENTER)
 	canvas.draw_rect(Rect2(x0 + sim.px / Sim.W * mw - 7, y0 + sim.py / Sim.H * mh - 4, 14, 8), Color(1, 1, 1, 0.5), false, 1.0)
 
 

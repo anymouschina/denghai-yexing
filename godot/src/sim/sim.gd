@@ -153,6 +153,15 @@ var mini_idx := 0
 var vine_taken: Dictionary = {}
 var rerolled := 0
 var rift_from := 1
+var rift_kind := "sword"       # sword / gourd / vault
+var arena_spawned := 0
+var arena_total := 0
+var arena_next := 0.0
+var set_depth := 0
+var set_move_acc := 0.0
+var set_kills := 0
+var set_ward_cd := 0.0
+var set_army_n := 0
 var rift_poi := -1
 var pois: Array = []          # 大地图上的“剑冢裂隙”入口：{x,y,name}
 var poi_hold: Dictionary = {}
@@ -306,6 +315,32 @@ func _relic_sum(stat: String) -> float:
 		if gp.stat == stat:
 			s += float(gp.per) * (1.0 + 0.1 * pet_marks if pet_on else 1.0)
 	return s
+
+
+func has_set(id: String) -> bool:
+	return active_sets().has(id)
+
+
+func _on_kill_sets(e: SimEnemy) -> void:
+	if set_depth >= 2:
+		return
+	if has_set("flame") and e.burn_t > 0.0:
+		set_depth += 1
+		_ev("ring", e.x, e.y - 30.0, 100.0)
+		for o: SimEnemy in _near(e.x, e.y, 130.0):
+			if o != e and o.alive:
+				_fusion_ignite(o)
+		_aoe(e.x, e.y - 30.0, 100.0, 25.0, "setsplash")
+		set_depth -= 1
+	if has_set("wealth") and rng.randf() < 0.12:
+		for i in range(3):
+			_spawn_pickup("coin", e.x + (rng.randf() - 0.5) * 80.0, e.y + (rng.randf() - 0.5) * 50.0, 2)
+	if has_set("soul"):
+		set_kills += 1
+		if set_kills % 12 == 0:
+			hp = minf(maxhp, hp + 6.0)
+			combo_cd = maxf(0.0, combo_cd - 3.0)
+			_ev("heal", 6.0)
 
 
 func has_part(id: String) -> bool:
@@ -585,6 +620,11 @@ func _update_player(dt: float) -> void:
 		px += vel.x * dt
 		py += vel.y * dt
 		_clamp_player()
+		if has_set("swift") and phase == PH_SEG:
+			set_move_acc += vel.length() * dt
+			if set_move_acc >= 400.0:
+				set_move_acc = 0.0
+				_spawn_qi(760.0, atan2(vel.y, vel.x), 40.0 * (1.0 + s_dmg_add), 0.8, 3, false, "sw_array", null)
 
 
 func hurt_player(dmg_in: float, fx: float, fy: float, src: String) -> void:
@@ -596,6 +636,12 @@ func hurt_player(dmg_in: float, fx: float, fy: float, src: String) -> void:
 	if touch:
 		dmg *= T.dmgMul
 	dmg = _pet_hurt(dmg)
+	set_ward_cd = maxf(0.0, set_ward_cd)
+	if has_set("ward") and set_ward_cd <= 0.0:
+		set_ward_cd = 6.0
+		ebullets.clear()
+		_ev("ring", px, py - 30.0, 220.0)
+		_aoe(px, py - 30.0, 200.0, 30.0, "setsplash")
 	var hp_before := hp
 	hp -= dmg
 	invuln = P.invuln + (T.invulnAdd if touch else 0.0) + s_invuln_add
@@ -835,6 +881,17 @@ func damage(e: SimEnemy, base: float, weapon: String, o: Dictionary = {}) -> voi
 		_ev("dmg", e, dmg, crit, synergy)
 	if weapon != "burn" and weapon != "huanhuo" and s_ignite > 0.0 and rng.randf() < s_ignite:
 		_ignite(e)
+	if crit and has_set("burst") and set_depth < 2 and weapon != "setsplash":
+		set_depth += 1
+		_aoe(e.x, e.y - e.h * 0.4, 90.0, base * 0.3, "setsplash")
+		set_depth -= 1
+	if weapon == "sword" and has_set("army"):
+		set_army_n += 1
+		if set_army_n % 8 == 0 and set_depth < 2:
+			set_depth += 1
+			_ev("ring", px, py - 30.0, 140.0)
+			_aoe(px, py - 30.0, 140.0, 30.0, "setsplash")
+			set_depth -= 1
 	if e.hp <= 0.0:
 		_kill(e, weapon)
 
@@ -853,6 +910,7 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 		return
 	e.alive = false
 	kills += 1
+	_on_kill_sets(e)
 	if has_part("part_huanhuo"):
 		hp = minf(maxhp, hp + 1.0)
 	if e.el.has("mini"):
@@ -1075,7 +1133,12 @@ func _thunder(tgt: SimEnemy, dmg: float, chain: int, hit_set: Dictionary, evl: b
 	var o1 := {"kx": tgt.x - px, "ky": tgt.y - py, "kb": L.knock}
 	if evl:
 		o1["forceCrit"] = true
+	var was_burn := tgt.burn_t > 0.0
 	damage(tgt, dmg, "lei", o1)
+	if was_burn and has_set("thunder") and set_depth < 2:
+		set_depth += 1
+		_aoe(tgt.x, tgt.y - 40.0, 130.0, dmg * 0.5, "setsplash")
+		set_depth -= 1
 	var from := tgt
 	var d := dmg
 	for c in range(chain):
@@ -1777,6 +1840,18 @@ func _open_choice(kind: String) -> void:
 	_ev("choice", kind)
 
 
+func _card_hint(u: Dictionary) -> String:
+	for ev in GameData.UP.evolutions:
+		if ev.weapon == u.id:
+			return "\n满级 + %s → 进化「%s」" % [GameData.UPS[ev.needs].name, ev.name]
+		if ev.needs == u.id:
+			return "\n配合满级%s → 进化「%s」" % [GameData.UPS[ev.weapon].name, ev.name]
+	for r in GameData.RELICS:
+		if r.has("part") and r.part == u.id:
+			return "\n满级可购金件：%s" % r.name
+	return ""
+
+
 func roll_choices(is_chest: bool) -> Array:
 	var UPL: Array = GameData.UP.list
 	var out: Array = []
@@ -1836,7 +1911,7 @@ func roll_choices(is_chest: bool) -> Array:
 		if emit:
 			lvt = ("新武器 • Lv 1" if u2.type == "weapon" else "新被动 • Lv 1") if from == 0 else "Lv %d 〉 %d%s" % [from, to, "（满级）" if to >= int(u2.max) else ""]
 		picked.append({"kind": "up", "id": u2.id, "icon": u2.icon, "name": u2.name, "school": u2.school, "rarity": rarity, "from": from, "to": to,
-			"lvText": lvt, "desc": Cards.describe(u2, from, to) if emit else ""})
+			"lvText": lvt, "desc": (Cards.describe(u2, from, to) + _card_hint(u2)) if emit else ""})
 	if is_chest:
 		picked.sort_custom(func(a, b): return RARITY.find(a.rarity) > RARITY.find(b.rarity))
 	out.append_array(picked)
@@ -2031,6 +2106,8 @@ func rift_state() -> String:
 
 
 func poi_state(i: int) -> String:
+	if phase == PH_SEG and (pois[i].kind == "gourd" or pois[i].kind == "vault"):
+		return "sealed" if rift_sealed.has(100 + i) else "ok"
 	if phase != PH_SEG or pois[i].kind != "sword":
 		return "none"
 	return rift_gate(100 + i)
@@ -2041,7 +2118,8 @@ func _gen_pois() -> void:
 	var c := Vector2(W / 2.0, H / 2.0)
 	pois = [{"kind": "sword", "x": c.x + 1000.0, "y": c.y - 700.0, "name": "剑冢裂隙 • 东北"}, {"kind": "sword", "x": c.x - 1100.0, "y": c.y + 720.0, "name": "剑冢裂隙 • 西南"},
 		{"kind": "merchant", "x": c.x - 650.0, "y": c.y - 420.0, "name": "游商灯摊"},
-		{"kind": "vine", "x": c.x + 420.0, "y": c.y + 380.0, "name": "葫芦灵藤"}, {"kind": "vine", "x": c.x - 1300.0, "y": c.y - 300.0, "name": "葫芦灵藤"}]
+		{"kind": "vine", "x": c.x + 420.0, "y": c.y + 380.0, "name": "葫芦灵藤"}, {"kind": "vine", "x": c.x - 1300.0, "y": c.y - 300.0, "name": "葫芦灵藤"},
+		{"kind": "gourd", "x": c.x + 1300.0, "y": c.y + 650.0, "name": "古药葫芦秘境"}, {"kind": "vault", "x": c.x - 400.0, "y": c.y - 950.0, "name": "镇魂宝库"}]
 	explored.resize(36 * 24)
 	_spawn_pickup("chest", c.x + 230.0, c.y - 110.0, 1)
 
@@ -2093,10 +2171,14 @@ func _update_pois(dt: float) -> void:
 				shop_inside = false
 			continue
 		if Vector2(px, py).distance_to(pp) < zr and poi_state(i) == "ok":
+			var is_arena: bool = pois[i].kind == "gourd" or pois[i].kind == "vault"
 			poi_hold[i] = float(poi_hold.get(i, 0.0)) + dt
 			if float(poi_hold[i]) >= float(GameData.DG.rift.hold):
 				poi_hold[i] = 0.0
-				enter_rift(i)
+				if is_arena:
+					enter_arena(i, String(pois[i].kind))
+				else:
+					enter_rift(i)
 				return
 		else:
 			poi_hold[i] = 0.0
@@ -2253,10 +2335,109 @@ func enter_rift(poi: int = -1) -> bool:
 	return true
 
 
+func enter_arena(poi: int, kind: String) -> void:
+	rift_from = phase
+	rift_poi = poi
+	rift_kind = kind
+	checkpoint()
+	rift_ret = Vector2(px, py)
+	phase = PH_RIFT
+	rift_t = 0.0
+	rift_limit = 75.0 if kind == "vault" else 60.0
+	pickups.clear()
+	gem_count = 0
+	bullets.clear()
+	ebullets.clear()
+	var c := Vector2(W / 2.0, H / 2.0)
+	px = c.x - 260.0
+	py = c.y
+	invuln = 1.0
+	arena_spawned = 0
+	arena_total = 4 if kind == "vault" else 30
+	arena_next = 1.0
+	rift_warden = null
+	_ev("rift_enter", 9)
+	_ev("banner", "镇魂宝库 • 限时清空精英潮" if kind == "vault" else "古药葫芦秘境 • 清除守护妖藤与小怪", "#ffcf5a")
+
+
+func _arena_step(dt: float) -> void:
+	arena_next -= dt
+	if arena_spawned < arena_total and arena_next <= 0.0:
+		var c := Vector2(W / 2.0, H / 2.0)
+		if rift_kind == "vault":
+			arena_next = 7.0
+			var base: Dictionary = GameData.EN.elites["jiangshi" if arena_spawned % 2 == 0 else "lantern"].duplicate()
+			base.hp = float(base.hp) * 0.3
+			base.xp = 0
+			base.name = "镇魂守卫"
+			var a := rng.randf() * TAU
+			spawn_enemy("jiangshi" if arena_spawned % 2 == 0 else "lantern", -1.0, -1.0, {"elite": true, "el": base, "pos": c + Vector2(cos(a), sin(a)) * 330.0})
+			arena_spawned += 1
+		else:
+			arena_next = 5.0
+			for i in range(10):
+				var a2 := rng.randf() * TAU
+				spawn_enemy("paperman" if i % 3 != 0 else "foxfire", -1.0, -1.0, {"pos": c + Vector2(cos(a2), sin(a2)) * 380.0})
+				arena_spawned += 1
+	var alive := 0
+	for e: SimEnemy in enemies:
+		if e.alive:
+			alive += 1
+	if arena_spawned >= arena_total and alive == 0:
+		_arena_end(true)
+	elif rift_t >= rift_limit:
+		_arena_end(false)
+
+
+func _arena_end(ok: bool) -> void:
+	for e2: SimEnemy in enemies:
+		e2.alive = false
+	enemies.clear()
+	ebullets.clear()
+	teles.clear()
+	bullets.clear()
+	phase = rift_from
+	px = rift_ret.x
+	py = rift_ret.y
+	invuln = 2.0
+	rift_sealed[100 + rift_poi] = true
+	var kind := rift_kind
+	rift_kind = "sword"
+	if ok:
+		if kind == "vault":
+			var amt := 240 + int(rng.randf() * 121.0)
+			for i in range(6):
+				_spawn_pickup("coin", px + (rng.randf() - 0.5) * 120.0, py + (rng.randf() - 0.5) * 80.0, amt / 6)
+			var pool: Array = []
+			for r in GameData.RELICS:
+				if not relics.has(r.id) and not r.has("part") and r.tier != "white":
+					pool.append(r.id)
+			if pool.size() > 0:
+				var rid: String = pool[int(rng.randf() * pool.size())]
+				relics.append(rid)
+				_recalc()
+				_ev("relic", rid)
+			_ev("banner", "镇魂宝库通关 • 铜钱 %d + 高阶遗物" % amt, "#ffcf5a")
+		else:
+			if not grant_gourd():
+				coins += 80
+			for i in range(3):
+				_spawn_pickup("coin", px + (rng.randf() - 0.5) * 100.0, py + (rng.randf() - 0.5) * 80.0, 20)
+			_ev("banner", "古药葫芦秘境通关 • 葫芦散件 + 铜钱", "#ffcf5a")
+	else:
+		_ev("banner", "秘境超时 • 未获奖励", "#ff8a7a")
+	rift_log.append({"poi": rift_poi, "kind": kind, "ok": ok, "t": rift_t, "how": "clear" if ok else "timeout"})
+	_ev("rift_exit", ok, "clear" if ok else "timeout")
+	checkpoint()
+
+
 func _step_rift(dt: float) -> void:
 	if phase != PH_RIFT:
 		return
 	rift_t += dt
+	if rift_kind != "sword":
+		_arena_step(dt)
+		return
 	if rift_warden != null and not rift_warden.alive:
 		_rift_end(true, "clear", hp)
 	elif rift_t >= rift_limit:
@@ -2416,7 +2597,7 @@ func duel_warden(build: Dictionary, entry: int, with_sword: bool) -> void:
 
 const SAVE_KEYS := ["seed_v", "phase", "t", "real_t", "seg", "kills", "coins", "level", "xp", "need", "pending_lv", "hp", "px", "py", "levels", "evo", "relics",
 	"wicks", "artifact", "rift_entries", "rift_clears", "rift_sealed", "threat_next", "threat_cur", "rerolls", "revive", "bonus_soul", "break_idx", "gift_pending", "shop",
-	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock", "gourds", "pet_on", "pet_hp", "pet_marks", "pet_dead_t", "mini_idx", "vine_taken"]
+	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock", "gourds", "pet_on", "pet_hp", "pet_marks", "pet_dead_t", "mini_idx", "vine_taken", "set_kills"]
 
 
 ## 检查点存档：只在「段/段间」两种阶段落档；恢复时妖物/弹幕清空，从该点继续（局内中断续档）
@@ -2458,6 +2639,8 @@ func from_save(d: Dictionary) -> void:
 				nd2[kk] = (int(v[kk]) if k == "levels" else v[kk])
 			v = nd2
 		set(k, v)
+	if not d.has("clock") and float(d.get("t", 0.0)) > 0.0:
+		clock = float(d.t) * stretch   # 旧存档无 clock：由节奏钟回推
 	rng.seed = seed_v + int(real_t * 10.0)
 	_recalc()
 	hp = minf(float(d.get("hp", maxhp)), maxhp)
@@ -2524,6 +2707,7 @@ func _pet_hurt(dmg: float) -> float:
 
 
 func _update_pet(dt: float) -> void:
+	set_ward_cd = maxf(0.0, set_ward_cd - dt)
 	combo_cd = maxf(0.0, combo_cd - dt)
 	combo_fx = maxf(0.0, combo_fx - dt)
 	for i in range(pet_fx.size() - 1, -1, -1):
