@@ -10,7 +10,7 @@ def axis(im):
     mids = [(np.where(r)[0].min() + np.where(r)[0].max()) / 2 for r in a if r.any()]
     return float(np.median(mids)) / a.shape[1]
 out = {}
-for n in ["enemy_paperman","enemy_foxfire","enemy_lanternyokai","enemy_jiangshi","enemy_firecracker","boss","boss_swordwarden","merchant"]:
+for n in ["enemy_paperman","enemy_foxfire","enemy_lanternyokai","enemy_jiangshi","enemy_firecracker","boss","boss_swordwarden","merchant","boss_swordlord","boss_sedan","boss_hundredlamps","pet_huluwa"]:
     out[n] = round(axis(Image.open(f"{A}/{n}.png")), 4)
 def sheet(path, fw, fh, cols, n):
     im = Image.open(f"{A}/{path}"); v = []

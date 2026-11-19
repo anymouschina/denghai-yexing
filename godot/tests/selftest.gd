@@ -446,6 +446,46 @@ func _init() -> void:
 	var oc := Sim.new(43)
 	oc.from_save({"phase": 0, "seg": 0, "t": 89.9, "stretch": 3.75, "ver": 2})
 	ok(oc.clock > 300.0, "旧存档缺 clock 由 t×stretch 回推")
+	print("== C3：6 段 / 专属小 BOSS ==")
+	var f6 := Sim.new(51, {"mode": "full"})
+	ok(f6.seg_n() == 6 and absf(f6.seg_to(0) - 80.0) < 0.01 and absf(f6.seg_to(5) - 480.0) < 0.01, "完整模式 6 段，每段 5 分钟（节奏钟 80 × 3.75）")
+	ok(f6.seg_theme(3).name == "灯冢废墟" and f6.seg_theme(5).name == "灯骸古殿", "6 段主题名")
+	f6.t = 79.9
+	f6.step(0.5)
+	ok(f6.phase == Sim.PH_BREAK and f6.break_idx == 0, "第 1 段 5:00 清场进入段间")
+	var q6 := Sim.new(52)
+	ok(q6.seg_n() == 3, "非完整模式仍 3 段")
+	for pair in [["swordlord", 2], ["sedan", 3], ["lamps", 4]]:
+		var bm := Sim.new(53, {"mode": "full"})
+		bm._spawn_mini_special(int(pair[1]))
+		var bo: SimEnemy = bm.enemies[bm.enemies.size() - 1]
+		ok(bo.ai == pair[0] and bo.def.tex == GameData.MB[pair[0]].tex, "%s：专属 AI 与专属贴图（非跳尸/灯笼妖）" % pair[0])
+		bm.invuln = 1e9
+		bm.px = bo.x - 400.0; bm.py = bo.y
+		var got_b := false
+		var got_ln := false
+		var got_g := false
+		var pk := bm.pickups.size()
+		for i in range(200):
+			bm.choice = {}
+			bm.step(0.05)
+			bo.hp = bo.maxhp
+			got_b = got_b or bm.ebullets.size() > 0
+			got_ln = got_ln or bo.state == "lunge" or bo.state == "aim"
+			for e in bm.enemies:
+				if e.type == "paperman":
+					got_g = true
+		if pair[0] == "swordlord":
+			ok(got_b, "剑冢真主：环形飞剑阵/扇形剑雨发射弹幕")
+		elif pair[0] == "sedan":
+			ok(got_b and got_ln and got_g, "纸轿冥娘：冲锋预警 + 撒纸钱 + 召纸人卫兵")
+			bm.invuln = 0.0; bm.dash_inv = 0.0; bm.stun = 0.0
+			bm.hurt_player(1.0, bm.px, bm.py, "sedan:paper")
+			ok(bm.stun > 1.0, "纸钱弹幕命中减速")
+		else:
+			bm.px = bo.x + 150.0; bm.py = bo.y - bo.h * 0.45 + 34.0
+			var lp := bm.lamp_pos(bo, 0)
+			ok(got_b and lp.distance_to(Vector2(bo.x, bo.y)) > 50.0, "百灯鬼王：鬼灯绕身 + 鬼火射线扫射")
 	print("== 确定性 ==")
 	var r1 := _run_fixed(777)
 	var r2 := _run_fixed(777)

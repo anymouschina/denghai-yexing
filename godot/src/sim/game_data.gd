@@ -15,6 +15,7 @@ static var MV: Dictionary
 static var SETS: Array
 static var SET_BY_ID: Dictionary = {}
 static var GD: Dictionary
+static var MB: Dictionary
 static var GP_BY_ID: Dictionary = {}
 static var ANCH: Dictionary
 static var UPS: Dictionary = {}
@@ -45,6 +46,7 @@ static func load_all() -> void:
 	MV = _read("movement")
 	SETS = _read("sets")
 	GD = _read("gourds")
+	MB = _read("minibosses")
 	for st in SETS:
 		SET_BY_ID[st.id] = st
 	for gp in GD.pieces:

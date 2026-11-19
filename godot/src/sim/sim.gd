@@ -262,6 +262,24 @@ func _ev(name: String, a: Variant = null, b: Variant = null, c: Variant = null, 
 # ======================================================================
 # 数值
 # ======================================================================
+func seg_n() -> int:
+	return 6 if mode == "full" else 3
+
+
+func seg_to(k: int) -> float:
+	return 480.0 * float(k + 1) / float(seg_n())
+
+
+func seg_from(k: int) -> float:
+	return 480.0 * float(k) / float(seg_n())
+
+
+func seg_theme(k: int) -> Dictionary:
+	if seg_n() == 6:
+		return GameData.SEG.themes[mini(k, 5)]
+	return GameData.SEG.segments[mini(k, 2)]
+
+
 func lv(id: String) -> int:
 	return int(levels.get(id, 0))
 
@@ -510,10 +528,10 @@ func _step_combat(dt: float) -> void:
 	_update_pois(dt)
 	_update_pet(dt)
 	_update_minis()
-	if phase == PH_SEG and t >= float(GameData.SEG.segments[seg].to) - 20.0 / stretch and not announced.has(seg):
+	if phase == PH_SEG and t >= seg_to(seg) - 20.0 / stretch and not announced.has(seg):
 		announced[seg] = true
 		_ev("banner", "20 秒后清场 · 场地中央将裂开「灯骸裂隙」", "#d9b8ff")
-	if phase == PH_SEG and t >= float(GameData.SEG.segments[seg].to):
+	if phase == PH_SEG and t >= seg_to(seg):
 		_start_break(seg)
 
 
@@ -647,6 +665,8 @@ func hurt_player(dmg_in: float, fx: float, fy: float, src: String) -> void:
 	invuln = P.invuln + (T.invulnAdd if touch else 0.0) + s_invuln_add
 	var sm := float(GameData.DG.rift.stunMul) if phase == PH_RIFT else 1.0
 	stun = P.stun * sm
+	if src == "sedan:paper":
+		stun = maxf(stun, float(GameData.MB.sedan.slow))
 	hurt_flash = 0.12
 	last_src = src
 	if sw_state == SW_RECALL:
@@ -683,7 +703,7 @@ func _update_lamps(dt: float) -> void:
 		return
 	var L: Dictionary = GameData.BAL.lamp
 	var c := Vector2(W / 2.0, H / 2.0)
-	var sg: Dictionary = GameData.SEG.segments[mini(seg, 2)]
+	var sg: Dictionary = seg_theme(seg)
 	for lp in sg.lamps:
 		var dx: float = c.x + lp[0] - px
 		var dy: float = c.y + lp[1] - py
@@ -721,6 +741,12 @@ func _update_spawns(dt: float) -> void:
 			if t >= float(pl.from):
 				pool = pl.weights
 				break
+		var bias: Dictionary = seg_theme(seg).get("bias", {}) if seg_n() == 6 else {}
+		if not bias.is_empty():
+			var np: Dictionary = {}
+			for kk in pool:
+				np[kk] = float(pool[kk]) * float(bias.get(kk, 1.0))
+			pool = np
 		var i := 0
 		while i < batch and enemies.size() < max_en:
 			spawn_enemy(_pick_weighted(pool))
@@ -1398,6 +1424,11 @@ func _update_enemies(dt: float) -> void:
 				vx = wv.x
 				vy = wv.y
 				e.lift = sin(real_t * 2.0) * 8.0
+			"swordlord", "sedan", "lamps":
+				var mvv := _mini_ai(e, dt, ux, uy, dist)
+				vx = mvv.x
+				vy = mvv.y
+				e.lift = sin(real_t * 2.0) * 8.0
 			"boss":
 				_boss_ai(e, dt)
 				if e.warn_t > 0.0:
@@ -2031,7 +2062,7 @@ func _start_break(k: int) -> void:
 		p.spd = 120.0
 	boss = null
 	# BOSS 前额外 1 枚灯芯
-	if k == 2:
+	if k == seg_n() - 1:
 		wicks += int(GameData.DG.wick.beforeBoss)
 		_ev("banner", "灯芯 +1 • 决战在即", "#ffc977")
 	_ev("break_start", k)
@@ -2236,7 +2267,7 @@ func _advance() -> void:
 	var k := break_idx
 	hold.clear()
 	shop_open = false
-	if k >= 2:
+	if k >= seg_n() - 1:
 		phase = PH_BOSS
 		t = float(GameData.WV.events[GameData.WV.events.size() - 1].at)
 		_ev("banner", "灯骸老祖 降临", "#ff7a6a")
@@ -2251,7 +2282,7 @@ func _advance() -> void:
 	else:
 		seg = k + 1
 		phase = PH_SEG
-		t = float(GameData.SEG.segments[seg].from)
+		t = seg_from(seg)
 		threat_cur = threat_next
 		threat_next = 0
 		spawn_t = 1.0
@@ -2586,7 +2617,7 @@ func duel_warden(build: Dictionary, entry: int, with_sword: bool) -> void:
 	_recalc()
 	hp = maxhp
 	seg = 0 if entry == 1 else 1
-	t = float(GameData.SEG.segments[seg].to)
+	t = seg_to(seg)
 	_start_break(seg)
 	rift_entries = entry - 1
 	if with_sword:
@@ -2772,6 +2803,126 @@ func _mini_drop(e: SimEnemy) -> void:
 	_ev("banner", "击败 %s • 铜钱 + 灯芯 + 葫芦散件" % e.el.name, "#ffcf5a")
 
 
+func _spawn_mini_special(k: int) -> void:
+	var key: String = ["swordlord", "sedan", "lamps"][k - 2]
+	var C: Dictionary = GameData.MB[key]
+	var def := {"name": GameData.GD.miniNames[k], "tex": C.tex, "h": C.h, "r": C.r, "hp": 1, "speed": C.speed, "dmg": C.dmg, "xp": 0, "ai": key, "faceRight": true, "knock": 0.0, "fx": "spark"}
+	var el := {"name": GameData.GD.miniNames[k], "scale": 1.0, "hp": C.hp, "dmg": C.dmg, "speed": C.speed, "xp": 20, "armor": 0.1, "glow": 0, "mini": k}
+	var e := spawn_enemy(key, -1.0, -1.0, {"el": el, "def": def})
+	e.atk_t = 1.5
+	e.blade_down = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+	e.blades_t = 1e9 if key == "lamps" else 0.0
+	_ev("banner", "小 BOSS • %s 现身" % GameData.GD.miniNames[k], "#ff7a6a")
+
+
+func lamp_pos(e: SimEnemy, i: int) -> Vector2:
+	var C: Dictionary = GameData.MB.lamps
+	var a := e.blade_ang + float(i) / float(C.lamps) * TAU
+	return Vector2(e.x + cos(a) * float(C.lampR), e.y - e.h * 0.45 + sin(a) * float(C.lampR) * 0.7)
+
+
+func _mini_ai(e: SimEnemy, dt: float, ux: float, uy: float, dist: float) -> Vector2:
+	var C: Dictionary = GameData.MB[e.ai]
+	var dirp := Vector2(ux, uy)
+	e.blade_hit_cd = maxf(0.0, e.blade_hit_cd - dt)
+	if e.ai == "lamps":
+		e.blade_ang += float(C.lampW) * dt
+		for i in range(int(C.lamps)):
+			var lp := lamp_pos(e, i)
+			if e.blade_hit_cd <= 0.0 and not over and lp.distance_to(Vector2(px, py - 34.0)) < float(C.lampHitR):
+				hurt_player(float(C.lampDmg), lp.x, lp.y, "lamps:lamp")
+				e.blade_hit_cd = float(C.lampHitCd)
+	if e.state == "lunge":
+		e.timer -= dt
+		if not e.lunge_hit and not over and Vector2(px, py - 20.0).distance_to(Vector2(e.x, e.y - 20.0)) < e.r + 30.0:
+			e.lunge_hit = true
+			hurt_player(float(C.chargeDmg), e.x, e.y, "sedan:charge")
+		if e.timer <= 0.0:
+			e.state = "move"
+			e.stagger_t = 1.2
+			_spawn_paper(e)
+		return e.lunge_dir * float(C.chargeSpeed)
+	if e.warn_t > 0.0:
+		e.warn_t -= dt
+		if e.warn_t <= 0.0 and e.ai == "sedan" and e.state == "aim":
+			e.state = "lunge"
+			e.timer = float(C.chargeLen) / float(C.chargeSpeed)
+			e.lunge_hit = false
+		return Vector2.ZERO
+	e.stagger_t = maxf(0.0, e.stagger_t - dt)
+	var v := dirp * e.speed
+	if dist < 200.0:
+		v = -dirp * e.speed * 0.4
+	e.atk_t -= dt
+	if e.atk_t <= 0.0:
+		e.atk_t = float(C.gap)
+		var phase_i := e.atk_idx % 3
+		e.atk_idx += 1
+		match e.ai:
+			"swordlord":
+				if phase_i != 1:
+					# 环形飞剑阵：预警圈 → 一圈飞剑
+					var cb := func() -> void:
+						if not e.alive:
+							return
+						var n := int(C.ringCount)
+						for i in range(n):
+							var a := float(i) / n * TAU + real_t
+							_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * float(C.ringSpeed), sin(a) * float(C.ringSpeed), float(C.ringDmg), "swordlord:ring")
+					_add_tele(e.x, e.y, 200.0, float(C.warn), cb, e)
+				else:
+					# 蓄力扇形剑雨：锁定方向，两轮齐射
+					var base := atan2(py - e.y, px - e.x)
+					for wave in range(2):
+						var cb2 := func() -> void:
+							if not e.alive:
+								return
+							var nn := int(C.fan)
+							for i in range(nn):
+								var a2 := base + (i - (nn - 1) / 2.0) * float(C.fanSpread) / nn
+								_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a2) * float(C.fanSpeed), sin(a2) * float(C.fanSpeed), float(C.fanDmg), "swordlord:rain")
+						_add_tele(e.x, e.y, 0.0, float(C.warn) + wave * 0.35, cb2, e)
+				_ev("sfx", "warn")
+			"sedan":
+				if phase_i == 0:
+					e.lunge_dir = Vector2(px - e.x, py - 20.0 - (e.y - 20.0)).normalized()
+					e.state = "aim"
+					e.warn_t = float(C.chargeWarn)
+					_ev("sfx", "warn")
+				elif phase_i == 1:
+					_spawn_paper(e)
+				else:
+					for i in range(int(C.guards)):
+						var a3 := float(i) / int(C.guards) * TAU
+						var g := spawn_enemy("paperman", 0.0, 0.0, {"pos": Vector2(e.x + cos(a3) * 120.0, e.y + sin(a3) * 80.0)})
+						g.speed *= 1.3
+					_ev("sfx", "roar")
+			"lamps":
+				if phase_i != 2:
+					var a0 := atan2(py - e.y, px - e.x) - 0.9
+					for i in range(int(C.beamBullets)):
+						var ai := a0 + i * 0.12
+						var cb3 := func() -> void:
+							if not e.alive:
+								return
+							_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(ai) * float(C.beamSpeed), sin(ai) * float(C.beamSpeed), float(C.beamDmg), "lamps:beam")
+						_add_tele(e.x, e.y, 0.0, float(C.beamStart) + i * float(C.beamStep), cb3, e)
+					_ev("sfx", "warn")
+				else:
+					for i in range(2):
+						var a4 := rng.randf() * TAU
+						spawn_enemy("foxfire", 0.0, 0.0, {"pos": Vector2(e.x + cos(a4) * 140.0, e.y + sin(a4) * 90.0)})
+	return v
+
+
+func _spawn_paper(e: SimEnemy) -> void:
+	var C: Dictionary = GameData.MB.sedan
+	var n := int(C.paperCount)
+	for i in range(n):
+		var a := float(i) / n * TAU
+		_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * float(C.paperSpeed), sin(a) * float(C.paperSpeed), float(C.paperDmg), "sedan:paper")
+
+
 func _update_minis() -> void:
 	if phase != PH_SEG and phase != PH_BOSS:
 		return
@@ -2780,6 +2931,9 @@ func _update_minis() -> void:
 		return
 	var k := mini_idx
 	mini_idx += 1
+	if mode == "full" and k >= 2:
+		_spawn_mini_special(k)
+		return
 	var base: Dictionary = GameData.EN.elites["jiangshi" if k % 2 == 0 else "lantern"].duplicate()
 	base.name = String(GameData.GD.miniNames[mini(k, 4)])
 	base.hp = float(base.hp) * (1.0 + 0.5 * k)

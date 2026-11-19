@@ -7,6 +7,10 @@
  "boss": 0.5093,
  "boss_swordwarden": 0.4979,
  "merchant": 0.4928,
+ "boss_swordlord": 0.4979,
+ "boss_sedan": 0.5,
+ "boss_hundredlamps": 0.5038,
+ "pet_huluwa": 0.4814,
  "hero_run": 0.4368,
  "boss_idle": 0.534,
  "jiangshi_hop": 0.5428

@@ -45,7 +45,7 @@ func setup(p_sim: Sim) -> void:
 	sim = p_sim
 	font = UI.font()
 	for n in ["hero_run", "enemy_atlas", "boss", "proj_talisman", "proj_flame",
-			"proj_ghostfire", "proj_sword", "boss_swordwarden", "fx_thunder", "fx_boom", "drop_soul", "drop_coin", "drop_oil", "drop_chest", "field_lantern", "rift_portal", "merchant"]:
+			"proj_ghostfire", "proj_sword", "boss_swordwarden", "boss_swordlord", "boss_sedan", "boss_hundredlamps", "pet_huluwa", "fx_thunder", "fx_boom", "drop_soul", "drop_coin", "drop_oil", "drop_chest", "field_lantern", "rift_portal", "merchant"]:
 		T[n] = load("res://assets/%s.png" % n)
 	for k in SHEETS:
 		T[k] = load(SHEETS[k].tex)
@@ -342,7 +342,7 @@ func _consume_events() -> void:
 # ======================================================================
 ## 背景按当前段/秘境按需加载（其余卸载），1280×720 一张，镜像无缝平铺铺满整图
 func _bg_tex() -> Texture2D:
-	var key: String = "field_rift" if sim.phase == Sim.PH_RIFT else String(["field", "field2", "field3"][mini(sim.seg, 2)])
+	var key: String = "field_rift" if sim.phase == Sim.PH_RIFT else String(sim.seg_theme(sim.seg).field)
 	if not T.has(key):
 		for k in ["field", "field2", "field3", "field_rift"]:
 			T.erase(k)
@@ -353,7 +353,7 @@ func _bg_tex() -> Texture2D:
 func _draw_bg(c: Node2D) -> void:
 	var tint := Color(0.82, 0.76, 0.95)
 	if sim.phase != Sim.PH_RIFT:
-		var tt: Array = GameData.SEG.segments[mini(sim.seg, 2)].tint
+		var tt: Array = sim.seg_theme(sim.seg).tint
 		tint = Color(tt[0], tt[1], tt[2])
 	else:
 		tint = Color(0.9, 0.82, 1.0)
@@ -386,7 +386,7 @@ func _draw_bg(c: Node2D) -> void:
 func _lamp_positions() -> Array:
 	var out: Array = []
 	var cc := Vector2(Sim.W / 2.0, Sim.H / 2.0)
-	for lp in GameData.SEG.segments[mini(sim.seg, 2)].lamps:
+	for lp in sim.seg_theme(sim.seg).lamps:
 		out.append(cc + Vector2(lp[0], lp[1]))
 	return out
 
@@ -593,6 +593,9 @@ func _enemy_tex(e: SimEnemy) -> Array:
 	if e.warden:
 		var wt: Texture2D = T.boss_swordwarden
 		return [wt, null, float(wt.get_width()), float(wt.get_height()), 1.0]
+	if e.ai == "swordlord" or e.ai == "sedan" or e.ai == "lamps":
+		var mt: Texture2D = T[e.def.tex]
+		return [mt, null, float(mt.get_width()), float(mt.get_height()), 1.0]
 	if e.boss:
 		var n := int(t_anim * 8.0) % 8
 		return [T.boss_idle, Rect2(n * 236, 0, 236, 384), 236.0, 384.0, 1.05]
@@ -632,6 +635,15 @@ func _draw_enemy(e: SimEnemy) -> void:
 		col = Color(1.0, 0.95, 0.5) if int(t_anim * 12.0) % 2 == 0 else Color(1.0, 0.8, 0.3)
 	if e.warden:
 		_draw_warden_fx(e)
+	if e.ai == "sedan" and e.warn_t > 0.0:
+		var CS: Dictionary = GameData.MB.sedan
+		var o2 := Vector2(e.x, e.y - 20.0)
+		draw_line(o2, o2 + e.lunge_dir * float(CS.chargeLen), Color(1.0, 0.2, 0.2, 0.6), 50.0, true)
+	if e.ai == "lamps":
+		for li in range(int(GameData.MB.lamps.lamps)):
+			var lp := sim.lamp_pos(e, li)
+			draw_texture_rect(T.glow, Rect2(lp.x - 36, lp.y - 36, 72, 72), false, Color(0.5, 1.0, 0.6, 0.8))
+			draw_circle(lp, 11.0, Color(0.7, 1.0, 0.7))
 	var y0 := e.y - h * 0.95 - e.lift
 	var dst := Anchors.rect(e.x, y0, w, h, _anchor_key(e), flip)
 	if info[1] != null:
@@ -828,11 +840,10 @@ func _draw_projectiles() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if sim.pet_on and sim.pet_dead_t <= 0.0:
 		var pp := sim.pet_pos
-		draw_circle(pp + Vector2(0, 4), 22.0, UI.INK)
-		draw_circle(pp, 19.0, Color(1.0, 0.75, 0.2))
-		draw_circle(pp + Vector2(0, -24), 12.0, Color(1.0, 0.6, 0.15))
-		draw_circle(pp + Vector2(-6, -2), 3.0, UI.INK)
-		draw_circle(pp + Vector2(6, -2), 3.0, UI.INK)
+		var pt: Texture2D = T.pet_huluwa
+		var ph := 84.0
+		var pw := pt.get_width() * ph / pt.get_height()
+		draw_texture_rect(pt, Anchors.rect(pp.x, pp.y - ph * 0.7, pw, ph, "pet_huluwa", sim.face_x < 0), false, Color.WHITE)
 	# 剑轮 / 剑气（阶段3-5）
 	var swt: Texture2D = T.proj_sword
 	for wp: Vector2 in sim.sw_wheel_pos:

@@ -202,16 +202,21 @@ func _draw_hud_inner() -> void:
 		canvas.draw_texture_rect(_icon("sword"), Rect2(rx + 6, ry - 2, 34 * k, 34 * k), false)
 		rx += 46.0 * k
 	# 铜钱 / 葫芦进度珠 / 小金刚 / 套装
-	_text(Vector2(rx, ry + 100 * k), "铜钱 %d" % sim.coins, _fs(18), Color("ffd36a"))
+	_text(Vector2(rx, ry + 100 * k), "铜钱 %d" % sim.coins, _fs(24), Color("ffd36a"))
 	var gcols := {"red": Color("ff4a3a"), "orange": Color("ff9a3c"), "yellow": Color("ffe04a"), "green": Color("5ade6a"), "cyan": Color("4adfe0"), "blue": Color("4a7aff"), "purple": Color("b05aff")}
-	_text(Vector2(L, ry + 104 * k), "彩虹葫芦 %d/7" % sim.gourds.size(), _fs(14), Color("ffcf5a"))
-	var bx2 := L + 120.0
+	_text(Vector2(L, ry + 104 * k), "彩虹葫芦 %d/7" % sim.gourds.size(), _fs(20), Color("ffcf5a"))
+	var bx2 := L + 160.0
 	var by2 := ry + 108 * k
 	for gp in GameData.GD.pieces:
 		var got: bool = sim.gourds.has(gp.id)
-		canvas.draw_circle(Vector2(bx2 + 9, by2), 9.0, UI.INK)
-		canvas.draw_circle(Vector2(bx2 + 9, by2), 7.0, gcols[gp.id] if got else Color(0.2, 0.2, 0.3))
-		bx2 += 22.0
+		canvas.draw_circle(Vector2(bx2 + 11, by2), 12.0, UI.INK)
+		if got:
+			canvas.draw_circle(Vector2(bx2 + 11, by2), 16.0, Color(gcols[gp.id], 0.35))
+			canvas.draw_circle(Vector2(bx2 + 11, by2), 9.0, gcols[gp.id])
+		else:
+			canvas.draw_circle(Vector2(bx2 + 11, by2), 9.0, Color(0.12, 0.12, 0.2))
+			canvas.draw_arc(Vector2(bx2 + 11, by2), 9.0, 0, TAU, 20, Color(gcols[gp.id], 0.55), 2.0, true)
+		bx2 += 28.0
 	if sim.pet_on:
 		var ptxt := "小金刚 复活 %ds" % int(ceil(sim.pet_dead_t)) if sim.pet_dead_t > 0.0 else "小金刚 %d/%d  印记%d  Q合击 %s" % [int(sim.pet_hp), int(sim.pet_maxhp()), sim.pet_marks, "就绪" if sim.combo_cd <= 0.0 else "%ds" % int(ceil(sim.combo_cd))]
 		_text(Vector2(bx2 + 8, by2 + 6), ptxt, _fs(15), Color("ffcf5a") if sim.pet_dead_t <= 0.0 else UI.BLOOD)
@@ -232,7 +237,7 @@ func _draw_hud_inner() -> void:
 	var title := ""
 	match sim.phase:
 		Sim.PH_SEG:
-			title = "%s  •  第 %d / 3 段  •  裂隙 %s 后开启" % [GameData.SEG.segments[sim.seg].name, sim.seg + 1, UI.fmt_time(maxf(0.0, (float(GameData.SEG.segments[sim.seg].to) - sim.t) * sim.stretch))]
+			title = "%s  •  第 %d / %d 段  •  清场 %s 后" % [sim.seg_theme(sim.seg).name, sim.seg + 1, sim.seg_n(), UI.fmt_time(maxf(0.0, (sim.seg_to(sim.seg) - sim.t) * sim.stretch))]
 		Sim.PH_BREAK:
 			title = "段间 • 清场  •  %s 后自动启程" % UI.fmt_time(maxf(0.0, float(GameData.SEG["break"].max) - sim.break_t))
 		Sim.PH_RIFT:
@@ -286,6 +291,8 @@ func _draw_hud_inner() -> void:
 			var dn := Vector2(float(sim.pois[best].x) - sim.px, float(sim.pois[best].y) - sim.py).normalized()
 			var ctr2 := Vector2(vw.x / 2.0, vw.y / 2.0)
 			var ap2 := ctr2 + Vector2(dn.x * (vw.x * 0.5 - 70.0), dn.y * (vw.y * 0.5 - 60.0))
+			if ap2.x > vw.x - inset.z - 230.0 and ap2.y < inset.y + 230.0:
+				ap2.y = inset.y + 250.0   # 避开右上角小地图
 			var perp2 := Vector2(-dn.y, dn.x)
 			canvas.draw_colored_polygon(PackedVector2Array([ap2 + dn * 20.0, ap2 - dn * 10.0 + perp2 * 14.0, ap2 - dn * 10.0 - perp2 * 14.0]), Color(0.85, 0.6, 1.0, 0.9))
 			_text(ap2 - Vector2(70, -34) if dn.y > 0 else ap2 - Vector2(70, 20), "剑冢裂隙 %dm" % int(bdist / 10.0), 15, Color(0.9, 0.75, 1.0), 140.0, HORIZONTAL_ALIGNMENT_CENTER)
