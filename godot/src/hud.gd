@@ -494,7 +494,7 @@ func _build_shop() -> void:
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_theme_constant_override("separation", 16)
 	shop_panel.add_child(col)
-	var tl := UI.label("游 商 • 灯芯换遗物", 50, UI.GOLD, 9)
+	var tl := UI.label("游 商 • 铜钱换遗物", 50, UI.GOLD, 9)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(tl)
 	var sl := UI.label("铜钱 %d  •  灯芯 %d（进裂隙/刷新商品要灯芯）" % [sim.coins, sim.wicks], 22, Color("d6d0f0"), 4)
@@ -579,6 +579,9 @@ func show_pause(on: bool) -> void:
 	var b2s := UI.button("手动存档", Vector2(220, 58))
 	b2s.pressed.connect(func(): game.manual_save())
 	hb.add_child(b2s)
+	var b2g := UI.button("结算本局 (X)", Vector2(220, 58))
+	b2g.pressed.connect(func(): game.give_up())
+	hb.add_child(b2g)
 	var b3 := UI.button("回标题", Vector2(220, 58))
 	b3.pressed.connect(func(): game.to_title())
 	hb.add_child(b3)

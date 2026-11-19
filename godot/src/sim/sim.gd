@@ -2732,6 +2732,18 @@ func pet_maxhp() -> float:
 	return float(GameData.GD.pet.hp) * (1.0 + 0.1 * pet_marks)
 
 
+func abandon() -> void:
+	## 放弃本局：按当前进度结算（暂停菜单「结算本局」/ X 键）
+	if over or ended:
+		return
+	death_cause = "abandon"
+	hp = 0.0
+	over = true
+	victory = false
+	end_timer = 0.0
+	_finish()
+
+
 func _pet_hurt(dmg: float) -> float:
 	## 小金刚替玩家挡一部分伤害；返回玩家实际承受的伤害
 	if not pet_on or pet_dead_t > 0.0:

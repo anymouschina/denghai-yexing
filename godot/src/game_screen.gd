@@ -335,6 +335,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 			if k == KEY_ENTER or k == KEY_KP_ENTER or k == KEY_R or k == KEY_SPACE:
 				restart()
 			return
+		if k == KEY_X and paused:
+			give_up()
+			return
 		if k == KEY_ESCAPE or k == KEY_P:
 			if not sim.over:
 				toggle_pause()
@@ -381,6 +384,13 @@ func toggle_mute() -> void:
 	var sv := SaveData.load_save()
 	sv.mute = Audio.muted
 	SaveData.write_save(sv)
+
+
+func give_up() -> void:
+	if paused:
+		paused = false
+		hud.show_pause(false)
+	sim.abandon()
 
 
 func manual_save() -> void:

@@ -486,6 +486,9 @@ func _init() -> void:
 			bm.px = bo.x + 150.0; bm.py = bo.y - bo.h * 0.45 + 34.0
 			var lp := bm.lamp_pos(bo, 0)
 			ok(got_b and lp.distance_to(Vector2(bo.x, bo.y)) > 50.0, "百灯鬼王：鬼灯绕身 + 鬼火射线扫射")
+	var ab := fresh(61)
+	ab.abandon()
+	ok(ab.ended and not ab.victory and ab.result.cause == "abandon", "结算本局：按当前进度结算")
 	print("== 确定性 ==")
 	var r1 := _run_fixed(777)
 	var r2 := _run_fixed(777)
