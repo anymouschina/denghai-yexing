@@ -44,11 +44,11 @@ func setup(p_game: Node, p_sim: Sim, p_touch: bool) -> void:
 	canvas.draw.connect(_draw_hud)
 	root.add_child(canvas)
 	wick_tex = load("res://assets/icons/wick.png")
-	banner = UI.label("", 44, UI.GOLD, 8)
+	banner = UI.label("", 30, UI.GOLD, 6)
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	banner.custom_minimum_size = Vector2(720, 60)
-	banner.position = Vector2(-360, 220)
+	banner.custom_minimum_size = Vector2(560, 50)
+	banner.position = Vector2(-280, 128)
 	banner.modulate.a = 0.0
 	root.add_child(banner)
 	refresh_inset()
@@ -64,7 +64,7 @@ func refresh_inset() -> void:
 func show_banner(text: String, color: String = "#ffc977", big: bool = false) -> void:
 	banner.text = text
 	banner.add_theme_color_override("font_color", Color(color))
-	banner.add_theme_font_size_override("font_size", 56 if big else 42)
+	banner.add_theme_font_size_override("font_size", 40 if big else 30)
 	banner.modulate.a = 0.0
 	banner.scale = Vector2(0.9, 0.9)
 	banner.pivot_offset = banner.size / 2.0
@@ -685,7 +685,7 @@ func show_result(r: Dictionary) -> void:
 	col.add_child(tl)
 	var cause := ""
 	if not win and r.cause != "":
-		cause = "  •  倒在 %s" % _cause_name(r.cause)
+		cause = ("  •  主动撤离" if r.cause == "abandon" else "  •  倒在 %s" % _cause_name(r.cause))
 	var l1 := UI.label("守夜 %s  •  等级 %d  •  击杀 %d%s" % [UI.fmt_time(r.time), r.level, r.kills, cause], 26, UI.PAPER, 5)
 	l1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(l1)
@@ -695,6 +695,8 @@ func show_result(r: Dictionary) -> void:
 		rifts += 1
 		if e.ok:
 			clears += 1
+	rifts = maxi(rifts, int(r.get("rift_entries", 0)))
+	clears = maxi(clears, int(r.get("rift_clears", 0)))
 	var l2 := UI.label("输出最高：%s  •  入裂隙 %d 次（通关 %d）%s" % [r.top, rifts, clears, "  •  法宝：飞剑术" if r.artifact == "sword" else ""], 22, Color("d6d0f0"), 4)
 	l2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(l2)

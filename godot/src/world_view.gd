@@ -816,11 +816,11 @@ func _draw_zone(which: String) -> void:
 
 
 func _draw_zone_text(p: Vector2, title: String, sub: String, col: Color) -> void:
-	draw_rect(Rect2(p.x - 190, p.y - 52, 380, 70), Color(0.03, 0.04, 0.1, 0.6))
-	draw_string_outline(font, p + Vector2(-200, -22), title, HORIZONTAL_ALIGNMENT_CENTER, 400.0, 34, 6, UI.INK)
-	draw_string(font, p + Vector2(-200, -22), title, HORIZONTAL_ALIGNMENT_CENTER, 400.0, 34, UI.PAPER)
-	draw_string_outline(font, p + Vector2(-260, 6), sub, HORIZONTAL_ALIGNMENT_CENTER, 520.0, 20, 5, UI.INK)
-	draw_string(font, p + Vector2(-260, 6), sub, HORIZONTAL_ALIGNMENT_CENTER, 520.0, 20, col)
+	draw_rect(Rect2(p.x - 130, p.y - 36, 260, 48), Color(0.03, 0.04, 0.1, 0.6))
+	draw_string_outline(font, p + Vector2(-200, -14), title, HORIZONTAL_ALIGNMENT_CENTER, 400.0, 22, 5, UI.INK)
+	draw_string(font, p + Vector2(-200, -14), title, HORIZONTAL_ALIGNMENT_CENTER, 400.0, 22, UI.PAPER)
+	draw_string_outline(font, p + Vector2(-260, 6), sub, HORIZONTAL_ALIGNMENT_CENTER, 520.0, 16, 4, UI.INK)
+	draw_string(font, p + Vector2(-260, 6), sub, HORIZONTAL_ALIGNMENT_CENTER, 520.0, 16, col)
 
 
 ## 旋转贴图一次提交（四顶点 + UV），不调 draw_set_transform，避免打断合批

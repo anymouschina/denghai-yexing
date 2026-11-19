@@ -2573,7 +2573,7 @@ func _finish() -> void:
 		top_name = "飞剑术"
 	_ev("result")
 	result = {"victory": victory, "time": clock, "level": level, "kills": kills, "top": top_name, "soul": soul_payout(), "build": owned(), "seed": seed_v,
-		"cause": death_cause, "rift": rift_log, "relics": relics.duplicate(), "artifact": artifact, "boss_time": boss_time}
+		"cause": death_cause, "rift": rift_log, "relics": relics.duplicate(), "artifact": artifact, "boss_time": boss_time, "rift_entries": rift_entries, "rift_clears": rift_clears}
 
 
 var result: Dictionary = {}
