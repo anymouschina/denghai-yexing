@@ -201,6 +201,25 @@ func _draw_hud_inner() -> void:
 	if sim.artifact == "sword":
 		canvas.draw_texture_rect(_icon("sword"), Rect2(rx + 6, ry - 2, 34 * k, 34 * k), false)
 		rx += 46.0 * k
+	# 铜钱 / 葫芦进度珠 / 小金刚 / 套装
+	_text(Vector2(rx, ry + 100 * k), "铜钱 %d" % sim.coins, _fs(18), Color("ffd36a"))
+	var gcols := {"red": Color("ff4a3a"), "orange": Color("ff9a3c"), "yellow": Color("ffe04a"), "green": Color("5ade6a"), "cyan": Color("4adfe0"), "blue": Color("4a7aff"), "purple": Color("b05aff")}
+	var bx2 := L
+	var by2 := ry + 108 * k
+	for gp in GameData.GD.pieces:
+		var got: bool = sim.gourds.has(gp.id)
+		canvas.draw_circle(Vector2(bx2 + 9, by2), 9.0, UI.INK)
+		canvas.draw_circle(Vector2(bx2 + 9, by2), 7.0, gcols[gp.id] if got else Color(0.2, 0.2, 0.3))
+		bx2 += 22.0
+	if sim.pet_on:
+		var ptxt := "小金刚 复活 %ds" % int(ceil(sim.pet_dead_t)) if sim.pet_dead_t > 0.0 else "小金刚 %d/%d  印记%d  Q合击 %s" % [int(sim.pet_hp), int(sim.pet_maxhp()), sim.pet_marks, "就绪" if sim.combo_cd <= 0.0 else "%ds" % int(ceil(sim.combo_cd))]
+		_text(Vector2(bx2 + 8, by2 + 6), ptxt, _fs(15), Color("ffcf5a") if sim.pet_dead_t <= 0.0 else UI.BLOOD)
+	var asets := sim.active_sets()
+	if asets.size() > 0:
+		var nms: Array = []
+		for sid in asets:
+			nms.append(GameData.SET_BY_ID[sid].name)
+		_text(Vector2(L, by2 + 30), "套装：" + " / ".join(PackedStringArray(nms)), _fs(15), Color("9fe8ff"))
 	# 右上：击杀 / 魂火
 	var rr := vw.x - inset.z - (110.0 if touch_mode else 24.0)
 	_text(Vector2(rr - 240, T + 24 * k), "击杀  %d" % sim.kills, _fs(22), UI.PAPER, 240.0, HORIZONTAL_ALIGNMENT_RIGHT)
@@ -262,7 +281,7 @@ func _draw_hud_inner() -> void:
 			if dd < bdist:
 				bdist = dd
 				best = i
-		if best >= 0 and bdist > 520.0:
+		if best >= 0 and bdist > 520.0 and not modal_open():
 			var dn := Vector2(float(sim.pois[best].x) - sim.px, float(sim.pois[best].y) - sim.py).normalized()
 			var ctr2 := Vector2(vw.x / 2.0, vw.y / 2.0)
 			var ap2 := ctr2 + Vector2(dn.x * (vw.x * 0.5 - 70.0), dn.y * (vw.y * 0.5 - 60.0))
@@ -469,7 +488,7 @@ func _build_shop() -> void:
 	var tl := UI.label("游 商 • 灯芯换遗物", 50, UI.GOLD, 9)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(tl)
-	var sl := UI.label("手里的灯芯：%d 枚（进裂隙也要灯芯，别花光）" % sim.wicks, 22, Color("d6d0f0"), 4)
+	var sl := UI.label("铜钱 %d  •  灯芯 %d（进裂隙/刷新商品要灯芯）" % [sim.coins, sim.wicks], 22, Color("d6d0f0"), 4)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(sl)
 	var row := HBoxContainer.new()
@@ -481,8 +500,17 @@ func _build_shop() -> void:
 	var i := 0
 	for rid in sim.shop:
 		var r: Dictionary = GameData.RELIC_BY_ID[rid]
-		var cb := _card(r.icon, r.name, "遗物", r.desc, UI.GOLD, Vector2(280, card_h), "灯芯 ×%d" % int(GameData.DG.wick.relicCost))
-		cb.disabled = sim.wicks < int(GameData.DG.wick.relicCost)
+		var tier_col: Color = {"white": Color("e8e6f5"), "blue": Color("6fb6ff"), "purple": Color("c08cff"), "gold": Color("ffcf5a")}[r.tier]
+		var sub := "进化配件" if r.has("part") else "遗物"
+		var extra := ""
+		if r.get("set", "") != "":
+			var sd: Dictionary = GameData.SET_BY_ID[r.set]
+			var cnt := int(sim.set_counts().get(r.set, 0))
+			extra = "\n【%s %d/2%s】" % [sd.name, mini(2, cnt + 1), " 激活" if cnt >= 1 else ""]
+		elif r.has("part"):
+			extra = "\n满级可购金件"
+		var cb := _card(r.icon, r.name, sub, r.desc + extra, tier_col, Vector2(280, card_h), "铜钱 %d" % sim.price_of(r.id))
+		cb.disabled = sim.coins < sim.price_of(r.id)
 		var idx := i
 		cb.pressed.connect(func(): game.on_buy(idx))
 		row.add_child(cb)
@@ -490,6 +518,11 @@ func _build_shop() -> void:
 		i += 1
 	if sim.shop.is_empty():
 		col.add_child(UI.label("游商的货卖光了", 26, UI.PAPER, 4))
+	var rr2 := UI.button("刷新（灯芯×%d）" % int(GameData.GD.rerollWicks), Vector2(240, 46), false, 22)
+	rr2.disabled = sim.wicks < int(GameData.GD.rerollWicks)
+	rr2.pressed.connect(func(): game.on_reroll_shop())
+	rr2.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(rr2)
 	var leave := UI.button("离开", Vector2(240, 56), true, 28)
 	leave.pressed.connect(func(): game.on_close_shop())
 	leave.size_flags_horizontal = Control.SIZE_SHRINK_CENTER

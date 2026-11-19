@@ -12,6 +12,10 @@ static var DG: Dictionary
 static var RELICS: Array
 static var SEG: Dictionary
 static var MV: Dictionary
+static var SETS: Array
+static var SET_BY_ID: Dictionary = {}
+static var GD: Dictionary
+static var GP_BY_ID: Dictionary = {}
 static var ANCH: Dictionary
 static var UPS: Dictionary = {}
 static var EVOS: Dictionary = {}
@@ -39,6 +43,12 @@ static func load_all() -> void:
 	RELICS = _read("relics")
 	SEG = _read("segments")
 	MV = _read("movement")
+	SETS = _read("sets")
+	GD = _read("gourds")
+	for st in SETS:
+		SET_BY_ID[st.id] = st
+	for gp in GD.pieces:
+		GP_BY_ID[gp.id] = gp
 	ANCH = _read("anchors")
 	for u in UP.list:
 		UPS[u.id] = u

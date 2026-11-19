@@ -146,6 +146,8 @@ func _process(delta: float) -> void:
 			sim.in_dash = true
 		if Input.is_action_just_pressed("skill") or (touch_mode and touch.consume_skill()):
 			sim.in_skill = true
+		if Input.is_action_just_pressed("combo") or (touch_mode and touch.consume_combo()):
+			sim.in_combo = true
 		var dt := minf(delta, 0.05)
 		if view.hit_stop > 0.0:
 			view.hit_stop -= delta
@@ -256,6 +258,11 @@ func _publish() -> void:
 	snap["relics"] = sim.relics.size()
 	snap["threat"] = sim.threat_next + sim.threat_cur
 	snap["break_idx"] = sim.break_idx
+	snap["coins"] = sim.coins
+	snap["gourds"] = sim.gourds.size()
+	snap["pet"] = sim.pet_on
+	snap["sets"] = sim.active_sets().size()
+	snap["clock"] = int(sim.clock)
 	snap["poi0"] = sim.poi_state(0)
 	snap["poi_x"] = int(sim.pois[0].x)
 	snap["poi_y"] = int(sim.pois[0].y)
@@ -342,6 +349,11 @@ func on_choose(i: int) -> void:
 func on_reroll() -> void:
 	Audio.play("click")
 	sim.reroll()
+
+
+func on_reroll_shop() -> void:
+	if sim.reroll_shop():
+		Audio.play("coin")
 
 
 func on_buy(i: int) -> void:

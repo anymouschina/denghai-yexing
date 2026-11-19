@@ -287,6 +287,19 @@ func _consume_events() -> void:
 			"stagger":
 				_shake(150, 0.003)
 				Audio.play("boom", 0.6)
+			"gourd":
+				Audio.play("chest")
+				ring(sim.px, sim.py - 30.0, 200.0, Color("ffcf5a"))
+			"pet_born":
+				Audio.play("levelup")
+				hit_stop = maxf(hit_stop, 0.12)
+				fade = 0.5
+				burst(sim.px, sim.py - 40.0, 70, Color("ffcf5a"), 520.0, 0.7, 1.0)
+			"pet_combo":
+				Audio.play("boom")
+				_shake(220, 0.006)
+			"pet_dead":
+				Audio.play("hurt")
 			"sword_stage":
 				Audio.play("levelup")
 				ring(sim.px, sim.py - 30.0, 260.0, Color("7fe3ff"))
@@ -354,6 +367,15 @@ func _draw_bg(c: Node2D) -> void:
 			# 奇数格镜像（负尺寸 = 翻转，位置不变），相邻瓦片边缘连续
 			c.draw_texture_rect(bt, Rect2(ix * tw, iy * th, -tw if ix % 2 == 1 else tw, -th if iy % 2 == 1 else th), false, tint)
 	c.draw_rect(Rect2(0, 0, Sim.W, Sim.H), Color(0.23, 0.16, 0.36, 0.16))
+	if sim.phase != Sim.PH_RIFT:
+		var lm := [[Vector2(Sim.W / 2.0, 260.0), "古井祭坛", Color(0.5, 0.7, 1.0)], [Vector2(Sim.W - 300.0, Sim.H / 2.0), "破败牌坊", Color(1.0, 0.7, 0.4)], [Vector2(300.0, Sim.H / 2.0), "灯冢废墟", Color(0.8, 0.6, 1.0)], [Vector2(Sim.W / 2.0, Sim.H - 260.0), "荒庙香炉", Color(1.0, 0.5, 0.4)]]
+		for m in lm:
+			var mp: Vector2 = m[0]
+			var mc: Color = m[2]
+			c.draw_arc(mp, 120.0, 0, TAU, 40, Color(mc, 0.35), 4.0, true)
+			c.draw_rect(Rect2(mp.x - 14, mp.y - 80, 28, 80), Color(mc, 0.3))
+			c.draw_rect(Rect2(mp.x - 50, mp.y - 90, 100, 14), Color(mc, 0.3))
+			c.draw_string(font, mp + Vector2(-100, 40), String(m[1]), HORIZONTAL_ALIGNMENT_CENTER, 200.0, 26, Color(mc, 0.6))
 	if sim.phase == Sim.PH_RIFT:
 		var cc := Vector2(Sim.W / 2.0, Sim.H / 2.0)
 		var R: float = GameData.DG.rift.arenaRadius
@@ -699,6 +721,19 @@ func _draw_pickup(k: SimPickup) -> void:
 
 
 func _draw_poi(i: int) -> void:
+	if sim.pois[i].kind == "vine":
+		if sim.vine_taken.has(i):
+			return
+		var vp := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
+		draw_texture_rect(T.glow, Rect2(vp.x - 110, vp.y - 110, 220, 220), false, Color(0.3, 1.0, 0.5, 0.45))
+		for a in range(3):
+			draw_line(vp, vp + Vector2(sin(t_anim + a * 2.1) * 40.0, -70.0 - a * 14.0), Color(0.3, 0.8, 0.3), 5.0, true)
+		draw_circle(vp + Vector2(0, -80), 16.0, Color(1.0, 0.7, 0.2))
+		_draw_zone_text(vp + Vector2(0, -110.0), "葫芦灵藤", "站定 1 秒采集彩虹葫芦散件", Color("9fffb0"))
+		var vh: float = float(sim.poi_hold.get(i, 0.0))
+		if vh > 0.0:
+			draw_arc(vp, 78.0, -PI / 2.0, -PI / 2.0 + clampf(vh / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, 48, Color(1.0, 0.9, 0.5, 0.95), 7.0, true)
+		return
 	if sim.pois[i].kind == "merchant":
 		var mp2 := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
 		var mt: Texture2D = T.merchant
@@ -788,6 +823,13 @@ func _draw_projectiles() -> void:
 		draw_set_transform(Vector2(b.x, b.y), t_anim * 6.0, Vector2.ONE)
 		draw_texture_rect(eg, Rect2(-w2 / 2.0, -h2 / 2.0, w2, h2), false, Color.WHITE)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if sim.pet_on and sim.pet_dead_t <= 0.0:
+		var pp := sim.pet_pos
+		draw_circle(pp + Vector2(0, 4), 22.0, UI.INK)
+		draw_circle(pp, 19.0, Color(1.0, 0.75, 0.2))
+		draw_circle(pp + Vector2(0, -24), 12.0, Color(1.0, 0.6, 0.15))
+		draw_circle(pp + Vector2(-6, -2), 3.0, UI.INK)
+		draw_circle(pp + Vector2(6, -2), 3.0, UI.INK)
 	# 剑轮 / 剑气（阶段3-5）
 	var swt: Texture2D = T.proj_sword
 	for wp: Vector2 in sim.sw_wheel_pos:
@@ -859,6 +901,20 @@ func defer__draw_fx_add(c: Node2D) -> void:
 		c.draw_texture_rect(g, Rect2(b.x - 30, b.y - 30, 60, 60), false, Color(0.5, 1.0, 0.7, 0.55))
 	for o in sim.orb_pos:
 		c.draw_texture_rect(g, Rect2(o.x - 44, o.y - 44, 88, 88), false, Color(1.0, 0.55, 0.2, 0.8))
+	if sim.pet_on and sim.pet_dead_t <= 0.0:
+		var rb := [Color("ff4a3a"), Color("ff9a3c"), Color("ffe04a"), Color("5ade6a"), Color("4adfe0"), Color("4a7aff"), Color("b05aff")]
+		for ri in range(7):
+			var ra := t_anim * 3.0 + ri * TAU / 7.0
+			c.draw_circle(sim.pet_pos + Vector2(cos(ra) * 30.0, sin(ra) * 22.0 - 10.0), 5.0, rb[ri])
+		c.draw_texture_rect(g, Rect2(sim.pet_pos.x - 50, sim.pet_pos.y - 50, 100, 100), false, Color(1.0, 0.8, 0.4, 0.5))
+	for fx in sim.pet_fx:
+		var fk: float = float(fx[3]) / 0.4
+		var fp := Vector2(fx[1], fx[2])
+		var fc: Color = [Color(1.0, 0.45, 0.15), Color(0.6, 0.9, 1.0), Color(1.0, 0.85, 0.4)][int(fx[0])]
+		c.draw_arc(fp, 40.0 + 120.0 * (1.0 - fk), 0, TAU, 32, Color(fc, fk), 6.0, true)
+	if sim.combo_fx > 0.0:
+		var ck := sim.combo_fx / 0.7
+		c.draw_arc(Vector2(sim.px, sim.py - 30.0), float(GameData.GD.pet.comboR) * (1.1 - ck), 0, TAU, 64, Color(1.0, 0.9, 0.5, ck), 12.0 * ck + 2.0, true)
 	# 剑轮/剑气光 + 剑阵环
 	for wp2: Vector2 in sim.sw_wheel_pos:
 		c.draw_texture_rect(g, Rect2(wp2.x - 40, wp2.y - 40, 80, 80), false, Color(0.4, 0.9, 1.0, 0.55))

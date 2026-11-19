@@ -136,6 +136,22 @@ var wick_spent_shop := 0
 var stretch := 1.0            # 模式拉伸：战斗节奏钟(t)每走 1 秒需要 stretch 个真实战斗秒；30 分钟=3.75，10 分钟=1.25，测试默认 1
 var mode := "classic"
 var clock := 0.0              # 玩家看到的战斗时钟（真实秒，不含段间/裂隙）
+var gourds: Array = []          # 已得彩虹葫芦散件（颜色 id，不重复）
+var pet_on := false
+var pet_hp := 0.0
+var pet_dead_t := 0.0
+var pet_marks := 3
+var pet_atk_t := 1.0
+var pet_idx := 0
+var pet_ang := 0.0
+var pet_pos := Vector2.ZERO
+var combo_cd := 0.0
+var combo_fx := 0.0
+var pet_fx: Array = []          # 渲染用的攻击特效 [type,x,y,life]
+var in_combo := false
+var mini_idx := 0
+var vine_taken: Dictionary = {}
+var rerolled := 0
 var rift_from := 1
 var rift_poi := -1
 var pois: Array = []          # 大地图上的“剑冢裂隙”入口：{x,y,name}
@@ -257,13 +273,43 @@ func _per(id: String, k: String) -> float:
 	return lv(id) * float(u.per.get(k, 0.0))
 
 
+func set_counts() -> Dictionary:
+	var c: Dictionary = {}
+	for rid in relics:
+		var st: String = GameData.RELIC_BY_ID[rid].get("set", "")
+		if st != "":
+			c[st] = int(c.get(st, 0)) + 1
+	return c
+
+
+func active_sets() -> Array:
+	var out: Array = []
+	var c := set_counts()
+	for st in GameData.SETS:
+		if int(c.get(st.id, 0)) >= 2:
+			out.append(st.id)
+	return out
+
+
 func _relic_sum(stat: String) -> float:
 	var s := 0.0
 	for rid in relics:
 		var r: Dictionary = GameData.RELIC_BY_ID[rid]
 		if r.stat == stat:
 			s += float(r.per)
+	for sid in active_sets():
+		var st: Dictionary = GameData.SET_BY_ID[sid]
+		if st.stat == stat:
+			s += float(st.per)
+	for gid in gourds:
+		var gp: Dictionary = GameData.GP_BY_ID[gid]
+		if gp.stat == stat:
+			s += float(gp.per) * (1.0 + 0.1 * pet_marks if pet_on else 1.0)
 	return s
+
+
+func has_part(id: String) -> bool:
+	return relics.has(id)
 
 
 func _recalc() -> void:
@@ -276,7 +322,7 @@ func _recalc() -> void:
 	s_dmg_add = meta.dmg + _per("taomu", "dmg") + _relic_sum("dmg")
 	s_crit = P.crit + _per("tiangang", "crit") + _relic_sum("crit")
 	s_crit_mul = P.critMul + _per("tiangang", "critMul")
-	s_dash_cd = P.dashCd * (1.0 - _per("jingxin", "dashCd")) * (T.dashCdMul if touch else 1.0)
+	s_dash_cd = P.dashCd * (1.0 - _per("jingxin", "dashCd") - _relic_sum("dashCd")) * (T.dashCdMul if touch else 1.0)
 	s_fu_cd_mul = 1.0 - _per("jishu", "fuCd")
 	s_fu_speed_mul = 1.0 + _per("jishu", "fuSpeed")
 	s_fu_count = int(_per("zhongfu", "fuCount"))
@@ -284,7 +330,7 @@ func _recalc() -> void:
 	s_ignite = _per("zhuohun", "igniteChance")
 	s_orb_r_mul = 1.0 + _per("tianyou", "orbRadius")
 	s_orb_spin_mul = 1.0 + _per("tianyou", "orbSpin")
-	s_chain = int(_per("leiyin", "chain"))
+	s_chain = int(_per("leiyin", "chain")) + (2 if has_part("part_lei") else 0)
 	s_soul_mul = 1.0 + _per("tongqian", "soulGain")
 	s_coin_chance = GameData.BAL.drops.coin + _per("tongqian", "coinChance")
 	s_dmg_taken = 1.0 + _relic_sum("dmgTaken")
@@ -299,7 +345,7 @@ func _sync_orbs() -> void:
 		want = int(GameData.EVOS.huanhuo.stats.orbs)
 	elif lv("huanhuo") > 0:
 		want = int(wstat("huanhuo").orbs)
-	orb_count = want
+	orb_count = want + (2 if has_part("part_huanhuo") and want > 0 else 0)
 
 
 ## 伤害乘区（加算）：1 + 局外 + 桃木心 + 遗物 + 进化增伤 + 目标身上的剑痕 × 6%。法宝与进化不相乘。
@@ -391,6 +437,7 @@ func step(dt: float) -> void:
 			_step_break(dt)
 	in_dash = false
 	in_skill = false
+	in_combo = false
 	if not over and choice.is_empty():
 		if pending_fusion > 0 and phase != PH_RIFT:
 			pending_fusion -= 1
@@ -426,6 +473,8 @@ func _step_combat(dt: float) -> void:
 	_update_teles(dt)
 	_update_lamps(dt)
 	_update_pois(dt)
+	_update_pet(dt)
+	_update_minis()
 	if phase == PH_SEG and t >= float(GameData.SEG.segments[seg].to) - 20.0 / stretch and not announced.has(seg):
 		announced[seg] = true
 		_ev("banner", "20 秒后清场 · 场地中央将裂开「灯骸裂隙」", "#d9b8ff")
@@ -546,6 +595,7 @@ func hurt_player(dmg_in: float, fx: float, fy: float, src: String) -> void:
 	var dmg := dmg_in * s_dmg_taken
 	if touch:
 		dmg *= T.dmgMul
+	dmg = _pet_hurt(dmg)
 	var hp_before := hp
 	hp -= dmg
 	invuln = P.invuln + (T.invulnAdd if touch else 0.0) + s_invuln_add
@@ -803,6 +853,10 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 		return
 	e.alive = false
 	kills += 1
+	if has_part("part_huanhuo"):
+		hp = minf(maxhp, hp + 1.0)
+	if e.el.has("mini"):
+		_mini_drop(e)
 	if has_sword() and sw_stage < 5:
 		sw_kills += 1
 		if sw_kills >= int(GameData.DG.sword.stages.kills[sw_stage - 1]):
@@ -928,7 +982,7 @@ func _update_weapons(dt: float) -> void:
 			if cands.size() > 0:
 				var evs: Dictionary = GameData.EVOS.lei.stats
 				w_lei = evs.cd if evl else st3.cd
-				var strikes: int = int(evs.strikes if evl else st3.strikes)
+				var strikes: int = int(evs.strikes if evl else st3.strikes) + (1 if has_part("part_lei") else 0)
 				var chain: int = int(st3.chain) + s_chain + (int(evs.chainBonus) if evl else 0)
 				var hit_set: Dictionary = {}
 				var k := 0
@@ -983,6 +1037,8 @@ func _update_bullets(dt: float) -> void:
 					e.mark_t = GameData.EVOS.fu.stats.markDelay
 					e.mark_dmg = b.dmg
 				damage(e, b.dmg, "fu", {"kx": b.vx, "ky": b.vy})
+				if has_part("part_fu") and rng.randf() < 0.35:
+					_aoe(b.x, b.y, 80.0, b.dmg * 0.5, "mark")
 				b.pierce -= 1
 				if b.pierce < 0:
 					dead = true
@@ -1914,16 +1970,44 @@ func _start_break(k: int) -> void:
 		sw_t = 0.5
 
 
+func part_ready(pid: String) -> bool:
+	var w: String = GameData.RELIC_BY_ID[pid].part
+	if w == "sword":
+		return has_sword() and sw_stage >= 5
+	return lv(w) >= int(GameData.UPS[w].max)
+
+
+func price_of(rid: String) -> int:
+	return int(GameData.GD.prices[GameData.RELIC_BY_ID[rid].tier])
+
+
 func _roll_shop() -> void:
 	var pool: Array = []
+	var parts: Array = []
 	for r in GameData.RELICS:
-		if not relics.has(r.id):
+		if relics.has(r.id):
+			continue
+		if r.has("part"):
+			if part_ready(r.id):
+				parts.append(r.id)
+		else:
 			pool.append(r.id)
 	shop.clear()
+	if parts.size() > 0:
+		shop.append(parts[int(rng.randf() * parts.size())])   # 满级进化件优先上架
 	while shop.size() < 3 and pool.size() > 0:
 		var i := int(rng.randf() * pool.size())
 		shop.append(pool[i])
 		pool.remove_at(i)
+
+
+func reroll_shop() -> bool:
+	if wicks < int(GameData.GD.rerollWicks):
+		return false
+	wicks -= int(GameData.GD.rerollWicks)
+	_roll_shop()
+	shop_serial += 1
+	return true
 
 
 func rift_gate(sealed_key: int) -> String:
@@ -1947,7 +2031,7 @@ func rift_state() -> String:
 
 
 func poi_state(i: int) -> String:
-	if phase != PH_SEG or pois[i].kind == "merchant":
+	if phase != PH_SEG or pois[i].kind != "sword":
 		return "none"
 	return rift_gate(100 + i)
 
@@ -1956,7 +2040,8 @@ func _gen_pois() -> void:
 	# 大地图上两处剑冢裂隙入口（东北 / 西南），战斗中靠近站定即可进入；出生点旁刷一只古灯宝箱
 	var c := Vector2(W / 2.0, H / 2.0)
 	pois = [{"kind": "sword", "x": c.x + 1000.0, "y": c.y - 700.0, "name": "剑冢裂隙 • 东北"}, {"kind": "sword", "x": c.x - 1100.0, "y": c.y + 720.0, "name": "剑冢裂隙 • 西南"},
-		{"kind": "merchant", "x": c.x - 650.0, "y": c.y - 420.0, "name": "游商灯摊"}]
+		{"kind": "merchant", "x": c.x - 650.0, "y": c.y - 420.0, "name": "游商灯摊"},
+		{"kind": "vine", "x": c.x + 420.0, "y": c.y + 380.0, "name": "葫芦灵藤"}, {"kind": "vine", "x": c.x - 1300.0, "y": c.y - 300.0, "name": "葫芦灵藤"}]
 	explored.resize(36 * 24)
 	_spawn_pickup("chest", c.x + 230.0, c.y - 110.0, 1)
 
@@ -1981,6 +2066,18 @@ func _update_pois(dt: float) -> void:
 	var zr: float = GameData.SEG["break"].zoneR
 	for i in range(pois.size()):
 		var pp := Vector2(float(pois[i].x), float(pois[i].y))
+		if pois[i].kind == "vine":
+			if vine_taken.has(i):
+				continue
+			if Vector2(px, py).distance_to(pp) < zr:
+				poi_hold[i] = float(poi_hold.get(i, 0.0)) + dt
+				if float(poi_hold[i]) >= float(GameData.DG.rift.hold):
+					vine_taken[i] = true
+					if not grant_gourd():
+						coins += 80
+			else:
+				poi_hold[i] = 0.0
+			continue
 		if pois[i].kind == "merchant":
 			if Vector2(px, py).distance_to(pp) < zr:
 				poi_hold[i] = float(poi_hold.get(i, 0.0)) + dt
@@ -2084,10 +2181,11 @@ func _advance() -> void:
 func buy_relic(i: int) -> bool:
 	if i < 0 or i >= shop.size():
 		return false
-	if wicks < int(GameData.DG.wick.relicCost):
-		return false
 	var rid: String = shop[i]
-	wicks -= int(GameData.DG.wick.relicCost)
+	var price := price_of(rid)
+	if coins < price:
+		return false
+	coins -= price
 	wick_spent_shop += 1
 	relics.append(rid)
 	shop_serial += 1
@@ -2318,7 +2416,7 @@ func duel_warden(build: Dictionary, entry: int, with_sword: bool) -> void:
 
 const SAVE_KEYS := ["seed_v", "phase", "t", "real_t", "seg", "kills", "coins", "level", "xp", "need", "pending_lv", "hp", "px", "py", "levels", "evo", "relics",
 	"wicks", "artifact", "rift_entries", "rift_clears", "rift_sealed", "threat_next", "threat_cur", "rerolls", "revive", "bonus_soul", "break_idx", "gift_pending", "shop",
-	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock"]
+	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock", "gourds", "pet_on", "pet_hp", "pet_marks", "pet_dead_t", "mini_idx", "vine_taken"]
 
 
 ## 检查点存档：只在「段/段间」两种阶段落档；恢复时妖物/弹幕清空，从该点继续（局内中断续档）
@@ -2349,7 +2447,7 @@ func from_save(d: Dictionary) -> void:
 			v = int(v)
 		elif cur is float:
 			v = float(v)
-		elif cur is Dictionary and k in ["rift_sealed", "announced"]:
+		elif cur is Dictionary and k in ["rift_sealed", "announced", "vine_taken"]:
 			var nd := {}
 			for kk in v:
 				nd[int(kk)] = true
@@ -2378,6 +2476,133 @@ func from_save(d: Dictionary) -> void:
 	hold.clear()
 	shop_open = false
 	choice = {}
+
+
+func _aoe(x: float, y: float, r: float, dmg: float, key: String) -> void:
+	for e: SimEnemy in _near(x, y, r + 40.0):
+		if Vector2(e.x - x, e.y - e.h * 0.4 - y).length() < r + e.r:
+			damage(e, dmg, key, {"noCrit": true, "kx": e.x - x, "ky": e.y - y, "kb": 90.0})
+
+
+func grant_gourd() -> bool:
+	var left: Array = []
+	for gp in GameData.GD.pieces:
+		if not gourds.has(gp.id):
+			left.append(gp.id)
+	if left.is_empty():
+		return false
+	var gid: String = left[int(rng.randf() * left.size())]
+	gourds.append(gid)
+	_ev("gourd", gid)
+	_ev("banner", "彩虹葫芦 • %s（%d/7）" % [GameData.GP_BY_ID[gid].name, gourds.size()], "#ffcf5a")
+	if gourds.size() >= 7 and not pet_on:
+		pet_on = true
+		pet_hp = float(GameData.GD.pet.hp) * (1.0 + 0.1 * pet_marks)
+		_ev("pet_born")
+		_ev("banner", "七色合一 • 葫芦小金刚现身", "#ffcf5a")
+	_recalc()
+	return true
+
+
+func pet_maxhp() -> float:
+	return float(GameData.GD.pet.hp) * (1.0 + 0.1 * pet_marks)
+
+
+func _pet_hurt(dmg: float) -> float:
+	## 小金刚替玩家挡一部分伤害；返回玩家实际承受的伤害
+	if not pet_on or pet_dead_t > 0.0:
+		return dmg
+	var ab := dmg * float(GameData.GD.pet.absorb)
+	pet_hp -= ab
+	if pet_hp <= 0.0:
+		pet_hp = 0.0
+		pet_dead_t = float(GameData.GD.pet.revive)
+		pet_marks = maxi(0, pet_marks - 1)    # 死亡惩罚：掉 1 层强化印记 + 45s 复活冷却
+		_ev("pet_dead")
+		_recalc()
+	return dmg - ab
+
+
+func _update_pet(dt: float) -> void:
+	combo_cd = maxf(0.0, combo_cd - dt)
+	combo_fx = maxf(0.0, combo_fx - dt)
+	for i in range(pet_fx.size() - 1, -1, -1):
+		pet_fx[i][3] -= dt
+		if pet_fx[i][3] <= 0.0:
+			pet_fx.remove_at(i)
+	if not pet_on:
+		return
+	var G: Dictionary = GameData.GD.pet
+	pet_ang += 2.2 * dt
+	pet_pos = Vector2(px + cos(pet_ang) * float(G.orbitR), py - 40.0 + sin(pet_ang) * float(G.orbitR) * 0.6)
+	if pet_dead_t > 0.0:
+		pet_dead_t -= dt
+		if pet_dead_t <= 0.0:
+			pet_dead_t = 0.0
+			pet_hp = pet_maxhp()
+			_ev("pet_revive")
+		return
+	if in_combo and combo_cd <= 0.0 and phase != PH_BREAK:
+		combo_cd = float(G.comboCd)
+		combo_fx = 0.7
+		var cdmg := float(G.comboDmg) * (1.0 + s_dmg_add) * (1.0 + 0.1 * pet_marks)
+		_aoe(px, py - 30.0, float(G.comboR), cdmg, "pet")
+		var kept: Array = []
+		for b in ebullets:
+			if Vector2(b.x - px, b.y - py).length() > float(G.comboR):
+				kept.append(b)
+		ebullets = kept
+		_ev("pet_combo")
+	pet_atk_t -= dt
+	if pet_atk_t <= 0.0:
+		var tgt := nearest_enemy(pet_pos.x, pet_pos.y, float(G.range))
+		if tgt == null:
+			pet_atk_t = 0.3
+			return
+		pet_atk_t = float(G.atkGap)
+		var d := float(G.dmg) * (1.0 + s_dmg_add) * (1.0 + 0.1 * pet_marks)
+		match pet_idx % 3:
+			0:   # 喷火：朝目标锥形
+				pet_fx.append([0, tgt.x, tgt.y, 0.4])
+				_aoe(tgt.x, tgt.y, 90.0, d, "pet")
+			1:   # 落雷
+				pet_fx.append([1, tgt.x, tgt.y, 0.3])
+				damage(tgt, d * 1.6, "pet", {"noCrit": true})
+			2:   # 冲击波
+				pet_fx.append([2, pet_pos.x, pet_pos.y, 0.4])
+				_aoe(pet_pos.x, pet_pos.y, 150.0, d * 0.8, "pet")
+		pet_idx += 1
+
+
+func _mini_drop(e: SimEnemy) -> void:
+	var G: Dictionary = GameData.GD
+	var k := clampi(int(e.el.mini), 0, 4)
+	for i in range(4):
+		_spawn_pickup("coin", e.x + (rng.randf() - 0.5) * 120.0, e.y + (rng.randf() - 0.5) * 80.0, int(int(G.miniCoins[k]) / 4))
+	_spawn_pickup("chest", e.x, e.y, 1)
+	wicks += 1
+	grant_gourd()
+	if pet_on and pet_marks < int(G.pet.marks):
+		pet_marks += 1
+		_recalc()
+	_ev("banner", "击败 %s • 铜钱 + 灯芯 + 葫芦散件" % e.el.name, "#ffcf5a")
+
+
+func _update_minis() -> void:
+	if phase != PH_SEG and phase != PH_BOSS:
+		return
+	var sched: Array = GameData.GD.minis.full if mode == "full" else (GameData.GD.minis.quick if mode == "quick" else [])
+	if mini_idx >= sched.size() or clock < float(sched[mini_idx]):
+		return
+	var k := mini_idx
+	mini_idx += 1
+	var base: Dictionary = GameData.EN.elites["jiangshi" if k % 2 == 0 else "lantern"].duplicate()
+	base.name = String(GameData.GD.miniNames[mini(k, 4)])
+	base.hp = float(base.hp) * (1.0 + 0.5 * k)
+	base["mini"] = k
+	base.xp = 20
+	spawn_enemy("jiangshi" if k % 2 == 0 else "lantern", -1.0, -1.0, {"elite": true, "el": base})
+	_ev("banner", "小 BOSS • %s 现身" % base.name, "#ff7a6a")
 
 
 func sw_rm() -> float:
@@ -2457,7 +2682,7 @@ func _update_sword_stages(dt: float) -> void:
 	# 阶段3：环身剑轮（贴身持续切割）
 	if sw_stage >= 3:
 		var W: Dictionary = ST.wheel
-		var n := int(W.blades) + int(sw_br.get("count", 0))
+		var n := int(W.blades) + int(sw_br.get("count", 0)) + (3 if has_part("part_sword") else 0)
 		var rad: float = float(W.radius) * sw_rm()
 		sw_wheel_ang += float(W.spin) * dt
 		for i in range(n):
@@ -2483,7 +2708,7 @@ func _update_sword_stages(dt: float) -> void:
 		if sw_qi_t <= 0.0 and enemies.size() > 0:
 			var picked: Dictionary = {}
 			var fired := 0
-			for k in range(int(Q.count) + int(sw_br.get("count", 0))):
+			for k in range(int(Q.count) + int(sw_br.get("count", 0)) + (2 if has_part("part_sword") else 0)):
 				var best: SimEnemy = null
 				var bd := float(Q.range) * float(Q.range)
 				for e: SimEnemy in enemies:

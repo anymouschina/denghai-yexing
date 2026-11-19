@@ -50,14 +50,21 @@ func _init() -> void:
 	to_break(s2, 2)
 	ok(s2.wicks == 3, "BOSS 前（第 3 段间）额外 +1 枚灯芯")
 	ok(s2.phase == Sim.PH_BREAK and s2.gift_pending, "段间清场后出现入口，三选一馈赠待领")
-	# 灯芯双用途
+	# 铜钱商店（灯芯只管进裂隙/刷新）
 	var s3 := fresh()
 	to_break(s3, 0)
-	var w0 := s3.wicks
-	ok(s3.buy_relic(0), "游商：灯芯可换遗物")
-	ok(s3.wicks == w0 - 1 and s3.relics.size() == 1, "买遗物消耗 1 枚灯芯")
+	var pr := s3.price_of(s3.shop[0])
+	ok(not s3.buy_relic(0), "铜钱不足买不了遗物")
+	s3.coins = 1000
+	var c0 := s3.coins
+	ok(s3.buy_relic(0), "铜钱商店：铜钱可换遗物")
+	ok(s3.coins == c0 - pr and s3.relics.size() == 1 and s3.wicks == 2, "买遗物扣铜钱、不扣灯芯")
+	var tiers := {"white": 50, "blue": 110, "purple": 200, "gold": 340}
+	var okp := true
+	for r in GameData.RELICS:
+		okp = okp and s3.price_of(r.id) == int(tiers[r.tier])
+	ok(okp, "价格严格分层 白50/蓝110/紫200/金340")
 	s3.wicks = 0
-	ok(not s3.buy_relic(0), "没有灯芯买不了遗物")
 	ok(s3.rift_state() == "nowick", "没有灯芯进不了裂隙（双用途闸门）")
 
 	print("== 裂隙入口 ==")
@@ -306,7 +313,7 @@ func _init() -> void:
 	print("== 大地图 / 战斗中裂隙入口 ==")
 	var mp := fresh(21)
 	ok(Sim.W == 3600.0 and Sim.H == 2400.0, "主战场 3600×2400")
-	ok(mp.pois.size() == 3 and mp.poi_state(0) == "ok", "大地图 2 处剑冢裂隙 + 1 处游商灯摊（kind 字段）")
+	ok(mp.pois.size() == 5 and mp.poi_state(0) == "ok", "大地图 2 剑冢裂隙 + 1 游商灯摊 + 2 葫芦灵藤（kind 字段）")
 	ok(mp.pickups.size() >= 1 and mp.pickups[0].kind == "chest" and Vector2(mp.pickups[0].x - mp.px, mp.pickups[0].y - mp.py).length() < 350.0, "出生点 350px 内刷古灯宝箱")
 	var mw0 := mp.wicks
 	mp.px = float(mp.pois[0].x); mp.py = float(mp.pois[0].y)
@@ -335,6 +342,63 @@ func _init() -> void:
 		if mm.shop_open:
 			break
 	ok(mm.shop_open and mm.shop.size() > 0, "战斗中站定游商灯摊 1 秒打开商店")
+	print("== 套装 / 进化件 / 葫芦 / 小金刚 / 小 BOSS ==")
+	var cs := fresh(31)
+	ok(GameData.SETS.size() == 8, "8 组套装")
+	cs.relics = ["talisman"]
+	cs._recalc()
+	var dm1 := cs.s_dmg_add
+	cs.relics = ["talisman", "ember"]
+	cs._recalc()
+	ok(cs.active_sets() == ["flame"] and cs.s_dmg_add > dm1 + 0.08, "烈焰焚魂 2/2 激活并真实加成伤害")
+	var cp := fresh(32)
+	cp.levels = {"fu": 5}
+	cp._recalc()
+	ok(cp.part_ready("part_fu") and not cp.part_ready("part_lei"), "驱邪符满级才能买「镇魂连爆符」")
+	cp.relics = ["part_lei"]
+	cp.levels["lei"] = 1
+	cp._recalc()
+	ok(cp.s_chain >= 2, "引雷铜柱：连锁 +2")
+	var cg := fresh(33)
+	for i in range(7):
+		ok(cg.grant_gourd(), "葫芦散件 %d/7 不重复" % (i + 1))
+	ok(cg.gourds.size() == 7 and cg.pet_on and not cg.grant_gourd(), "7 色集齐合成小金刚，且不再重复掉落")
+	var cu := {}
+	for gg in cg.gourds:
+		cu[gg] = true
+	ok(cu.size() == 7, "7 个颜色互不相同")
+	cg.pickups.clear()
+	var tg := cg.spawn_enemy("paperman", -1.0, -1.0, {"pos": Vector2(cg.px + 150.0, cg.py)})
+	tg.hp = 1e7; tg.maxhp = 1e7; tg.speed = 0.0
+	for i in range(120):
+		cg.choice = {}
+		cg.step(0.05)
+	ok(float(cg.dmg_by.get("pet", 0.0)) > 0.0, "小金刚自动攻击造成伤害")
+	cg.in_combo = true
+	cg.step(0.05)
+	ok(cg.combo_cd > 30.0, "Q 合击进入冷却")
+	cg.invuln = 0.0; cg.dash_inv = 0.0
+	var m0 := cg.pet_marks
+	cg.pet_hp = 1.0
+	cg.hurt_player(100.0, cg.px, cg.py, "x")
+	ok(cg.pet_dead_t > 40.0 and cg.pet_marks == m0 - 1, "小金刚阵亡：45s 复活冷却 + 掉 1 层印记")
+	var cm := Sim.new(34, {"mode": "quick"})
+	cm.clock = 151.0
+	cm._update_minis()
+	var nm := 0
+	for e in cm.enemies:
+		if e.el.has("mini"):
+			nm += 1
+	ok(nm == 1, "疾速模式 2:30 刷出第 1 个阶梯小 BOSS")
+	var tot := 0
+	var cv := fresh(35)
+	cv.px = float(cv.pois[3].x); cv.py = float(cv.pois[3].y)
+	for i in range(40):
+		cv.step(0.05)
+	ok(cv.gourds.size() == 1 and cv.vine_taken.has(3), "葫芦灵藤站定采集 1 片散件")
+	var old := Sim.new(36)
+	old.from_save({"phase": 1, "seg": 1, "hp": 50.0, "level": 5, "ver": 2})
+	ok(old.gourds.is_empty() and not old.pet_on and old.seg == 1, "旧存档（无葫芦/小金刚字段）读取不报错并补默认值")
 	print("== 确定性 ==")
 	var r1 := _run_fixed(777)
 	var r2 := _run_fixed(777)

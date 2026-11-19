@@ -12,6 +12,9 @@ var move := Vector2.ZERO
 var mag := 0.0
 var dash_q := false
 var skill_q := false
+var combo_q := false
+var has_pet := false
+var combo_k := 1.0
 var pause_q := false
 var stick_id := -1
 var origin := Vector2.ZERO
@@ -48,6 +51,8 @@ func btn_pos(which: String) -> Vector2:
 	match which:
 		"dash":
 			return Vector2(v.x - inset.z - 120.0, v.y - inset.w - 120.0)
+		"gourd":
+			return Vector2(v.x - inset.z - 190.0, v.y - inset.w - 215.0)
 		"skill":
 			return Vector2(v.x - inset.z - 290.0, v.y - inset.w - 90.0)
 		"pause":
@@ -56,12 +61,18 @@ func btn_pos(which: String) -> Vector2:
 
 
 func btn_r(which: String) -> float:
-	return {"dash": 78.0, "skill": 62.0, "pause": 34.0}[which]
+	return {"dash": 78.0, "skill": 62.0, "pause": 34.0, "gourd": 56.0}[which]
 
 
 func consume_dash() -> bool:
 	var v := dash_q
 	dash_q = false
+	return v
+
+
+func consume_combo() -> bool:
+	var v := combo_q
+	combo_q = false
 	return v
 
 
@@ -101,7 +112,9 @@ func _input(ev: InputEvent) -> void:
 	if ev is InputEventScreenTouch:
 		var st := ev as InputEventScreenTouch
 		if st.pressed:
-			for b in ["pause", "dash", "skill"]:
+			for b in ["pause", "dash", "skill", "gourd"]:
+				if (b == "gourd" and not has_pet):
+					continue
 				if (b == "skill" and not has_sword):
 					continue
 				if _hit(b, st.position):
@@ -110,6 +123,8 @@ func _input(ev: InputEvent) -> void:
 						dash_q = true
 					elif b == "skill":
 						skill_q = true
+					elif b == "gourd":
+						combo_q = true
 					else:
 						pause_q = true
 					return
@@ -155,6 +170,8 @@ func _process(_delta: float) -> void:
 	if not active and (stick_id != -1 or not btn_ids.is_empty()):
 		release_all()
 	has_sword = sim.has_sword()
+	has_pet = sim.pet_on and sim.pet_dead_t <= 0.0
+	combo_k = 1.0 - clampf(sim.combo_cd / float(GameData.GD.pet.comboCd), 0.0, 1.0)
 	sword_state = sim.sw_state
 	dash_k = 1.0 - clampf(sim.dash_cd / maxf(0.01, sim.s_dash_cd), 0.0, 1.0)
 	inset = SafeArea.insets(get_viewport())
@@ -196,6 +213,12 @@ func _draw_ctl() -> void:
 		var label := "剑" if sword_state != Sim.SW_ORBIT else "收"
 		ctl.draw_string_outline(font, sp + Vector2(-40, 16), label, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, 6, UI.INK)
 		ctl.draw_string(font, sp + Vector2(-40, 16), label, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, UI.PAPER)
+	if has_pet:
+		var gp := btn_pos("gourd")
+		ctl.draw_circle(gp, 56.0, Color(0.25, 0.12, 0.3, 0.85))
+		ctl.draw_arc(gp, 54.0, -PI / 2.0, -PI / 2.0 + combo_k * TAU, 40, Color(1.0, 0.8, 0.3), 7.0, true)
+		ctl.draw_string_outline(font, gp + Vector2(-40, 16), "葫", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, 6, UI.INK)
+		ctl.draw_string(font, gp + Vector2(-40, 16), "葫", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, UI.PAPER)
 	# 暂停
 	var pp := btn_pos("pause")
 	ctl.draw_circle(pp, btn_r("pause"), Color(0.1, 0.13, 0.28, 0.8))

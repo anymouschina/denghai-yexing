@@ -1,0 +1,95 @@
+{
+ "pieces": [
+  {
+   "id": "red",
+   "name": "赤•烈火",
+   "stat": "dmg",
+   "per": 0.04
+  },
+  {
+   "id": "orange",
+   "name": "橙•镇山",
+   "stat": "dmgTaken",
+   "per": -0.03
+  },
+  {
+   "id": "yellow",
+   "name": "黄•金钟",
+   "stat": "maxHp",
+   "per": 12
+  },
+  {
+   "id": "green",
+   "name": "绿•回春",
+   "stat": "maxHp",
+   "per": 12
+  },
+  {
+   "id": "cyan",
+   "name": "青•疾风",
+   "stat": "speed",
+   "per": 0.03
+  },
+  {
+   "id": "blue",
+   "name": "蓝•引雷",
+   "stat": "crit",
+   "per": 0.03
+  },
+  {
+   "id": "purple",
+   "name": "紫•吸魂",
+   "stat": "pickup",
+   "per": 0.1
+  }
+ ],
+ "pet": {
+  "hp": 120,
+  "revive": 45.0,
+  "marks": 3,
+  "markMax": 3,
+  "dmg": 34.0,
+  "atkGap": 1.2,
+  "absorb": 0.4,
+  "comboCd": 40.0,
+  "comboR": 380.0,
+  "comboDmg": 140.0,
+  "orbitR": 95.0,
+  "range": 520.0
+ },
+ "prices": {
+  "white": 50,
+  "blue": 110,
+  "purple": 200,
+  "gold": 340
+ },
+ "rerollWicks": 1,
+ "minis": {
+  "full": [
+   300,
+   600,
+   900,
+   1200,
+   1500
+  ],
+  "quick": [
+   150,
+   300,
+   450
+  ]
+ },
+ "miniNames": [
+  "跳尸王",
+  "破灯笼王",
+  "剑冢真主",
+  "纸轿冥娘",
+  "百灯鬼王"
+ ],
+ "miniCoins": [
+  60,
+  90,
+  120,
+  150,
+  180
+ ]
+}
