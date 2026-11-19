@@ -79,6 +79,15 @@ const engine = new Engine(GODOT_CONFIG);
     window.removeEventListener('pointerup', once, true);
   };
   window.addEventListener('pointerup', once, true);
+  // 点到画布外/页面边缘会让画布失焦，键盘事件就到不了 Godot：任何指针按下、窗口重新获得焦点都把焦点还给画布
+  const cv = document.getElementById('canvas'); cv.tabIndex = 0;
+  const refocus = () => { try { cv.focus({ preventScroll: true }); } catch (e) {} };
+  window.addEventListener('pointerdown', refocus, true);
+  window.addEventListener('mousedown', refocus, true);
+  window.addEventListener('touchstart', refocus, { capture: true, passive: true });
+  window.addEventListener('focus', refocus);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refocus(); });
+  window.addEventListener('keydown', (e) => { if (document.activeElement !== cv) refocus(); }, true);
   const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
   if (missing.length) { fail(new Error('当前浏览器缺少运行所需特性：\n' + missing.join('\n'))); return; }
   engine.startGame({

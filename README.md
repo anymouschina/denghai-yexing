@@ -135,3 +135,7 @@ tools/export_web.sh      # = godot --headless --path godot --export-release "Web
 **未完整留档**：「进副本击杀守关者 → 拿到飞剑术」这一条在手机视口曾由脚本走通一次（日志显示 got-feijianshu、sword-out-orbiting），但截图被我清理时误删，之后重跑 6 次没能复现（脚本的躲避机器人较弱、墙钟计时有波动）。该链路的规则已由 `selftest.gd` 覆盖，手机截图证据缺这一环。
 **未做**：真机；桌面键鼠端到端截图回归（只有试玩预跑）；Android 出包（本轮只配预设）。
 
+
+## 10. 已知问题（验收返工记录）
+- 返工修复：点到画布边缘/页面外后画布失焦，键盘事件到不了 Godot（点击后按 Enter/WASD 无反应）。`godot/web/shell.html` 现在在任何指针按下、窗口聚焦、按键时把焦点还给画布；回归脚本 `node tools/e2e_focus.mjs`（点画布右下角再按 Enter，应进入 play）。
+- 构建体积 52MB：其中 `index.wasm` 39.5MB 是官方 Web 导出模板，无法裁剪（需自编译精简模板），超出标准库 40MB 预算，未解决。

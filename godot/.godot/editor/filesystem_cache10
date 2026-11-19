@@ -109,7 +109,7 @@ relics.json::JSON::-1::1795079134::0::1::::<><><>0<>0<><>::
 segments.json::JSON::-1::1795079134::0::1::::<><><>0<>0<><>::
 upgrades.json::JSON::-1::1795079134::0::1::::<><><>0<>0<><>::
 waves.json::JSON::-1::1795079134::0::1::::<><><>0<>0<><>::
-::res://fonts/::1795078387
+::res://fonts/::1795079142
 MaShanZheng-subset.ttf::FontFile::5194515659408724947::1795079140::1795079142::1::::<><><>0<>0<>a90af3f772cc7ef233d6ec5aa960d62b<>res://.godot/imported/MaShanZheng-subset.ttf-d134312cc71f9d65358bdfd86bb33308.fontdata::
 ::res://src/::1795079134
 audio.gd::GDScript::2904713228379482549::1795079134::0::1::::<>Node<><>0<>0<><>::
