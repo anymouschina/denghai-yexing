@@ -395,13 +395,26 @@ func _init() -> void:
 	cg.hurt_player(100.0, cg.px, cg.py, "x")
 	ok(cg.pet_dead_t > 40.0 and cg.pet_marks == m0 - 1, "小金刚阵亡：45s 复活冷却 + 掉 1 层印记")
 	var cm := Sim.new(34, {"mode": "quick"})
-	cm.clock = 151.0
-	cm._update_minis()
+	cm.t = float(GameData.SEG.segments[0].to)
+	cm.step(0.05)
 	var nm := 0
+	var gref: SimEnemy = null
 	for e in cm.enemies:
 		if e.el.has("mini"):
 			nm += 1
-	ok(nm == 1, "疾速模式 2:30 刷出第 1 个阶梯小 BOSS")
+			gref = e
+	ok(nm == 1 and cm.phase == Sim.PH_SEG, "疾速模式：段末先刷出清场守关 BOSS，段间不会提前开始")
+	cm.step(0.05)
+	ok(cm.phase == Sim.PH_SEG, "守关 BOSS 在场时不清场")
+	cm.damage(gref, 1e9, "fu", {"noCrit": true, "pierce": true})
+	cm.step(0.05)
+	cm.step(0.05)
+	ok(cm.phase == Sim.PH_BREAK and cm.gourds.size() >= 1 and cm.coins > 0 or cm.pickups.size() > 0, "击败守关 BOSS 后清场进段间，且掉葫芦散件+铜钱")
+	var fg := Sim.new(48, {"mode": "full"})
+	fg._roll_shop()
+	ok(fg.shop.has("gourd_piece") and fg.price_of("gourd_piece") == 80, "完整模式游商上架铜钱直购葫芦散件（80 起，每得一件 +20）")
+	fg.coins = 100
+	ok(fg.buy_relic(fg.shop.find("gourd_piece")) and fg.gourds.size() == 1 and fg.coins == 20 and fg.gourd_log[0].src == "游商购买", "购买葫芦散件")
 	var tot := 0
 	var cv := fresh(35)
 	cv.px = float(cv.pois[3].x); cv.py = float(cv.pois[3].y)
@@ -450,11 +463,29 @@ func _init() -> void:
 			var coins_before := ar.coins
 			ar.step(0.05)
 			ok(ar.phase == Sim.PH_SEG and ar.coins >= coins_before + 60 and ar.vine_runs == 1, "超时失败：门票全额返还，强度不升级")
+			ar.px = float(ar.pois[idx].x); ar.py = float(ar.pois[idx].y)
+			for i in range(40):
+				ar.step(0.05)
+				if ar.phase == Sim.PH_RIFT:
+					break
+			var coins_in := ar.coins
+			ar.invuln = 0.0; ar.dash_inv = 0.0
+			ar.hp = 0.5
+			ar.hurt_player(999.0, -1e9, 0.0, "x")
+			ok(ar.phase == Sim.PH_SEG and not ar.over and ar.coins == coins_in, "葫芦藤秘境内倒下：门票不退（与剑冢倒下同口径）")
 			var poor := fresh(43)
 			poor.coins = 10
 			ok(poor.poi_state(5) == "noticket", "铜钱不足：提示门票价格")
 		else:
 			ok(ar.relics.size() == 1 and ar.pickups.size() > 0, "镇魂宝库给高阶遗物与铜钱")
+	var fz := Sim.new(53, {"mode": "full"})
+	fz.real_t = 329.0
+	fz.clock = 100.0   # 模拟打过副本/段间：战斗钟远落后于真实时间
+	fz.step(0.05)
+	ok(fz.pending_fusion == 0 and fz.fusion_t < 0.0, "融合：真实时间 5:30 前不触发")
+	fz.real_t = 331.0
+	fz.step(0.05)
+	ok(fz.pending_fusion == 1 or fz.fusion != "" or not fz.choice.is_empty(), "融合按真实时间 5:30 触发（不再被副本/段间暂停的战斗钟拖到 10 分钟后）")
 	print("== 地标交互 / 飞剑精通 / 葫芦保底 ==")
 	var lm := fresh(44)
 	lm.coins = 100
@@ -484,11 +515,15 @@ func _init() -> void:
 	ok(swm.sw_master == 1, "飞剑 5/5 后每 800 击杀精通 +1（+8% 伤害）")
 	swm._sword_advance("副本守关者")
 	ok(swm.sw_master == 2, "再破守关者精通 +1")
-	var gg := fresh(46)
-	gg.stretch = 3.75
+	var gg := Sim.new(46, {"mode": "full"})
 	gg.clock = 175.0
 	gg.step(0.05)
 	ok(gg.gourds.size() == 1 and gg.gourd_log[0].src == "保底", "完整模式保底：约每 170 秒必出一件葫芦散件")
+	var gq := Sim.new(46, {"mode": "quick"})
+	gq.clock = 7.0 * gq.gourd_guarantee_step() + 1.0
+	for j in range(8):
+		gq.step(0.05)
+	ok(gq.gourds.size() == 7 and gq.pet_on and 7.0 * gq.gourd_guarantee_step() < 600.0, "疾速模式（10 分钟）保底也能在终局前集齐 7 件并合成小金刚（以前只能到 3 件保底）")
 	var gc := fresh(47)
 	gc.clock = 400.0
 	gc.step(0.05)
@@ -519,7 +554,11 @@ func _init() -> void:
 	ok(f6.seg_theme(3).name == "灯冢废墟" and f6.seg_theme(5).name == "灯骸古殿", "6 段主题名")
 	f6.t = 79.9
 	f6.step(0.5)
-	ok(f6.phase == Sim.PH_BREAK and f6.break_idx == 0, "第 1 段 5:00 清场进入段间")
+	ok(f6.phase == Sim.PH_SEG and f6.guard_ref != null, "第 1 段 5:00：先刷出清场守关 BOSS")
+	f6.damage(f6.guard_ref, 1e9, "fu", {"noCrit": true, "pierce": true})
+	f6.step(0.1)
+	f6.step(0.1)
+	ok(f6.phase == Sim.PH_BREAK and f6.break_idx == 0, "击败守关 BOSS 后清场进入段间")
 	var q6 := Sim.new(52)
 	ok(q6.seg_n() == 3, "非完整模式仍 3 段")
 	for pair in [["swordlord", 2], ["sedan", 3], ["lamps", 4]]:
@@ -590,9 +629,188 @@ func _init() -> void:
 	ok(sv2.levels.get("fu") == 4 and sv2.levels.get("lei") == 2, "已选升级一致")
 	ok(sv2.relics == ["mirror"] and sv2.wicks == 1 and sv2.artifact == "sword", "遗物/灯芯/法宝一致")
 	ok(sv2.rift_entries == 1 and sv2.rift_sealed.has(0) and sv2.rift_state() != "none", "副本已用次数/封闭状态一致")
+	_test_d1()
+	_test_assets()
 	print("== 小结 ==")
 	print("通过 %d 项，失败 %d 项" % [passes, fails])
 	quit(1 if fails > 0 else 0)
+
+
+## 数据里引用的背景键都能按 world_view._bg_tex 的规则（res://assets/<key>.jpg）载入。
+## 无头自检不跑渲染层，疾速/经典的 3 段表曾写成 "field.jpg" → 载入 field.jpg.jpg 崩溃，只在网页里暴露。
+func _test_assets() -> void:
+	print("== 资源：段背景键 ==")
+	var bad: Array = []
+	for list_key in ["segments", "themes"]:
+		for sg in GameData.SEG[list_key]:
+			var key := String(sg.get("field", ""))
+			if key == "" or not ResourceLoader.exists("res://assets/%s.jpg" % key):
+				bad.append("%s:%s" % [list_key, key])
+	if not ResourceLoader.exists("res://assets/field_rift.jpg"):
+		bad.append("field_rift")
+	ok(bad.is_empty(), "每段背景键都能载入（坏键：%s）" % [bad])
+
+
+## 练级点 / 淬火 / 突破 / 百万血 Boss（单独成函数，避免与 _init 里的变量重名）
+func _test_d1() -> void:
+	print("== D1：练级点 / 淬火 / 突破 / 百万血 Boss ==")
+	var fm := Sim.new(61, {"mode": "full"})
+	var ci := -1
+	var si := -1
+	for j in range(fm.pois.size()):
+		if fm.pois[j].kind == "coinfarm": ci = j
+		if fm.pois[j].kind == "soulfarm": si = j
+	ok(ci == 11 and si == 12, "练级点追加在 POI 末尾（旧下标不变）")
+	ok(Sim.new(61).pois.size() == 11, "经典口径不加练级点")
+	fm.hp = fm.maxhp
+	fm.px = float(fm.pois[ci].x); fm.py = float(fm.pois[ci].y)
+	fm._spawn_pickup("coin", fm.px + 900.0, fm.py, 7)
+	var c0 := fm.coins
+	for j in range(30):
+		fm.step(0.05)
+		if fm.phase == Sim.PH_RIFT: break
+	ok(fm.phase == Sim.PH_RIFT and fm.rift_kind == "coinfarm", "站定 1 秒进入聚宝鬼市")
+	ok(fm.pickups.is_empty() and fm.arena_stash.size() >= 1, "进秘境前地上的铜钱先收起来（不再被清掉）")
+	fm.invuln = 1e9
+	var guard := 0
+	while fm.phase == Sim.PH_RIFT and guard < 2000:
+		for e in fm.enemies:
+			if e.alive: fm.damage(e, 1e9, "fu", {"noCrit": true, "pierce": true})
+		fm.step(0.05)
+		guard += 1
+	ok(fm.phase == Sim.PH_SEG and int(fm.farm_runs.get("coinfarm", 0)) == 1, "坚持到时间即通关并回到大地图")
+	ok(fm.coins - c0 >= 7 + 60 and int(fm.farm_gain.kills) > 10, "聚宝鬼市：每只妖物必掉铜钱 + 通关奖励（铜钱 +%d，击杀 %d）" % [fm.coins - c0, int(fm.farm_gain.kills)])
+	ok(fm.poi_state(ci) == "cd" and fm.poi_state(ci) != "sealed", "练级点有冷却、不封死（可反复刷）")
+	fm.clock += 61.0
+	ok(fm.poi_state(ci) == "ok", "冷却过后可再刷")
+	fm.guard_ref = fm.spawn_enemy("jiangshi", -1.0, -1.0, {"elite": true})
+	var g_hp := fm.guard_ref.hp
+	ok(fm.poi_state(si) == "ok", "守关 BOSS 在场时也能进练级点（进去不清怪，出来接着打）")
+	var lv0 := fm.level
+	fm.px = float(fm.pois[si].x); fm.py = float(fm.pois[si].y)
+	fm.hp = fm.maxhp
+	for j in range(60):
+		while not fm.choice.is_empty():
+			fm.choose(0)   # 鬼市里捡的魂火升了级：三选一会暂停 step
+		fm.step(0.05)
+		if fm.phase == Sim.PH_RIFT: break
+	ok(fm.rift_kind == "soulfarm", "进入炼魂坑")
+	ok(not fm.enemies.has(fm.guard_ref) and fm.world_stash.has(fm.guard_ref) and fm.guard_ref.alive, "进练级点：大地图妖物（含守关 BOSS）原样收起，不清怪")
+	var clk_in := fm.clock
+	var t_in := fm.t
+	var e_soul: SimEnemy = null
+	guard = 0
+	while e_soul == null and guard < 100:
+		fm.step(0.05)
+		guard += 1
+		for e in fm.enemies:
+			if e.alive and e.type == "paperman": e_soul = e
+	ok(e_soul != null and e_soul.xpv >= 3 * int(GameData.EN.paperman.xp), "炼魂坑：妖物魂火 ×3")
+	fm.hp = 0.5
+	fm.invuln = 0.0; fm.dash_inv = 0.0
+	fm.hurt_player(999.0, -1e9, 0.0, "x")
+	ok(fm.phase == Sim.PH_SEG and not fm.over and fm.rift_kind == "sword", "练级点内倒下：弹出副本扣血不死、副本类型复位（不会把下一次剑冢当秘境跑）")
+	ok(fm.enemies.has(fm.guard_ref) and fm.guard_ref.alive and near(fm.guard_ref.hp, g_hp) and fm.world_stash.is_empty(), "出练级点（倒下弹出）：大地图妖物原样放回，守关 BOSS 血量不变")
+	ok(fm.clock > clk_in + 0.5 and fm.t > t_in, "练级点里大地图时钟照走（刷要花一局的时间，不能无限拉长）")
+	fm.guard_ref.alive = false
+	fm.guard_ref = null
+	var gw := Sim.new(62, {"mode": "full"})
+	gw.invuln = 1e9
+	gw.t = gw.seg_to(0) - 0.01
+	gw.clock = gw.t * gw.stretch
+	for j in range(40):
+		while not gw.choice.is_empty():
+			gw.choose(0)
+		gw.invuln = 1e9
+		gw.step(0.05)
+	ok(gw.phase == Sim.PH_SEG and gw.guard_ref != null and gw.guard_ref.alive and near(gw.t, gw.seg_to(0)), "守关 BOSS 在场：先不清场，节奏钟停在段末（下一段妖潮不提前刷）")
+	var gl := Sim.new(62, {"mode": "full"})
+	gl.from_save(JSON.parse_string(JSON.stringify(gw.to_save())))
+	gl.invuln = 1e9
+	gl.step(0.05)
+	ok(gl.phase == Sim.PH_SEG and gl.guard_ref != null and gl.guard_ref.alive, "守关 BOSS 打到一半存档：读档后重新刷出守关 BOSS（不直接清场）")
+	fm.choice = {}
+	fm.pending_lv = 0
+	for u in GameData.UP.list:
+		fm.levels[u.id] = int(u.max)
+	for ev in GameData.UP.evolutions:
+		fm.evo[ev.weapon] = true
+	fm._recalc()
+	var opts := fm.roll_choices(false)
+	ok(opts.size() == 3 and opts[0].kind == "asc" and opts[1].kind == "asc", "武器被动全满后：升级出可无限叠加的突破卡（不再只给补给）")
+	var d0 := fm.s_dmg_add
+	var hp0 := fm.maxhp
+	fm.choice = {"kind": "level", "options": opts}
+	fm.choose(0)
+	fm.choice = {"kind": "level", "options": opts}
+	fm.choose(1)
+	ok(near(fm.s_dmg_add - d0, float(GameData.DG.ascend.dmg)) and near(fm.maxhp - hp0, float(GameData.DG.ascend.hp)), "突破：伤害 +4% / 生命上限 +12")
+	var oc2 := Sim.new(61)
+	for u in GameData.UP.list:
+		oc2.levels[u.id] = int(u.max)
+	for ev in GameData.UP.evolutions:
+		oc2.evo[ev.weapon] = true
+	ok(oc2.roll_choices(false)[0].kind != "asc", "经典口径不出突破卡（平衡基线不变）")
+	fm._roll_shop()
+	ok(fm.shop.has("forge"), "游商常驻「灯油淬火」")
+	fm.coins = 10000
+	var fi := fm.shop.find("forge")
+	var p1 := fm.price_of("forge")
+	var d1 := fm.s_dmg_add
+	ok(fm.buy_relic(fi) and fm.shop.has("forge") and fm.price_of("forge") > p1 and near(fm.s_dmg_add - d1, float(GameData.DG.forge.dmg)), "淬火：买了不下架、价格上涨、伤害 +6%")
+	ok(fm.buy_relic(fm.shop.find("forge")) and fm.forge_n == 2 and fm.coins == 10000 - p1 - (p1 + int(GameData.DG.forge.step)), "可连续淬火")
+	var sv := fm.to_save()
+	var fr := Sim.new(61, {"mode": "full"})
+	fr.from_save(JSON.parse_string(JSON.stringify(sv)))
+	ok(fr.forge_n == 2 and fr.asc_dmg_n == 1 and fr.asc_hp_n == 1 and int(fr.farm_runs.get("coinfarm", 0)) == 1, "淬火/突破/练级点次数随存档恢复")
+	ok(fr.poi_cd.has(ci) and float(fr.poi_cd[ci]) > 1.0, "冷却到期时刻随存档恢复为时间（不是 true）")
+	var bf := Sim.new(62, {"mode": "full"})
+	var bb := bf.spawn_enemy("boss", 0.0, 0.0, {"boss": true})
+	ok(int(bb.maxhp) == 1000000, "完整模式终局 Boss 血量 1,000,000")
+	ok(int(Sim.new(62, {"mode": "quick"}).spawn_enemy("boss", 0.0, 0.0, {"boss": true}).maxhp) == int(GameData.EN.boss.hpByMode.quick), "疾速模式 Boss 按模式定血量")
+	ok(int(Sim.new(62).spawn_enemy("boss", 0.0, 0.0, {"boss": true}).maxhp) < 200000, "经典口径 Boss 血量不变")
+	ok(UI.fmt_int(1000000) == "1,000,000", "血条数字千分位")
+	bf.px = bb.x - 200.0; bf.py = bb.y
+	bf.boss_phase = false
+	bb.atk_idx = 1   # p0 第 2 招 = 半壁灯海
+	bb.atk_t = 0.0
+	bf._boss_ai(bb, 0.01)
+	var rect: SimTele = null
+	for tl in bf.teles:
+		if tl.is_rect(): rect = tl
+	ok(rect != null and rect.rw >= 640.0 and rect.rh >= 720.0, "半壁灯海：预警区覆盖半个屏幕（%d×%d，视口 1280×720）" % [int(rect.rw) if rect else 0, int(rect.rh) if rect else 0])
+	ok(rect != null and rect.is_inside(Vector2(bf.px, bf.py - 30.0)), "半壁灯海压在玩家身上，必须横移躲开")
+	bf.invuln = 0.0; bf.dash_inv = 0.0
+	var hpa := bf.hp
+	rect.t = rect.dur
+	bf._update_teles(0.0)
+	ok(bf.hp < hpa, "站在半壁灯海里会被打中")
+	bf.hp = bf.maxhp; bf.invuln = 0.0
+	bb.atk_idx = 1
+	bb.atk_t = 0.0
+	bf.teles.clear()
+	bf._boss_ai(bb, 0.01)
+	var r2: SimTele = bf.teles[bf.teles.size() - 1]
+	var safe_x := r2.x - signf(r2.x - bf.px) * (r2.rw * 0.5 + 40.0)
+	bf.px = safe_x
+	var hpb := bf.hp
+	r2.t = r2.dur
+	bf._update_teles(0.0)
+	ok(bf.hp == hpb, "躲到另一半屏就不受伤")
+	bf.boss_phase = true
+	bf.teles.clear()
+	bb.atk_idx = 0   # p1 第 1 招 = 半壁灯海（连击）
+	bb.atk_t = 0.0
+	bf.invuln = 1e9
+	bf._boss_ai(bb, 0.01)
+	var first: SimTele = bf.teles[0]
+	first.t = first.dur
+	bf._update_teles(0.0)
+	ok(bf.teles.size() == 1 and bf.teles[0].is_rect() and signf(bf.teles[0].x - bf.px) == -signf(first.x - bf.px), "二阶段：半壁灯海落下后另一侧再补一击（左右连击）")
+	bb.hp = bb.maxhp * 0.1
+	bb.atk_t = 0.0
+	bf._boss_ai(bb, 0.01)
+	ok(bf.boss_enraged and bb.atk_t < float(GameData.EN.boss.cd[1]), "血量 20% 以下回光返照：出招加快")
 
 
 func _run_fixed(seed_v: int) -> String:

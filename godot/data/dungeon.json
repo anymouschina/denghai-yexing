@@ -174,5 +174,43 @@
   },
   "guaranteeSwordStage": 1,
   "atRealSec": 330
+ },
+ "farms": {
+  "_doc": "大地图练级点（完整/疾速模式）：站定进入，限时生存，期间妖潮不断；结束即通关，可反复刷，冷却按战斗时钟",
+  "coinfarm": {
+   "name": "聚宝鬼市",
+   "dur": 45,
+   "cd": 60,
+   "wave": 2.2,
+   "waveN": 9,
+   "cap": 70,
+   "coinPer": 3,
+   "coinEvery": 120,
+   "clearCoin": 60,
+   "hpGate": 0.5
+  },
+  "soulfarm": {
+   "name": "炼魂坑",
+   "dur": 45,
+   "cd": 60,
+   "wave": 2.0,
+   "waveN": 10,
+   "cap": 80,
+   "xpMul": 3.0,
+   "clearLv": 1,
+   "hpGate": 0.5
+  }
+ },
+ "forge": {
+  "_doc": "游商「灯油淬火」：铜钱的无限出口，每次 +dmg 伤害（加算）、+hp 生命上限，价格逐次上涨",
+  "base": 150,
+  "step": 100,
+  "dmg": 0.06,
+  "hp": 5
+ },
+ "ascend": {
+  "_doc": "升级三选一里武器/被动全满后（完整/疾速模式），先出这两张可无限叠加的「突破」卡，再出补给",
+  "dmg": 0.04,
+  "hp": 12
  }
 }

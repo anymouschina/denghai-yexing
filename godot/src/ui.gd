@@ -104,6 +104,17 @@ static func icon(id: String, size: float = 56.0) -> TextureRect:
 	return tr
 
 
+## 千分位：1000000 -> "1,000,000"（Boss 百万血条用）
+static func fmt_int(n: int) -> String:
+	var neg := n < 0
+	var d := str(absi(n))
+	var out := ""
+	while d.length() > 3:
+		out = "," + d.substr(d.length() - 3) + out
+		d = d.substr(0, d.length() - 3)
+	return ("-" if neg else "") + d + out
+
+
 static func fmt_time(sec: float) -> String:
 	var s := int(sec)
 	return "%d:%02d" % [s / 60, s % 60]

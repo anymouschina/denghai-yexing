@@ -288,7 +288,7 @@ func _draw_hud_inner() -> void:
 	_text(Vector2(L, ry + 138 * k), "彩虹葫芦 %d/7" % sim.gourds.size(), _fs(20), Color("ffcf5a"))
 	if sim.gourds.size() < 7:
 		var gl := sim.gourd_guarantee_left()
-		var gtxt := "下一件：灵藤 / 小BOSS 必掉 / 葫芦藤秘境 / 牌坊许愿" + (" / 保底 %s 后" % UI.fmt_time(gl) if gl >= 0.0 else "")
+		var gtxt := "下一件：灵藤 / 守关BOSS 必掉 / 葫芦藤秘境 / 游商直购 / 牌坊许愿" + (" / 保底 %s 后" % UI.fmt_time(gl) if gl >= 0.0 else "")
 		_text(Vector2(L, ry + 138 * k + 24), gtxt, _fs(15), Color(1.0, 0.85, 0.5, 0.9))
 	var bx2 := L + 160.0
 	var by2 := ry + 132 * k
@@ -327,7 +327,7 @@ func _draw_hud_inner() -> void:
 		Sim.PH_BREAK:
 			title = "段间 • 清场  •  %s 后自动启程" % UI.fmt_time(maxf(0.0, float(GameData.SEG["break"].max) - sim.break_t))
 		Sim.PH_RIFT:
-			title = "灯骸裂隙 • 剑灵"
+			title = {"sword": "灯骸裂隙 • 剑灵", "gourd": "葫芦藤秘境 • 第 %d 劫" % sim.vine_runs, "vault": "镇魂宝库", "coinfarm": "练级点 • 聚宝鬼市", "soulfarm": "练级点 • 炼魂坑"}.get(sim.rift_kind, "秘境")
 		Sim.PH_BOSS:
 			title = "终局 • 灯骸老祖"
 	_text(Vector2(cx - 300, T + 68 * k), title, _fs(20), UI.GOLD, 600.0, HORIZONTAL_ALIGNMENT_CENTER)
@@ -335,16 +335,25 @@ func _draw_hud_inner() -> void:
 	if sim.phase == Sim.PH_RIFT:
 		var rem := maxf(0.0, sim.rift_limit - sim.rift_t)
 		var warn := rem < 15.0
-		_text(Vector2(cx - 320, yb + 18), "限时 %s • 目标 %d 秒内击杀 • 限时 %d 秒" % [UI.fmt_time(rem), int(sim.rift_target), int(sim.rift_limit)], _fs(17), UI.BLOOD if warn else UI.PAPER, 640.0, HORIZONTAL_ALIGNMENT_CENTER)
+		var rline := "限时 %s • 目标 %d 秒内击杀 • 限时 %d 秒" % [UI.fmt_time(rem), int(sim.rift_target), int(sim.rift_limit)]
+		if Sim.FARM_KINDS.has(sim.rift_kind):
+			rline = "坚持 %s • 击杀 %d • 铜钱 +%d • 魂火 +%d" % [UI.fmt_time(rem), int(sim.farm_gain.kills), int(sim.farm_gain.coins), int(sim.farm_gain.xp)]
+			warn = false
+		elif sim.rift_kind != "sword":
+			rline = "限时 %s" % UI.fmt_time(rem)
+		_text(Vector2(cx - 320, yb + 18), rline, _fs(17), UI.BLOOD if warn else UI.PAPER, 640.0, HORIZONTAL_ALIGNMENT_CENTER)
+		if sim.rift_kind == "gourd" and sim.vine_boss != null and sim.vine_boss.alive:
+			_bar(Rect2(cx - 240, yb + 28, 480, 16), sim.vine_boss.hp / maxf(1.0, sim.vine_boss.maxhp), Color("6fdc7a"))
 		if sim.rift_warden != null:
 			var w := sim.rift_warden
 			_bar(Rect2(cx - 240, yb + 28, 480, 16), w.hp / maxf(1.0, w.maxhp), Color("b36bff"))
 			_text(Vector2(cx - 300, yb + 62), "剑冢守关者「剑灵」• 御剑环身 • 回鞘突刺 • 剑雨", _fs(17), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER)
-		_text(Vector2(cx - 340, yb + 84), "无补给 • 无三选一 • 骨灯全熄 • 冲刺冷却×1.25 • 受击硬直×1.2", _fs(15), Color("ff9a8a"), 680.0, HORIZONTAL_ALIGNMENT_CENTER)
+		if sim.rift_kind == "sword":
+			_text(Vector2(cx - 340, yb + 84), "无补给 • 无三选一 • 骨灯全熄 • 冲刺冷却×1.25 • 受击硬直×1.2", _fs(15), Color("ff9a8a"), 680.0, HORIZONTAL_ALIGNMENT_CENTER)
 	elif sim.boss != null and sim.boss.alive:
 		var b := sim.boss
 		_bar(Rect2(cx - 280, yb + 12, 560, 18), b.hp / maxf(1.0, b.maxhp), Color("b36bff"))
-		_text(Vector2(cx - 300, yb + 50), "灯骸老祖", _fs(20), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER)
+		_text(Vector2(cx - 300, yb + 50), "灯骸老祖  %s / %s%s" % [UI.fmt_int(int(ceil(maxf(0.0, b.hp)))), UI.fmt_int(int(b.maxhp)), "  • 回光返照" if sim.boss_enraged else ""], _fs(20), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER)
 	elif sim.phase == Sim.PH_BREAK:
 		_text(Vector2(cx - 420, yb + 22), "站定「启程」领三选一馈赠；站定「灯骸裂隙」则放弃它 • 游商用铜钱换遗物", _fs(17), UI.PAPER, 840.0, HORIZONTAL_ALIGNMENT_CENTER)
 	# 段间：指向裂隙的箭头（离得远时）+ 状态牌
@@ -438,7 +447,7 @@ func _draw_minimap(vw: Vector2) -> void:
 		canvas.draw_texture_rect(mm_tex, Rect2(x0, y0, mw, mh), false)
 	_frame(Rect2(x0, y0, mw, mh), UI.ORANGE, 2.0)
 	for pp in sim.pois:
-		var st_: Color = {"sword": Color(0.8, 0.45, 1.0), "merchant": Color(1.0, 0.8, 0.3), "vine": Color(0.4, 1.0, 0.5), "gourd": Color(0.5, 1.0, 0.8), "vault": Color(1.0, 0.4, 0.3), "altar": Color(0.6, 0.8, 1.0), "arch": Color(1.0, 0.7, 0.4), "tomb": Color(0.8, 0.6, 1.0), "incense": Color(1.0, 0.5, 0.4)}[pp.kind]
+		var st_: Color = {"sword": Color(0.8, 0.45, 1.0), "merchant": Color(1.0, 0.8, 0.3), "vine": Color(0.4, 1.0, 0.5), "gourd": Color(0.5, 1.0, 0.8), "vault": Color(1.0, 0.4, 0.3), "altar": Color(0.6, 0.8, 1.0), "arch": Color(1.0, 0.7, 0.4), "tomb": Color(0.8, 0.6, 1.0), "incense": Color(1.0, 0.5, 0.4), "coinfarm": Color(1.0, 0.9, 0.2), "soulfarm": Color(0.4, 0.8, 1.0)}.get(pp.kind, Color.WHITE)
 		hb_front.circle(Vector2(x0 + float(pp.x) / Sim.W * mw, y0 + float(pp.y) / Sim.H * mh), 5.0, st_, 10)
 	for k in sim.pickups:
 		if k.kind == "chest":
@@ -601,8 +610,29 @@ func _build_shop() -> void:
 	col.add_child(row)
 	var vh := get_viewport().get_visible_rect().size.y
 	var card_h := minf(340.0, vh - 260.0)
+	var vw2 := get_viewport().get_visible_rect().size.x
+	var card_w := clampf((vw2 - 120.0) / maxf(1.0, float(sim.shop.size())) - 22.0, 200.0, 280.0)   # 5 张卡（3 遗物+散件+淬火）也放得下
 	var i := 0
 	for rid in sim.shop:
+		if rid == "forge":
+			var F: Dictionary = GameData.DG.forge
+			var fcb := _card("tianyou", "灯油淬火", "已淬 %d 次 • 可重复" % sim.forge_n, "伤害 +%d%%（加算）\n生命上限 +%d\n每次涨价 %d" % [int(round(float(F.dmg) * 100.0)), int(F.hp), int(F.step)], Color("ff9a5a"), Vector2(card_w, card_h), "铜钱 %d" % sim.forge_price())
+			fcb.disabled = sim.coins < sim.forge_price()
+			var fidx := i
+			fcb.pressed.connect(func(): game.on_buy(fidx))
+			row.add_child(fcb)
+			UI.pop_in(fcb, 0.06 * i)
+			i += 1
+			continue
+		if rid == "gourd_piece":
+			var gcb := _card("hundai", "彩虹葫芦散件", "葫芦 %d / 7" % sim.gourds.size(), "随机一件未得的七色散件\n集齐 7 件合成葫芦小金刚", Color("ffcf5a"), Vector2(card_w, card_h), "铜钱 %d" % sim.gourd_price())
+			gcb.disabled = sim.coins < sim.gourd_price() or sim.gourds.size() >= 7
+			var gidx := i
+			gcb.pressed.connect(func(): game.on_buy(gidx))
+			row.add_child(gcb)
+			UI.pop_in(gcb, 0.06 * i)
+			i += 1
+			continue
 		var r: Dictionary = GameData.RELIC_BY_ID[rid]
 		var tier_col: Color = {"white": Color("e8e6f5"), "blue": Color("6fb6ff"), "purple": Color("c08cff"), "gold": Color("ffcf5a")}[r.tier]
 		var sub := "进化配件" if r.has("part") else "遗物"
@@ -613,7 +643,7 @@ func _build_shop() -> void:
 			extra = "\n【%s %d/2%s】" % [sd.name, mini(2, cnt + 1), " 激活" if cnt >= 1 else ""]
 		elif r.has("part"):
 			extra = "\n满级可购金件"
-		var cb := _card(r.icon, r.name, sub, r.desc + extra, tier_col, Vector2(280, card_h), "铜钱 %d" % sim.price_of(r.id))
+		var cb := _card(r.icon, r.name, sub, r.desc + extra, tier_col, Vector2(card_w, card_h), "铜钱 %d" % sim.price_of(r.id))
 		cb.disabled = sim.coins < sim.price_of(r.id)
 		var idx := i
 		cb.pressed.connect(func(): game.on_buy(idx))
@@ -665,9 +695,15 @@ func show_pause(on: bool) -> void:
 			guide.append("%s Lv%d/%d  配对「%s」%s  〉「%s」%s" % [w.name, wl, int(w.max), nd.name, "（已持有）" if sim.lv(ev.needs) > 0 else "（缺）", ev.name, "（已进化）" if done else ""])
 	if sim.has_sword():
 		var nms: Array = GameData.DG.sword.stages.names
-		var nxt := "已圆满" if sim.sw_stage >= 5 else "下一阶「%s」：剑意 %d/%d 或击败守关者" % [nms[sim.sw_stage], sim.sw_kills, int(GameData.DG.sword.stages.kills[sim.sw_stage - 1])]
+		var nxt := ("已圆满 • 精通 %d/5（每 800 击杀或再破守关者/藤妖 +1）" % sim.sw_master) if sim.sw_stage >= 5 else "下一阶「%s」：剑意 %d/%d 或击败守关者/藤妖" % [nms[sim.sw_stage], sim.sw_kills, sim._sw_thr(sim.sw_stage - 1)]
 		guide.append("飞剑 第 %d/5 阶 • %s" % [sim.sw_stage, nxt])
 	guide.append("彩虹葫芦 %d/7%s" % [sim.gourds.size(), "  • 小金刚已合成" if sim.pet_on else ""])
+	if sim.gourds.size() < 7:
+		var gl := sim.gourd_guarantee_left()
+		guide.append("葫芦获取：葫芦灵藤 • 小BOSS/守关BOSS必掉 • 葫芦藤秘境第 %d 劫（门票 %d 铜钱）• 游商直购（%d 铜钱）• 牌坊许愿%s" % [sim.vine_runs + 1, sim.vine_ticket(), sim.gourd_price(), (" • 保底 %s 后" % UI.fmt_time(gl)) if gl >= 0.0 else ""])
+	guide.append("地标：古井祭坛（献祭换遗物）• 破败牌坊（许愿）• 灯冢废墟（掘冢得宝箱）• 荒庙香炉（上香回血）")
+	if sim.mode != "classic":
+		guide.append("练级点（冷却 60 秒可反复刷）：聚宝鬼市（刷铜钱 已通关 %d）• 炼魂坑（刷等级 已通关 %d）• 铜钱去游商「灯油淬火」已淬 %d 次 • 满级后升级出「突破」卡 已突破 %d 层" % [int(sim.farm_runs.get("coinfarm", 0)), int(sim.farm_runs.get("soulfarm", 0)), sim.forge_n, sim.asc_dmg_n + sim.asc_hp_n])
 	var sc := sim.set_counts()
 	var sparts: Array = []
 	for st in GameData.SETS:

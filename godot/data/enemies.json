@@ -154,6 +154,51 @@
   "slamDmg": 24,
   "summon": 8,
   "summonCap": 160,
-  "armor": 0.25
+  "armor": 0.25,
+  "hpByMode": {
+   "_doc": "按模式的固定血量（不再乘威胁档）：完整/疾速都是 100 万；经典口径沿用 hp×威胁档作平衡基线",
+   "full": 1000000,
+   "quick": 1000000
+  },
+  "half": {
+   "_doc": "半壁灯海：以玩家为基准一侧整片半屏（宽 w×高 h，视口 1280×720），玩家离安全边 off 像素；二阶段左右连击",
+   "w": 700,
+   "h": 900,
+   "off": 170,
+   "warn": [
+    1.9,
+    1.6
+   ],
+   "gap": 1.25,
+   "dmg": 60
+  },
+  "drop": {
+   "_doc": "灯笼坠天：以玩家为圆心的巨型落点",
+   "r": 330,
+   "warn": 2.1,
+   "dmg": 70
+  },
+  "enrage": {
+   "at": 0.2,
+   "cdMul": 0.7
+  },
+  "cycle": {
+   "_doc": "技能循环（非经典）：ring 鬼火环 / slam 震地 / half 半壁灯海 / drop 灯笼坠天 / summon 召唤",
+   "p0": [
+    "ring",
+    "half",
+    "slam",
+    "summon",
+    "drop"
+   ],
+   "p1": [
+    "half",
+    "ring",
+    "drop",
+    "slam",
+    "half",
+    "summon"
+   ]
+  }
  }
 }

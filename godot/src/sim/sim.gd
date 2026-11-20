@@ -173,6 +173,19 @@ var gift_pending := false
 var rift_entries := 0
 var rift_ready_at := 0.0          # 第 3 次起进裂隙需等冷却（clock 秒）
 var poi_cd: Dictionary = {}       # 地标/POI 的冷却到期时刻（clock 秒）
+var guard_done: Dictionary = {}
+var guard_ref: SimEnemy = null
+var guard_clock := 0.0
+var mid_idx := 0                  # 巡场妖王（每段中途的精英）已出场数
+var forge_n := 0                  # 游商「灯油淬火」已购次数（铜钱的无限出口）
+var asc_dmg_n := 0                # 突破卡「灯魂淬炼」层数（满级后经验的出口）
+var asc_hp_n := 0                 # 突破卡「命火长明」层数
+var farm_runs: Dictionary = {}    # 练级点通关次数 kind -> n
+var farm_gain := {"coins": 0, "xp": 0, "kills": 0}   # 本次练级点收益（横幅与报告用）
+var arena_stash: Array = []       # 进秘境/练级点前地上没捡的魂火铜钱（出来原样还在，不再被清掉）
+var world_stash: Array = []       # 进剑冢/秘境/宝库/练级点时大地图上的妖物：原样收起（位置/血量/状态不变），出来放回，不清怪
+var boss_enraged := false
+var hurt_by: Dictionary = {}      # 受到的伤害按来源统计（平衡报告用，不存档）
 var vine_runs := 0                # 葫芦藤秘境已挑战次数（决定门票价与 BOSS 强度）
 var vine_boss: SimEnemy = null
 var vine_guard_t := 0.0
@@ -388,11 +401,11 @@ func _recalc() -> void:
 	_sets_dirty = true
 	var P: Dictionary = GameData.BAL.player
 	var T: Dictionary = GameData.BAL.touch
-	maxhp = P.hp + meta.maxHp + _per("yupei", "maxHp") + _relic_sum("maxHp")
+	maxhp = P.hp + meta.maxHp + _per("yupei", "maxHp") + _relic_sum("maxHp") + forge_n * float(GameData.DG.forge.hp) + asc_hp_n * float(GameData.DG.ascend.hp)
 	s_speed = P.speed * (1.0 + meta.speed + _per("caolv", "speed") + _relic_sum("speed")) * (T.speedMul if touch else 1.0)
 	s_pickup = P.pickup * (1.0 + meta.pickup + _per("hundai", "pickup") + _relic_sum("pickup")) * (T.pickupMul if touch else 1.0)
 	# 加算：桃木心 / 局外强化 / 遗物 同一个加算池；武器进化与剑痕另加（见 _dmg_mul）
-	s_dmg_add = meta.dmg + _per("taomu", "dmg") + _relic_sum("dmg")
+	s_dmg_add = meta.dmg + _per("taomu", "dmg") + _relic_sum("dmg") + forge_n * float(GameData.DG.forge.dmg) + asc_dmg_n * float(GameData.DG.ascend.dmg)
 	s_crit = P.crit + _per("tiangang", "crit") + _relic_sum("crit")
 	s_crit_mul = P.critMul + _per("tiangang", "critMul")
 	s_dash_cd = P.dashCd * (1.0 - _per("jingxin", "dashCd") - _relic_sum("dashCd")) * (T.dashCdMul if touch else 1.0)
@@ -528,11 +541,16 @@ func step(dt: float) -> void:
 
 
 func _step_combat(dt: float) -> void:
-	if phase != PH_RIFT and clock >= float(GameData.DG.fusion.atRealSec):
+	if phase != PH_RIFT and real_t >= float(GameData.DG.fusion.atRealSec):
 		_trigger_fusion()
-	if phase != PH_RIFT:
+	if phase != PH_RIFT or FARM_KINDS.has(rift_kind):
+		# 剑冢/秘境/宝库：大地图原样等你，妖物收起、时钟不走。
+		# 练级点例外：时钟照走，刷是拿一局的时间换资源。停钟时完整模式实测被刷到 100 分钟、56 级，
+		# 百万血 Boss 被碾压。出怪计时器只在 PH_SEG 走，出来不会补刷积压的妖潮，最多提前触发一条剧本事件。
 		t += dt / stretch
 		clock += dt
+		if guard_done.has(seg) and t > seg_to(seg):
+			t = seg_to(seg)   # 守关 Boss 在场：节奏钟停在段末，下一段的妖潮不提前刷出、也不会被清场吞掉
 	_rebuild_grid()
 	_update_player(dt)
 	if phase == PH_SEG:
@@ -548,13 +566,27 @@ func _step_combat(dt: float) -> void:
 	_update_pois(dt)
 	_update_pet(dt)
 	_update_minis()
-	if phase == PH_SEG and stretch > 1.0 and gourds.size() < 7 and clock >= 170.0 * float(gourds.size() + 1):
+	var gstep := gourd_guarantee_step()
+	if phase == PH_SEG and gstep > 0.0 and gourds.size() < 7 and clock >= gstep * float(gourds.size() + 1):
 		grant_gourd("保底")
 	if phase == PH_SEG and t >= seg_to(seg) - 20.0 / stretch and not announced.has(seg):
 		announced[seg] = true
-		_ev("banner", "20 秒后清场 • 场地中央将裂开「灯骸裂隙」", "#d9b8ff")
+		if stretch > 1.0 and seg < seg_n() - 1:
+			_ev("banner", "20 秒后守关 BOSS 现身 • 击败后清场", "#d9b8ff")
+		else:
+			_ev("banner", "20 秒后清场 • 场地中央将裂开「灯骸裂隙」", "#d9b8ff")
 	if phase == PH_SEG and t >= seg_to(seg):
-		_start_break(seg)
+		if stretch > 1.0 and seg < seg_n() - 1:
+			if not guard_done.has(seg):
+				guard_done[seg] = true
+				_spawn_guard(seg)
+			if guard_ref != null and guard_ref.alive and clock - guard_clock < 120.0:
+				pass   # 守关 Boss 在场：先打 Boss，再清场
+			else:
+				guard_ref = null
+				_start_break(seg)
+		else:
+			_start_break(seg)
 
 
 func _rebuild_grid() -> void:
@@ -684,6 +716,7 @@ func hurt_player(dmg_in: float, fx: float, fy: float, src: String) -> void:
 		_aoe(px, py - 30.0, 200.0, 30.0, "setsplash")
 	var hp_before := hp
 	hp -= dmg
+	hurt_by[src] = float(hurt_by.get(src, 0.0)) + dmg
 	invuln = P.invuln + (T.invulnAdd if touch else 0.0) + s_invuln_add
 	var sm := float(GameData.DG.rift.stunMul) if phase == PH_RIFT else 1.0
 	stun = P.stun * sm
@@ -702,7 +735,12 @@ func hurt_player(dmg_in: float, fx: float, fy: float, src: String) -> void:
 	if hp <= 0.0:
 		if phase == PH_RIFT:
 			rift_deaths += 1
-			_rift_end(false, "death", hp_before)
+			if rift_kind == "sword":
+				_rift_end(false, "death", hp_before)
+			else:
+				# 秘境/宝库/练级点内倒下：按失败弹出（扣入场前生命 30%），不能走剑冢的结算——那会把 rift_kind 留在秘境类型，下一次进剑冢就跑错逻辑
+				_arena_end(false, "death")
+				hp = maxf(1.0, hp_before * (1.0 - float(GameData.DG.rift.failHpLoss)))
 		elif revive > 0:
 			revive -= 1
 			hp = round(maxhp * 0.5)
@@ -858,7 +896,8 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 	e.x = sp.x
 	e.y = sp.y
 	if is_boss:
-		e.hp = def.hp * pow(GameData.DG.threat.bossHpMul, tier)
+		var hbm: Dictionary = def.get("hpByMode", {})
+		e.hp = float(hbm[mode]) if hbm.has(mode) else def.hp * pow(GameData.DG.threat.bossHpMul, tier)
 		e.armor = def.get("armor", 0.0)
 	elif e.elite:
 		e.hp = el.hp
@@ -972,6 +1011,14 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 		return
 	if e.elite:
 		_spawn_pickup("chest", e.x, e.y, 1)
+	if phase == PH_RIFT and rift_kind == "coinfarm":
+		var cf: Dictionary = GameData.DG.farms.coinfarm
+		var cv := int(float(cf.coinPer) * (1.0 + t / float(cf.coinEvery)))
+		_spawn_pickup("coin", e.x - 10.0, e.y, cv)
+		farm_gain.coins += cv
+	if phase == PH_RIFT and FARM_KINDS.has(rift_kind):
+		farm_gain.kills += 1
+		farm_gain.xp += e.xpv
 	if e.xpv > 0:
 		if e.elite:
 			for i in range(8):
@@ -1350,7 +1397,8 @@ func _update_enemies(dt: float) -> void:
 	var tx := px
 	var ty := py - 20.0
 	var alive_list: Array = []
-	for e: SimEnemy in enemies:
+	var cur := enemies   # 循环里玩家可能在副本中倒下 → _return_world 把 enemies 换成大地图妖物；那时不能再用本帧的副本名单覆盖回去
+	for e: SimEnemy in cur:
 		if not e.alive:
 			continue
 		var dx := tx - e.x
@@ -1511,7 +1559,8 @@ func _update_enemies(dt: float) -> void:
 			e.alive = false
 			continue
 		alive_list.append(e)
-	enemies = alive_list
+	if is_same(cur, enemies):
+		enemies = alive_list
 
 
 func warden_blade_pos(e: SimEnemy, i: int) -> Vector2:
@@ -1657,16 +1706,24 @@ func _boss_ai(e: SimEnemy, dt: float) -> void:
 	var ph := 1 if boss_phase else 0
 	if not boss_phase and e.hp < e.maxhp * 0.5:
 		boss_phase = true
-		_ev("banner", "灯骸老祖 • 灯火尽燃", "#ff7a6a")
+		_ev("banner", "灯骸老祖 • 灯火尽燃（半壁灯海 左右连击）" if mode != "classic" else "灯骸老祖 • 灯火尽燃", "#ff7a6a")
 		_ev("sfx", "roar")
 		e.speed *= 1.3
+	if mode != "classic" and not boss_enraged and e.hp < e.maxhp * float(B.enrage.at):
+		boss_enraged = true
+		_ev("banner", "灯骸老祖 • 回光返照（出招加快）", "#ff4a3a")
+		_ev("sfx", "roar")
 	e.atk_t -= dt
 	if e.atk_t > 0.0:
 		return
-	e.atk_t = B.cd[ph]
-	var move := e.atk_idx % 3
+	e.atk_t = B.cd[ph] * (float(B.enrage.cdMul) if boss_enraged else 1.0)
+	var move := _boss_next_move(e)
 	e.atk_idx += 1
-	if move == 0:
+	if move == 3:
+		_boss_half(e, B, ph)
+	elif move == 4:
+		_boss_drop(e, B)
+	elif move == 0:
 		var n := int(B.ringCount[ph])
 		var rings := 2 if boss_phase else 1
 		e.warn_t = B.ringWarn
@@ -1699,6 +1756,66 @@ func _boss_ai(e: SimEnemy, dt: float) -> void:
 			var m := spawn_enemy("paperman", 0.0, 0.0)
 			m.x = e.x + cos(a) * 140.0
 			m.y = e.y + sin(a) * 100.0
+
+
+const BOSS_MOVES := {"ring": 0, "slam": 1, "summon": 2, "half": 3, "drop": 4}
+
+
+## 经典口径保持原三招循环（平衡基线）；完整/疾速按 enemies.json boss.cycle 的技能表循环
+func _boss_next_move(e: SimEnemy) -> int:
+	if mode == "classic":
+		return e.atk_idx % 3
+	var cyc: Array = GameData.EN.boss.cycle["p1" if boss_phase else "p0"]
+	return int(BOSS_MOVES[String(cyc[e.atk_idx % cyc.size()])])
+
+
+## 半壁灯海：以玩家为基准，选一侧铺满半个屏幕（玩家离安全边只有 off 像素）；二阶段在第一击落下时朝玩家躲去的一侧再补一击
+func _boss_half(e: SimEnemy, B: Dictionary, ph: int) -> void:
+	var H2: Dictionary = B.half
+	var side := 1.0 if rng.randf() < 0.5 else -1.0
+	_ev("sfx", "warn")
+	_ev("banner", "半壁灯海 • 往%s躲！" % ("左" if side > 0.0 else "右"), "#ff9a6a")
+	_boss_half_wave(e, H2, side, float(H2.warn[ph]), boss_phase)
+
+
+func _boss_half_wave(e: SimEnemy, H2: Dictionary, side: float, warn: float, chain: bool) -> void:
+	var w := float(H2.w)
+	var h := float(H2.h)
+	var cx := px + side * (w * 0.5 - float(H2.off))
+	var cy := py - 30.0
+	var tl := SimTele.new()
+	tl.x = cx
+	tl.y = cy
+	tl.rw = w
+	tl.rh = h
+	tl.dur = warn
+	tl.cb = func() -> void:
+		if not e.alive:
+			return
+		_ev("sweep", cx, cy, w, h)
+		var pr := float(GameData.BAL.player.radius)
+		if absf(px - cx) <= w * 0.5 + pr and absf(py - 30.0 - cy) <= h * 0.5 + pr:
+			hurt_player(float(H2.dmg), cx, cy, "boss:half")
+		if chain and e.alive and not over:
+			_ev("sfx", "warn")
+			_boss_half_wave(e, H2, -side, float(H2.gap), false)
+	teles.append(tl)
+
+
+## 灯笼坠天：以玩家当前位置为圆心的巨型落点，需要整段跑出去或冲刺穿出
+func _boss_drop(e: SimEnemy, B: Dictionary) -> void:
+	var D2: Dictionary = B.drop
+	var x := px
+	var y := py
+	var r := float(D2.r)
+	_ev("sfx", "warn")
+	var cb := func() -> void:
+		if not e.alive:
+			return
+		_ev("shock", x, y, r)
+		if Vector2(px - x, py - y).length() < r + float(GameData.BAL.player.radius):
+			hurt_player(float(D2.dmg), x, y, "boss:drop")
+	_add_tele(x, y, r, float(D2.warn), cb, null)
 
 
 func _enemy_shoot(e: SimEnemy, ux: float, uy: float) -> void:
@@ -1737,18 +1854,27 @@ func _spawn_ebullet(x: float, y: float, vx: float, vy: float, dmg: float, src: S
 	ebullets.append(b)
 
 
+## 受击会整体清弹（护心套清屏、副本内阵亡结束副本、合击清弹），所以不能边按下标遍历边删：
+## 先在本帧的数组上推进、把存活的收进新数组；一旦受击让 ebullets 被清空或换成别的数组，本帧剩下的弹幕视为已被清掉，直接收手。
 func _update_ebullets(dt: float) -> void:
-	for i in range(ebullets.size() - 1, -1, -1):
-		var b: SimBullet = ebullets[i]
+	var cur := ebullets
+	var kept: Array = []
+	var i := 0
+	while i < cur.size():
+		var b: SimBullet = cur[i]
+		i += 1
 		b.x += b.vx * dt
 		b.y += b.vy * dt
 		b.life -= dt
-		var dead := b.life <= 0.0
-		if not dead and not over and Vector2(b.x - px, b.y - (py - 34.0)).length() < 26.0:
+		if b.life <= 0.0:
+			continue
+		if not over and Vector2(b.x - px, b.y - (py - 34.0)).length() < 26.0:
 			hurt_player(b.dmg, b.x, b.y, b.hits.src)
-			dead = true
-		if dead:
-			ebullets.remove_at(i)
+			if not is_same(cur, ebullets) or cur.is_empty():
+				return
+			continue
+		kept.append(b)
+	ebullets = kept
 
 
 func _add_tele(x: float, y: float, r: float, dur: float, cb: Callable, follow: SimEnemy) -> void:
@@ -1970,6 +2096,12 @@ func roll_choices(is_chest: bool) -> Array:
 	if is_chest:
 		picked.sort_custom(func(a, b): return RARITY.find(a.rarity) > RARITY.find(b.rarity))
 	out.append_array(picked)
+	if mode != "classic" and out.size() < 3:
+		# 武器/被动都满了：经验不再白给补给，先出两张可无限叠加的突破卡
+		var A: Dictionary = GameData.DG.ascend
+		out.append({"kind": "asc", "id": "asc_dmg", "icon": "taomu", "name": "灯魂淬炼", "school": "gen", "rarity": "purple", "lvText": "突破 • 第 %d 层" % (asc_dmg_n + 1), "desc": "伤害 +%d%%（加算，可无限叠加）" % int(round(float(A.dmg) * 100.0))})
+		if out.size() < 3:
+			out.append({"kind": "asc", "id": "asc_hp", "icon": "yupei", "name": "命火长明", "school": "gen", "rarity": "purple", "lvText": "突破 • 第 %d 层" % (asc_hp_n + 1), "desc": "生命上限 +%d 并回复等量生命（可无限叠加）" % int(A.hp)})
 	var D: Dictionary = GameData.BAL.drops
 	var fillers: Array = [
 		{"kind": "heal", "id": "heal", "icon": "yupei", "name": "灯火续命", "school": "gen", "rarity": "white", "lvText": "补给", "desc": "回复 %d 生命" % int(D.fillerHeal)},
@@ -2007,6 +2139,12 @@ func choose(i: int) -> void:
 	elif c.kind == "evo":
 		evo[c.weapon] = true
 		_ev("banner", "进化 • %s" % c.name, "#ffcf5a")
+	elif c.kind == "asc":
+		if c.id == "asc_dmg":
+			asc_dmg_n += 1
+		else:
+			asc_hp_n += 1
+			hp += float(GameData.DG.ascend.hp)
 	elif c.kind == "heal":
 		hp += GameData.BAL.drops.fillerHeal
 	elif c.kind == "soul":
@@ -2107,7 +2245,20 @@ func part_ready(pid: String) -> bool:
 	return lv(w) >= int(GameData.UPS[w].max)
 
 
+func gourd_price() -> int:
+	return 80 + 20 * gourds.size()
+
+
+func forge_price() -> int:
+	var F: Dictionary = GameData.DG.forge
+	return int(F.base) + int(F.step) * forge_n
+
+
 func price_of(rid: String) -> int:
+	if rid == "gourd_piece":
+		return gourd_price()
+	if rid == "forge":
+		return forge_price()
 	return int(GameData.GD.prices[GameData.RELIC_BY_ID[rid].tier])
 
 
@@ -2129,6 +2280,10 @@ func _roll_shop() -> void:
 		var i := int(rng.randf() * pool.size())
 		shop.append(pool[i])
 		pool.remove_at(i)
+	if gourds.size() < 7 and mode != "classic":
+		shop.append("gourd_piece")   # 铜钱直购彩虹葫芦散件（经典口径不上架，平衡基线不变）
+	if mode != "classic":
+		shop.append("forge")         # 灯油淬火：常驻、可重复买，铜钱永远有地方花
 
 
 func reroll_shop() -> bool:
@@ -2163,9 +2318,15 @@ func vine_ticket() -> int:
 
 ## 下一件葫芦的保底倒计时（仅完整/疾速模式；经典口径不发保底，保持平衡基线）
 func gourd_guarantee_left() -> float:
-	if stretch <= 1.0 or gourds.size() >= 7:
+	var st := gourd_guarantee_step()
+	if st <= 0.0 or gourds.size() >= 7:
 		return -1.0
-	return maxf(0.0, 170.0 * float(gourds.size() + 1) - clock)
+	return maxf(0.0, st * float(gourds.size() + 1) - clock)
+
+
+## 每件葫芦的保底间隔（战斗秒）。按模式取，保证在终局 Boss 前一定集齐 7 件；经典口径为 0（不发）。
+func gourd_guarantee_step() -> float:
+	return float(GameData.GD.guarantee.get(mode, 0.0))
 
 
 func rift_state() -> String:
@@ -2176,6 +2337,12 @@ func rift_state() -> String:
 
 
 func poi_state(i: int) -> String:
+	if phase == PH_SEG and FARM_KINDS.has(pois[i].kind):
+		if lm_cd_left(i) > 0.0:
+			return "cd"
+		if hp < maxhp * float(GameData.DG.farms[pois[i].kind].hpGate):
+			return "weak"
+		return "ok"
 	if phase == PH_SEG and pois[i].kind == "gourd":
 		return "noticket" if coins < vine_ticket() else "ok"
 	if phase == PH_SEG and pois[i].kind == "vault":
@@ -2196,6 +2363,11 @@ func _gen_pois() -> void:
 		{"kind": "gourd", "x": c.x + 1300.0, "y": c.y + 650.0, "name": "葫芦藤秘境"}, {"kind": "vault", "x": c.x - 400.0, "y": c.y - 950.0, "name": "镇魂宝库"},
 		{"kind": "altar", "x": c.x, "y": 260.0, "name": "古井祭坛"}, {"kind": "arch", "x": W - 300.0, "y": c.y, "name": "破败牌坊"},
 		{"kind": "tomb", "x": 300.0, "y": c.y, "name": "灯冢废墟"}, {"kind": "incense", "x": c.x, "y": H - 260.0, "name": "荒庙香炉"}]
+	if mode != "classic":
+		# 练级点只加在末尾：poi_cd / poi_hold 等按下标存，前面的下标不能变（存档兼容）
+		var FM: Dictionary = GameData.DG.farms
+		pois.append({"kind": "coinfarm", "x": c.x + 1000.0, "y": c.y - 750.0, "name": String(FM.coinfarm.name)})
+		pois.append({"kind": "soulfarm", "x": c.x + 700.0, "y": c.y + 800.0, "name": String(FM.soulfarm.name)})
 	explored.resize(36 * 24)
 	_spawn_pickup("chest", c.x + 160.0, c.y + 90.0, 1)
 
@@ -2216,6 +2388,8 @@ func _mark_explored() -> void:
 
 
 const LM_KINDS := ["altar", "arch", "tomb", "incense"]
+const FARM_KINDS := ["coinfarm", "soulfarm"]
+const ARENA_KINDS := ["gourd", "vault", "coinfarm", "soulfarm"]
 const LM_CD := {"altar": 180.0, "arch": 120.0, "tomb": 200.0, "incense": 90.0}
 const LM_COST := {"altar": 0, "arch": 30, "tomb": 0, "incense": 20}
 
@@ -2305,11 +2479,16 @@ func _use_landmark(i: int) -> void:
 	_ev("banner", "%s • %s" % [pois[i].name, what], "#ffcf5a")
 
 
+## 互动圈半径：完整/疾速模式用配置值（140，对走位容差友好）；经典口径保持原基线 78，避免走位路过大地图 POI 被动吸入扭曲平衡基线
+func _zone_r() -> float:
+	return 78.0 if mode == "classic" else float(GameData.SEG["break"].zoneR)
+
+
 func _update_pois(dt: float) -> void:
 	_mark_explored()
 	if phase != PH_SEG:
 		return
-	var zr: float = GameData.SEG["break"].zoneR
+	var zr: float = _zone_r()
 	for i in range(pois.size()):
 		var pp := Vector2(float(pois[i].x), float(pois[i].y))
 		if pois[i].kind == "vine":
@@ -2348,7 +2527,7 @@ func _update_pois(dt: float) -> void:
 				poi_hold[i] = 0.0
 			continue
 		if Vector2(px, py).distance_to(pp) < zr and poi_state(i) == "ok":
-			var is_arena: bool = pois[i].kind == "gourd" or pois[i].kind == "vault"
+			var is_arena: bool = ARENA_KINDS.has(pois[i].kind)
 			poi_hold[i] = float(poi_hold.get(i, 0.0)) + dt
 			if float(poi_hold[i]) >= float(GameData.DG.rift.hold):
 				poi_hold[i] = 0.0
@@ -2368,7 +2547,7 @@ func _step_break(dt: float) -> void:
 	_update_bullets(dt)
 	_update_pickups(dt)
 	_update_sword(dt)
-	var zr: float = GameData.SEG["break"].zoneR
+	var zr: float = _zone_r()
 	var here := Vector2(px, py)
 	var hold_t: float = GameData.DG.rift.hold
 	for z in ["rift", "merchant", "gate"]:
@@ -2444,7 +2623,21 @@ func buy_relic(i: int) -> bool:
 	var price := price_of(rid)
 	if coins < price:
 		return false
+	if rid == "gourd_piece" and gourds.size() >= 7:
+		return false   # 已集齐：不收钱
 	coins -= price
+	if rid == "gourd_piece":
+		grant_gourd("游商购买")
+		shop_serial += 1
+		shop.remove_at(i)
+		return true
+	if rid == "forge":
+		forge_n += 1
+		hp += float(GameData.DG.forge.hp)
+		_recalc()
+		shop_serial += 1
+		_ev("banner", "灯油淬火 第 %d 次 • 伤害 +%d%% 生命上限 +%d" % [forge_n, int(round(float(GameData.DG.forge.dmg) * 100.0)), int(GameData.DG.forge.hp)], "#ffcf5a")
+		return true   # 不下架：可以连续淬火，价格逐次上涨
 	wick_spent_shop += 1
 	relics.append(rid)
 	shop_serial += 1
@@ -2468,6 +2661,7 @@ func enter_rift(poi: int = -1) -> bool:
 		return false
 	rift_from = phase
 	rift_poi = poi
+	rift_kind = "sword"
 	checkpoint()   # 进副本前存档（存的是进入前的状态：灯芯未扣）
 	var dg: Dictionary = GameData.DG
 	wicks -= int(dg.wick.riftCost)
@@ -2486,10 +2680,9 @@ func enter_rift(poi: int = -1) -> bool:
 	var extra := maxi(0, entry_no - 2)   # 第 3 次起：目标击杀时间 +10s/次（守关者血量 = DPS×目标），限时 +10s，伤害 +10%/次
 	rift_target = float(tcfg.target) + 10.0 * extra
 	rift_limit = float(tcfg.limit) + 10.0 * extra
-	pickups.clear()
+	_leave_world()
+	pickups.clear()   # 经典口径不收掉落，进副本即清（平衡基线不变）
 	gem_count = 0
-	bullets.clear()
-	ebullets.clear()
 	var c := Vector2(W / 2.0, H / 2.0)
 	px = c.x - 260.0
 	py = c.y
@@ -2522,13 +2715,15 @@ func enter_arena(poi: int, kind: String) -> void:
 	phase = PH_RIFT
 	rift_t = 0.0
 	rift_limit = 75.0 if kind == "vault" else 60.0
+	_leave_world()
 	if kind == "gourd":
 		_enter_vine()
 		return
+	if FARM_KINDS.has(kind):
+		_enter_farm(kind)
+		return
 	pickups.clear()
 	gem_count = 0
-	bullets.clear()
-	ebullets.clear()
 	var c := Vector2(W / 2.0, H / 2.0)
 	px = c.x - 260.0
 	py = c.y
@@ -2546,13 +2741,8 @@ func _enter_vine() -> void:
 	coins -= vine_ticket_paid
 	vine_runs += 1
 	var n := vine_runs
-	for e2: SimEnemy in enemies:
-		e2.alive = false
-	enemies.clear()
 	pickups.clear()
 	gem_count = 0
-	bullets.clear()
-	ebullets.clear()
 	var c := Vector2(W / 2.0, H / 2.0)
 	px = c.x - 260.0
 	py = c.y
@@ -2574,6 +2764,102 @@ func _enter_vine() -> void:
 	_ev("banner", "葫芦藤秘境 第%d劫 • 门票 %d 铜钱 • 藤妖血量×%.1f 伤害×%.2f，击败得葫芦散件" % [n, vine_ticket_paid, tsec / 40.0, 1.0 + 0.18 * float(n - 1)], "#9fffb0")
 
 
+## 离开大地图进副本类场地（剑冢/秘境/宝库/练级点）的唯一入口：
+## 大地图妖物原样收起（守关 Boss、巡场妖王都在里面，出来接着打），掉落收起；弹幕/预警/拖尾/雷击队列是瞬时的，丢弃。
+## 用新数组替换而不是 clear()：调用方可能正在遍历旧数组。
+func _leave_world() -> void:
+	world_stash = enemies
+	enemies = []
+	bullets = []
+	ebullets = []
+	teles = []
+	trails = []
+	lei_queue = []
+	_stash_pickups()
+	_rebuild_grid()
+
+
+## 回到大地图的唯一出口（通关/超时/倒下都走这里）：副本里的妖物消散，大地图妖物原样放回。
+## 可能在妖物循环、弹幕循环、预警回调里被调用（玩家在副本中倒下），所以同样只换数组、不原地清空。
+func _return_world() -> void:
+	for e2: SimEnemy in enemies:
+		e2.alive = false
+	enemies = world_stash
+	world_stash = []
+	bullets = []
+	ebullets = []
+	teles = []
+	trails = []
+	lei_queue = []
+	_unstash_pickups()
+	_rebuild_grid()
+
+
+## 进秘境前地上的魂火/铜钱：完整/疾速模式先收起来、出来原地还回去（以前直接清空=白丢）；经典口径保持原样
+func _stash_pickups() -> void:
+	if mode == "classic":
+		return
+	arena_stash.append_array(pickups)
+	pickups.clear()
+	gem_count = 0
+
+
+func _unstash_pickups() -> void:
+	if mode == "classic":
+		return
+	# 秘境里没捡完的：直接入账（场地已经关了，不让玩家白打）
+	for k: SimPickup in pickups:
+		if k.kind == "coin" or k.kind == "soul":
+			_collect(k)
+	pickups.clear()
+	gem_count = 0
+	if arena_stash.is_empty():
+		return
+	pickups.append_array(arena_stash)
+	arena_stash.clear()
+	for k: SimPickup in pickups:
+		if k.kind == "soul":
+			gem_count += 1
+
+
+func _enter_farm(kind: String) -> void:
+	var F: Dictionary = GameData.DG.farms[kind]
+	var c := Vector2(W / 2.0, H / 2.0)
+	px = c.x
+	py = c.y
+	invuln = 1.0
+	rift_limit = float(F.dur)
+	arena_next = 0.6
+	arena_spawned = 0
+	arena_total = 0
+	rift_warden = null
+	farm_gain = {"coins": 0, "xp": 0, "kills": 0}
+	_ev("rift_enter", 9)
+	var txt := "每只妖物必掉铜钱" if kind == "coinfarm" else "妖物魂火 ×%.0f" % float(F.xpMul)
+	_ev("banner", "%s • 坚持 %d 秒 • %s" % [F.name, int(F.dur), txt], "#ffcf5a" if kind == "coinfarm" else "#9fe8ff")
+
+
+func _farm_step(dt: float) -> void:
+	var F: Dictionary = GameData.DG.farms[rift_kind]
+	arena_next -= dt
+	if arena_next <= 0.0:
+		arena_next = float(F.wave)
+		var alive := 0
+		for e: SimEnemy in enemies:
+			if e.alive:
+				alive += 1
+		var c := Vector2(W / 2.0, H / 2.0)
+		var pool := ["paperman", "paperman", "foxfire", "jiangshi"] if rift_kind == "soulfarm" else ["paperman", "foxfire", "paperman", "firecracker"]
+		for i in range(mini(int(F.waveN), int(F.cap) - alive)):
+			var a := rng.randf() * TAU
+			var m := spawn_enemy(pool[i % pool.size()], -1.0, -1.0, {"pos": c + Vector2(cos(a), sin(a)) * 400.0})
+			if rift_kind == "soulfarm":
+				m.xpv = int(ceil(float(m.xpv) * float(F.xpMul)))
+			arena_spawned += 1
+	if rift_t >= rift_limit:
+		_arena_end(true, "survive")
+
+
 func _vine_step(dt: float) -> void:
 	vine_guard_t -= dt
 	var n := vine_runs
@@ -2592,6 +2878,9 @@ func _vine_step(dt: float) -> void:
 func _arena_step(dt: float) -> void:
 	if rift_kind == "gourd":
 		_vine_step(dt)
+		return
+	if FARM_KINDS.has(rift_kind):
+		_farm_step(dt)
 		return
 	arena_next -= dt
 	if arena_spawned < arena_total and arena_next <= 0.0:
@@ -2621,21 +2910,20 @@ func _arena_step(dt: float) -> void:
 		_arena_end(false)
 
 
-func _arena_end(ok: bool) -> void:
-	for e2: SimEnemy in enemies:
-		e2.alive = false
-	enemies.clear()
-	ebullets.clear()
-	teles.clear()
-	bullets.clear()
+func _arena_end(ok: bool, how: String = "") -> void:
+	_return_world()
 	phase = rift_from
 	px = rift_ret.x
 	py = rift_ret.y
 	invuln = 2.0
 	var kind := rift_kind
-	if kind != "gourd":
-		rift_sealed[100 + rift_poi] = true
+	var died := how == "death"
+	if kind == "vault":
+		rift_sealed[100 + rift_poi] = true   # 宝库一局一次
 	rift_kind = "sword"
+	if FARM_KINDS.has(kind):
+		_farm_end(kind, ok, how)
+		return
 	var boss_info := {}
 	if kind == "gourd":
 		boss_info = {"n": vine_runs, "ticket": vine_ticket_paid, "boss_hp": (vine_boss.maxhp if vine_boss != null else 0.0)}
@@ -2661,7 +2949,7 @@ func _arena_end(ok: bool) -> void:
 			if not got:
 				coins += 80
 			for i in range(3):
-				_spawn_pickup("coin", px + (rng.randf() - 0.5) * 100.0, py + (rng.randf() - 0.5) * 80.0, 20 + 10 * n)
+				_spawn_pickup("coin", px + (rng.randf() - 0.5) * 100.0, py + (rng.randf() - 0.5) * 80.0, maxi(5, vine_ticket_paid / 6))   # 返还约一半门票，秘境不是印钱机
 			var extra_txt := ""
 			if has_sword():
 				sw_kills += 120 * n
@@ -2673,15 +2961,45 @@ func _arena_end(ok: bool) -> void:
 			_ev("banner", "葫芦藤秘境第%d劫通关 • %s + 铜钱%s" % [n, "葫芦散件" if got else "铜钱 80", extra_txt], "#9fffb0")
 	else:
 		if kind == "gourd":
-			coins += vine_ticket_paid
 			vine_runs = maxi(0, vine_runs - 1)
-			_ev("banner", "挑战超时 • 门票 %d 铜钱已返还，藤妖强度不变" % vine_ticket_paid, "#ff8a7a")
+			if died:
+				# 倒下与剑冢同口径：无奖励、门票不退、扣入场前生命 30%（由 hurt_player 结算）
+				_ev("banner", "倒在葫芦藤秘境 • 门票不退，藤妖强度不变", "#ff8a7a")
+			else:
+				coins += vine_ticket_paid
+				_ev("banner", "挑战超时 • 门票 %d 铜钱已返还，藤妖强度不变" % vine_ticket_paid, "#ff8a7a")
 		else:
-			_ev("banner", "秘境超时 • 未获奖励", "#ff8a7a")
-	var rec2 := {"poi": rift_poi, "kind": kind, "ok": ok, "t": rift_t, "how": "clear" if ok else "timeout"}
+			_ev("banner", "倒在镇魂宝库 • 未获奖励" if died else "秘境超时 • 未获奖励", "#ff8a7a")
+	var how2 := how if how != "" else ("clear" if ok else "timeout")
+	var rec2 := {"at": snappedf(clock, 0.1), "poi": rift_poi, "kind": kind, "ok": ok, "t": rift_t, "how": how2}
 	rec2.merge(boss_info)
 	rift_log.append(rec2)
-	_ev("rift_exit", ok, "clear" if ok else "timeout")
+	_ev("rift_exit", ok, how2)
+	checkpoint()
+
+
+func _farm_end(kind: String, ok: bool, how: String) -> void:
+	var F: Dictionary = GameData.DG.farms[kind]
+	poi_cd[rift_poi] = clock + float(F.cd)
+	var bonus := ""
+	if ok:
+		farm_runs[kind] = int(farm_runs.get(kind, 0)) + 1
+		if kind == "coinfarm":
+			var cc := int(float(F.clearCoin) * (1.0 + t / float(F.coinEvery)))
+			coins += cc
+			farm_gain.coins += cc
+			bonus = "铜钱共 %d" % int(farm_gain.coins)
+		else:
+			var lv_n := int(F.clearLv)
+			for j in range(lv_n):
+				_gain_xp(maxi(0, need - xp))
+			bonus = "魂火共 %d + 直升 %d 级" % [int(farm_gain.xp), lv_n]
+		_ev("banner", "%s 坚持到底 • 击杀 %d • %s • %d 秒后可再来" % [F.name, int(farm_gain.kills), bonus, int(F.cd)], "#ffcf5a")
+	else:
+		_ev("banner", "%s 倒下 • 已捡的收益保留 • %d 秒后可再来" % [F.name, int(F.cd)], "#ff8a7a")
+	var rec := {"at": snappedf(clock, 0.1), "poi": rift_poi, "kind": kind, "ok": ok, "t": rift_t, "how": how if how != "" else ("survive" if ok else "timeout"), "gain": farm_gain.duplicate()}
+	rift_log.append(rec)
+	_ev("rift_exit", ok, rec.how)
 	checkpoint()
 
 
@@ -2701,16 +3019,9 @@ func _step_rift(dt: float) -> void:
 func _rift_end(ok: bool, how: String, hp_ref: float) -> void:
 	var dg: Dictionary = GameData.DG
 	var entry_no := rift_entries
-	var rec := {"break": break_idx, "poi": rift_poi, "entry": entry_no, "ok": ok, "how": how, "t": rift_t, "target": rift_target, "limit": rift_limit,
+	var rec := {"at": snappedf(clock, 0.1), "break": break_idx, "poi": rift_poi, "entry": entry_no, "ok": ok, "how": how, "t": rift_t, "target": rift_target, "limit": rift_limit,
 		"dps_est": rift_dps_est, "warden_hp": (rift_warden.maxhp if rift_warden != null else 0.0), "dealt": rift_dmg_dealt, "hp_in": rift_hp_before, "hp_out": 0.0, "artifact": "", "levels": levels.duplicate(), "evo": evo.duplicate(), "by": rift_by.duplicate(), "parts": rift_parts.duplicate()}
-	for e2: SimEnemy in enemies:
-		e2.alive = false
-	enemies.clear()
-	ebullets.clear()
-	teles.clear()
-	bullets.clear()
-	trails.clear()
-	lei_queue.clear()
+	_return_world()
 	rift_warden = null
 	phase = rift_from
 	px = rift_ret.x
@@ -2749,7 +3060,8 @@ func _rift_end(ok: bool, how: String, hp_ref: float) -> void:
 				_ev("banner", "遗宝 • %s" % GameData.RELIC_BY_ID[rid].name, "#ffc977")
 	else:
 		rift_fails += 1
-		rift_sealed[100 + rift_poi if rift_poi >= 0 else break_idx] = true
+		if rift_poi < 0:
+			rift_sealed[break_idx] = true   # 段间裂隙失败即闭合；大地图剑冢失败不封死，靠全局冷却重试
 		var base := hp_ref
 		hp = maxf(1.0, base * (1.0 - float(dg.rift.failHpLoss)))
 	threat_next += 1   # 出副本后下一段威胁预算 +1 档
@@ -2798,7 +3110,8 @@ func fork() -> Sim:
 	for pr in get_property_list():
 		if pr.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
 			var n: String = pr.name
-			if n in ["rng", "enemies", "bullets", "ebullets", "pickups", "teles", "bolts", "trails", "grid", "events", "lei_queue", "boss", "rift_warden", "orb_pos", "choice"]:
+			# 妖物/掉落对象不能浅共享：duplicate(true) 不复制对象，克隆里打怪会改到真局面。大地图收起的妖物、收起的掉落不进克隆（试射只看当前场地）。
+			if n in ["rng", "enemies", "bullets", "ebullets", "pickups", "teles", "bolts", "trails", "grid", "events", "lei_queue", "boss", "rift_warden", "guard_ref", "vine_boss", "world_stash", "arena_stash", "orb_pos", "choice"]:
 				continue
 			var v: Variant = get(n)
 			if v is Dictionary or v is Array:
@@ -2812,6 +3125,10 @@ func fork() -> Sim:
 			f.boss = c
 		if e == rift_warden:
 			f.rift_warden = c
+		if e == guard_ref:
+			f.guard_ref = c
+		if e == vine_boss:
+			f.vine_boss = c
 	f.enemies = cp
 	f.emit = false
 	f.choice = {}
@@ -2854,7 +3171,7 @@ func duel_warden(build: Dictionary, entry: int, with_sword: bool) -> void:
 
 const SAVE_KEYS := ["seed_v", "phase", "t", "real_t", "seg", "kills", "coins", "level", "xp", "need", "pending_lv", "hp", "px", "py", "levels", "evo", "relics",
 	"wicks", "artifact", "rift_entries", "rift_clears", "rift_sealed", "threat_next", "threat_cur", "rerolls", "revive", "bonus_soul", "break_idx", "gift_pending", "shop",
-	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock", "gourds", "pet_on", "pet_hp", "pet_marks", "pet_dead_t", "mini_idx", "vine_taken", "set_kills", "rift_ready_at", "poi_cd", "vine_runs", "sw_master", "sw_kill5", "sw_cnt", "gourd_log", "poi_log"]
+	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock", "gourds", "pet_on", "pet_hp", "pet_marks", "pet_dead_t", "mini_idx", "vine_taken", "set_kills", "rift_ready_at", "poi_cd", "vine_runs", "sw_master", "sw_kill5", "sw_cnt", "gourd_log", "poi_log", "mid_idx", "guard_done", "forge_n", "asc_dmg_n", "asc_hp_n", "farm_runs"]
 
 
 ## 检查点存档：只在「段/段间」两种阶段落档；恢复时妖物/弹幕清空，从该点继续（局内中断续档）
@@ -2885,11 +3202,16 @@ func from_save(d: Dictionary) -> void:
 			v = int(v)
 		elif cur is float:
 			v = float(v)
-		elif cur is Dictionary and k in ["rift_sealed", "announced", "vine_taken"]:
+		elif cur is Dictionary and k in ["rift_sealed", "announced", "vine_taken", "guard_done"]:
 			var nd := {}
 			for kk in v:
 				nd[int(kk)] = true
 			v = nd
+		elif cur is Dictionary and k == "poi_cd":
+			var nd3 := {}   # POI 下标 -> 冷却到期时刻：值是时间，不能当成 true 存（JSON 回来键变成字符串）
+			for kk in v:
+				nd3[int(kk)] = float(v[kk])
+			v = nd3
 		elif cur is Dictionary:
 			var nd2 := {}
 			for kk in v:
@@ -2898,6 +3220,11 @@ func from_save(d: Dictionary) -> void:
 		set(k, v)
 	if not d.has("clock") and float(d.get("t", 0.0)) > 0.0:
 		clock = float(d.t) * stretch   # 旧存档无 clock：由节奏钟回推
+	if phase == PH_SEG:
+		# 存档不存妖物：守关 Boss 打到一半存的档（例如段末进剑冢前的检查点），读回来要重新刷出守关 Boss，否则直接清场、掉落丢失
+		guard_done.erase(seg)
+	guard_ref = null
+	world_stash = []
 	rng.seed = seed_v + int(real_t * 10.0)
 	_recalc()
 	hp = minf(float(d.get("hp", maxhp)), maxhp)
@@ -3042,7 +3369,8 @@ func _mini_drop(e: SimEnemy) -> void:
 	_ev("banner", "击败 %s • 铜钱 + 灯芯 + 葫芦散件" % e.el.name, "#ffcf5a")
 
 
-func _spawn_mini_special(k: int) -> void:
+func _spawn_mini_special(k: int) -> SimEnemy:
+	k = mini(k, 4)
 	var key: String = ["swordlord", "sedan", "lamps"][k - 2]
 	var C: Dictionary = GameData.MB[key]
 	var def := {"name": GameData.GD.miniNames[k], "tex": C.tex, "h": C.h, "r": C.r, "hp": 1, "speed": C.speed, "dmg": C.dmg, "xp": 0, "ai": key, "faceRight": true, "knock": 0.0, "fx": "spark"}
@@ -3051,7 +3379,8 @@ func _spawn_mini_special(k: int) -> void:
 	e.atk_t = 1.5
 	e.blade_down = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	e.blades_t = 1e9 if key == "lamps" else 0.0
-	_ev("banner", "小 BOSS • %s 现身" % GameData.GD.miniNames[k], "#ff7a6a")
+	_ev("banner", "清场守关 BOSS • %s 现身（击败后才能清场）" % GameData.GD.miniNames[k], "#ff7a6a")
+	return e
 
 
 func lamp_pos(e: SimEnemy, i: int) -> Vector2:
@@ -3165,21 +3494,33 @@ func _spawn_paper(e: SimEnemy) -> void:
 func _update_minis() -> void:
 	if phase != PH_SEG and phase != PH_BOSS:
 		return
-	var sched: Array = GameData.GD.minis.full if mode == "full" else (GameData.GD.minis.quick if mode == "quick" else [])
-	if mini_idx >= sched.size() or clock < float(sched[mini_idx]):
-		return
-	var k := mini_idx
-	mini_idx += 1
+	var mids: Array = GameData.GD.minis.fullMid if mode == "full" else (GameData.GD.minis.quickMid if mode == "quick" else [])
+	if mid_idx < mids.size() and clock >= float(mids[mid_idx]) and phase == PH_SEG:
+		var mk := mid_idx
+		mid_idx += 1
+		var mb: Dictionary = GameData.EN.elites["lantern" if mk % 2 == 0 else "jiangshi"].duplicate()
+		mb.name = "巡场妖王"
+		mb.hp = float(mb.hp) * (1.0 + 0.35 * mk)
+		mb.xp = 12
+		spawn_enemy("lantern" if mk % 2 == 0 else "jiangshi", -1.0, -1.0, {"elite": true, "el": mb})
+		_ev("banner", "巡场妖王 现身 • 击败得宝箱", "#ff9a6a")
+
+
+## 每段清场守关 Boss（完整/疾速模式）：段末先刷出守关 Boss，击败（或 120 秒超时）后才进入清场段间；必掉铜钱+宝箱+灯芯+彩虹葫芦散件
+func _spawn_guard(k: int) -> void:
+	mini_idx = maxi(mini_idx, k + 1)
+	guard_ref = null
+	guard_clock = clock
 	if mode == "full" and k >= 2:
-		_spawn_mini_special(k)
+		guard_ref = _spawn_mini_special(k)
 		return
 	var base: Dictionary = GameData.EN.elites["jiangshi" if k % 2 == 0 else "lantern"].duplicate()
 	base.name = String(GameData.GD.miniNames[mini(k, 4)])
 	base.hp = float(base.hp) * (1.0 + 0.5 * k)
 	base["mini"] = k
 	base.xp = 20
-	spawn_enemy("jiangshi" if k % 2 == 0 else "lantern", -1.0, -1.0, {"elite": true, "el": base})
-	_ev("banner", "小 BOSS • %s 现身" % base.name, "#ff7a6a")
+	guard_ref = spawn_enemy("jiangshi" if k % 2 == 0 else "lantern", -1.0, -1.0, {"elite": true, "el": base})
+	_ev("banner", "清场守关 BOSS • %s 现身（击败后才能清场）" % base.name, "#ff7a6a")
 
 
 func sw_rm() -> float:

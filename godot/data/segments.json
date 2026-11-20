@@ -5,7 +5,7 @@
    "name": "荒园灯市",
    "from": 0,
    "to": 160,
-   "field": "field.jpg",
+   "field": "field",
    "tint": [
     0.82,
     0.76,
@@ -35,7 +35,7 @@
    "name": "荒坟夜雾",
    "from": 160,
    "to": 320,
-   "field": "field2.jpg",
+   "field": "field2",
    "tint": [
     0.9,
     0.98,
@@ -65,7 +65,7 @@
    "name": "焦灯市",
    "from": 320,
    "to": 480,
-   "field": "field3.jpg",
+   "field": "field3",
    "tint": [
     1.0,
     0.88,

@@ -21,6 +21,12 @@ var shop_wait := 0.0
 var done_shop: Dictionary = {}
 var entered: Dictionary = {}
 var target_zone := ""
+var explore := false            # 完整/疾速模式验证用：会去走地标、灵藤、游商、裂隙、葫芦藤秘境（经典平衡口径不开）
+var goal := Vector2.ZERO
+var has_goal := false
+var goal_i := -1
+var stay_t := 0.0
+var visited_until: Dictionary = {}
 
 const PRIORITY := {
 	"fu": 62.0, "huanhuo": 58.0, "lei": 60.0, "taomu": 52.0, "zhongfu": 48.0, "jishu": 47.0, "zhuohun": 46.0, "tianyou": 45.0,
@@ -92,6 +98,8 @@ func _pick(s: Sim) -> void:
 			sc += (int(o.to) - int(o.from)) * 3.0
 		elif o.kind == "heal":
 			sc = 70.0 if s.hp < s.maxhp * 0.45 else 3.0
+		elif o.kind == "asc":
+			sc = 12.0 if o.id == "asc_dmg" else (14.0 if s.maxhp < 220.0 else 9.0)
 		else:
 			sc = 5.0
 		if sc > bs:
@@ -104,7 +112,7 @@ func _pick(s: Sim) -> void:
 func _shop(s: Sim) -> void:
 	# 铜钱商店：优先买进化配件(金)，其次买得起的最贵一件；买不起就走人（避免死循环）
 	var guard := 0
-	while s.shop.size() > 0 and guard < 6:
+	while s.shop.size() > 0 and guard < 12:
 		guard += 1
 		var bi := -1
 		var bp := -1
@@ -113,7 +121,13 @@ func _shop(s: Sim) -> void:
 			var pr := s.price_of(rid)
 			if pr > s.coins:
 				continue
-			var pri := pr + (1000 if GameData.RELIC_BY_ID[rid].has("part") else 0)
+			var pri := 0
+			if rid == "gourd_piece":
+				pri = 500
+			elif rid == "forge":
+				pri = 1   # 淬火排最后：先买遗物/散件，剩下的钱再淬火
+			else:
+				pri = pr + (1000 if GameData.RELIC_BY_ID[rid].has("part") else 0)
 			if kind == Kind.RANDOM:
 				pri = int(rng.randi() % 100)
 			if pri > bp:
@@ -144,6 +158,11 @@ func _break(s: Sim, _dt: float) -> void:
 	target_zone = zone
 	var tp := s.break_pos(zone)
 	var d := tp - Vector2(s.px, s.py)
+	var rp := s.break_pos("rift")
+	if zone != "rift" and Vector2(s.px, s.py).distance_to(rp) < 200.0:
+		d = Vector2(s.px, s.py) - rp   # 不进裂隙的口径：先离开裂隙圈再走向目标
+		if d.length() < 1.0:
+			d = Vector2(1, 0)
 	if d.length() < 20.0:
 		s.in_move = Vector2.ZERO
 	else:
@@ -179,6 +198,8 @@ func _combat(s: Sim, dt: float) -> void:
 	s.in_dash = want_dash
 	want_dash = false
 	_sword(s, dt)
+	if explore and s.pet_on and s.combo_cd <= 0.0 and s.enemies.size() >= 8:
+		s.in_combo = true
 
 
 func _think(s: Sim) -> void:
@@ -208,6 +229,7 @@ func _think(s: Sim) -> void:
 	var n_dir := 14
 	var center := Vector2(Sim.W / 2.0, Sim.H / 2.0)
 	var rift := s.phase == Sim.PH_RIFT
+	_pick_goal(s, p)
 	var gem: SimPickup = null
 	var gd := 480.0
 	for k in s.pickups:
@@ -266,10 +288,8 @@ func _think(s: Sim) -> void:
 				if along > -40.0 and along < 600.0 and absf(rel.x * e2.lunge_dir.y - rel.y * e2.lunge_dir.x) < 80.0:
 					thr += 7.0
 		for tl: SimTele in s.teles:
-			if tl.r > 0.0:
-				var td := c2.distance_to(Vector2(tl.x, tl.y))
-				if td < tl.r + 36.0:
-					thr += 5.0 + 6.0 * clampf(tl.t / tl.dur, 0.0, 1.0)
+			if tl.is_inside(c2, 36.0):
+				thr += 5.0 + 6.0 * clampf(tl.t / tl.dur, 0.0, 1.0)
 		# 墙
 		var wall := 0.0
 		if rift:
@@ -289,6 +309,8 @@ func _think(s: Sim) -> void:
 		else:
 			sc += 0.28 * d.dot(cur_dir) if cur_dir.length() > 0.0 else 0.0
 			sc += 0.12 * d.dot((center - p).normalized())
+			if has_goal and thr < 2.5:
+				sc += 1.5 * d.dot((goal - p).normalized())
 			if gem != null and thr < 2.5:
 				var tg := Vector2(gem.x, gem.y - 30.0) - p
 				sc += 1.1 * d.dot(tg.normalized()) * (1.0 - clampf(gd / 520.0, 0.0, 0.7))
@@ -299,15 +321,59 @@ func _think(s: Sim) -> void:
 			best_sc = sc
 			best_dir = d
 	cur_dir = best_dir
+	if has_goal and p.distance_to(goal) < 90.0 and threat_now < 2.5:
+		cur_dir = Vector2.ZERO   # 到点站定（互动要站 1 秒）
 	# 闪避：危险较大时冲出去；预警圈快炸且人在里面时必闪
 	var in_tele := false
 	for tl: SimTele in s.teles:
-		if tl.r > 0.0 and p.distance_to(Vector2(tl.x, tl.y)) < tl.r + 6.0 and tl.dur - tl.t < 0.45:
+		if tl.is_inside(Vector2(p.x, p.y - (30.0 if tl.is_rect() else 0.0)), 6.0) and tl.dur - tl.t < 0.45:
 			in_tele = true
 	if s.dash_cd <= 0.0 and (threat_now > 5.5 or in_tele):
 		want_dash = true
 		if best_dir.length() < 0.1:
 			cur_dir = Vector2(s.face_x, 0)
+
+
+func _pick_goal(s: Sim, p: Vector2) -> void:
+	has_goal = false
+	if not explore or s.phase != Sim.PH_SEG:
+		return
+	var hpk := s.hp / s.maxhp
+	var order := ["incense", "sword", "gourd", "vine", "soulfarm", "coinfarm", "arch", "altar", "tomb", "merchant"]
+	for kd in order:
+		var best := -1
+		var bd := 1e9
+		for i in range(s.pois.size()):
+			if s.pois[i].kind != kd or float(visited_until.get(i, 0.0)) > s.clock:
+				continue
+			var ok_ := false
+			match kd:
+				"incense": ok_ = hpk < 0.65 and s.poi_state(i) == "ok"
+				"sword": ok_ = hpk >= 0.75 and s.poi_state(i) == "ok" and s.level >= 9
+				"gourd": ok_ = hpk > 0.85 and s.poi_state(i) == "ok" and (s.gourds.size() < 7 or s.vine_runs < 3)
+				"vine": ok_ = not s.vine_taken.has(i)
+				"arch": ok_ = s.poi_state(i) == "ok" and s.coins >= s.vine_ticket() + 30
+				"altar": ok_ = hpk > 0.85 and s.poi_state(i) == "ok"
+				"tomb": ok_ = hpk > 0.9 and s.poi_state(i) == "ok"
+				"merchant": ok_ = s.coins >= 110
+				"soulfarm", "coinfarm": ok_ = hpk > 0.8 and s.poi_state(i) == "ok" and s.clock > 90.0
+			if not ok_:
+				continue
+			var d := p.distance_to(Vector2(float(s.pois[i].x), float(s.pois[i].y)))
+			if d < bd:
+				bd = d
+				best = i
+		if best >= 0:
+			goal = Vector2(float(s.pois[best].x), float(s.pois[best].y))
+			has_goal = true
+			if goal_i != best:
+				goal_i = best
+				stay_t = 0.0
+			if p.distance_to(goal) < 100.0:
+				stay_t += react
+				if stay_t > 4.0:
+					visited_until[best] = s.clock + 150.0   # 站够了仍没触发（如冷却/商店已买完）：暂时放弃
+			return
 
 
 # ---------------- 飞剑 ----------------

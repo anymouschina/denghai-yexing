@@ -240,6 +240,17 @@ func _consume_events() -> void:
 				fx_sprites.append({"tex": "fx_boom", "x": ev[1], "y": ev[2] - 10.0, "life": 0.45, "max": 0.45, "scale": ev[3] / 140.0})
 				Audio.play("boom", 0.8)
 				_shake(200, 0.005)
+			"sweep":
+				# 半壁灯海落下：矩形里铺一片爆炎
+				var sx: float = ev[1]
+				var sy: float = ev[2]
+				var sw2: float = ev[3]
+				var sh2: float = ev[4]
+				for gx in range(4):
+					for gy in range(4):
+						fx_sprites.append({"tex": "fx_boom", "x": sx - sw2 * 0.5 + sw2 * (gx + 0.5) / 4.0, "y": sy - sh2 * 0.5 + sh2 * (gy + 0.5) / 4.0, "life": 0.5, "max": 0.5, "scale": 1.3})
+				Audio.play("boom")
+				_shake(320, 0.007)
 			"boom":
 				fx_sprites.append({"tex": "fx_boom", "x": ev[1], "y": ev[2], "life": 0.45, "max": 0.45, "scale": 0.85})
 				Audio.play("boom")
@@ -380,15 +391,6 @@ func _draw_bg(c: Node2D) -> void:
 			b_bg.rect(trc.position.x, trc.position.y, tw, th, u0, v0, 1.0 - u0, 1.0 - v0, tint)
 	b_bg.flush(c.get_canvas_item(), bt)
 	c.draw_rect(Rect2(0, 0, Sim.W, Sim.H), Color(0.23, 0.16, 0.36, 0.16))
-	if sim.phase != Sim.PH_RIFT:
-		var lm := [[Vector2(Sim.W / 2.0, 260.0), "古井祭坛", Color(0.5, 0.7, 1.0)], [Vector2(Sim.W - 300.0, Sim.H / 2.0), "破败牌坊", Color(1.0, 0.7, 0.4)], [Vector2(300.0, Sim.H / 2.0), "灯冢废墟", Color(0.8, 0.6, 1.0)], [Vector2(Sim.W / 2.0, Sim.H - 260.0), "荒庙香炉", Color(1.0, 0.5, 0.4)]]
-		for m in lm:
-			var mp: Vector2 = m[0]
-			var mc: Color = m[2]
-			c.draw_arc(mp, 120.0, 0, TAU, 40, Color(mc, 0.35), 4.0, true)
-			c.draw_rect(Rect2(mp.x - 14, mp.y - 80, 28, 80), Color(mc, 0.3))
-			c.draw_rect(Rect2(mp.x - 50, mp.y - 90, 100, 14), Color(mc, 0.3))
-			c.draw_string(font, mp + Vector2(-100, 40), String(m[1]), HORIZONTAL_ALIGNMENT_CENTER, 200.0, 26, Color(mc, 0.35))
 	if sim.phase == Sim.PH_RIFT:
 		var cc := Vector2(Sim.W / 2.0, Sim.H / 2.0)
 		var R: float = GameData.DG.rift.arenaRadius
@@ -599,6 +601,15 @@ func _draw_lamp(p: Vector2) -> void:
 
 func _draw_teles() -> void:
 	for tl: SimTele in sim.teles:
+		if tl.is_rect():
+			# 半壁灯海：整片半屏的矩形预警，由外向内填满，倒计时一目了然
+			var kr := clampf(tl.t / maxf(0.01, tl.dur), 0.0, 1.0)
+			var rc := Rect2(tl.x - tl.rw * 0.5, tl.y - tl.rh * 0.5, tl.rw, tl.rh)
+			draw_rect(rc, Color(0.95, 0.25, 0.18, 0.10 + 0.22 * kr), true)
+			draw_rect(rc, Color(1.0, 0.45, 0.35, 0.9), false, 4.0)
+			var inner := rc.grow(-minf(rc.size.x, rc.size.y) * 0.5 * (1.0 - kr))
+			draw_rect(inner, Color(1.0, 0.7, 0.45, 0.22), true)
+			continue
 		if tl.r <= 0.0:
 			continue
 		var k := clampf(tl.t / maxf(0.01, tl.dur), 0.0, 1.0)
@@ -894,12 +905,21 @@ func _draw_poi(i: int) -> void:
 	var w := tx.get_width() * sc
 	var h := tx.get_height() * sc
 	draw_texture_rect(T.glow, Rect2(pp.x - 200, pp.y - 260, 400, 300), false, Color(0.7, 0.3, 1.0, 0.45 if st == "ok" else 0.15))
-	var is_ar: bool = sim.pois[i].kind == "gourd" or sim.pois[i].kind == "vault"
-	var tint2 := Color(0.6, 1.0, 0.6) if sim.pois[i].kind == "gourd" else (Color(1.0, 0.7, 0.4) if sim.pois[i].kind == "vault" else Color.WHITE)
+	var pk: String = sim.pois[i].kind
+	var is_ar: bool = Sim.ARENA_KINDS.has(pk)
+	var tint2: Color = {"gourd": Color(0.6, 1.0, 0.6), "vault": Color(1.0, 0.7, 0.4), "coinfarm": Color(1.0, 0.88, 0.35), "soulfarm": Color(0.55, 0.85, 1.0)}.get(pk, Color.WHITE)
 	draw_texture_rect(tx, Rect2(pp.x - w / 2.0, pp.y - h * 0.75, w, h), false, tint2 if st == "ok" else Color(0.55, 0.5, 0.62))
 	var sub: String = ("站定进入 • 限时挑战" if is_ar else "站定进入 • 消耗灯芯×1") if st == "ok" else {"weak": "灯弱，不可入", "nowick": "灯芯不足", "sealed": "裂隙已闭合", "cooldown": "冷却中 %d 秒（第 3 次起每次间隔 90 秒）" % int(ceil(sim.rift_cd_left())), "noticket": "门票 %d 铜钱（现有 %d）" % [sim.vine_ticket(), sim.coins]}.get(st, "")
 	if sim.pois[i].kind == "gourd" and st == "ok":
-		sub = "站定入内 • 门票 %d 铜钱 • 第 %d 劫（失败返还）" % [sim.vine_ticket(), sim.vine_runs + 1]
+		sub = "站定入内 • 门票 %d 铜钱 • 第 %d 劫（超时返还）" % [sim.vine_ticket(), sim.vine_runs + 1]
+	if Sim.FARM_KINDS.has(pk):
+		var FM: Dictionary = GameData.DG.farms[pk]
+		if st == "ok":
+			sub = ("站定入内 • 坚持 %d 秒 • 每只妖物必掉铜钱" if pk == "coinfarm" else "站定入内 • 坚持 %d 秒 • 魂火×3 通关直升 1 级") % int(FM.dur)
+		elif st == "cd":
+			sub = "冷却中 %d 秒（可反复刷）" % int(ceil(sim.lm_cd_left(i)))
+		elif st == "weak":
+			sub = "生命需高于 %d%%" % int(float(FM.hpGate) * 100.0)
 	_draw_zone_text(pp + Vector2(0, -h * 0.75 - 10.0), String(sim.pois[i].name), sub, UI.GOLD if st == "ok" else Color("ff8a7a"))
 	var zr: float = GameData.SEG["break"].zoneR
 	var hv: float = float(sim.poi_hold.get(i, 0.0))
