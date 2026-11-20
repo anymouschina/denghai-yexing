@@ -1,0 +1,107 @@
+{
+ "pieces": [
+  {
+   "id": "red",
+   "name": "赤•烈火",
+   "stat": "dmg",
+   "per": 0.04
+  },
+  {
+   "id": "orange",
+   "name": "橙•镇山",
+   "stat": "dmgTaken",
+   "per": -0.03
+  },
+  {
+   "id": "yellow",
+   "name": "黄•金钟",
+   "stat": "maxHp",
+   "per": 12
+  },
+  {
+   "id": "green",
+   "name": "绿•回春",
+   "stat": "maxHp",
+   "per": 12
+  },
+  {
+   "id": "cyan",
+   "name": "青•疾风",
+   "stat": "speed",
+   "per": 0.03
+  },
+  {
+   "id": "blue",
+   "name": "蓝•引雷",
+   "stat": "crit",
+   "per": 0.03
+  },
+  {
+   "id": "purple",
+   "name": "紫•吸魂",
+   "stat": "pickup",
+   "per": 0.1
+  }
+ ],
+ "pet": {
+  "hp": 360,
+  "revive": 15.0,
+  "marks": 3,
+  "markMax": 5,
+  "dmg": 140.0,
+  "dpsRatio": 0.18,
+  "atkGap": 0.55,
+  "absorb": 0.3,
+  "regen": 0.04,
+  "comboCd": 20.0,
+  "comboR": 460.0,
+  "comboDmg": 900.0,
+  "comboDpsRatio": 1.4,
+  "comboWaves": 7,
+  "orbitR": 110.0,
+  "range": 600.0,
+  "huntSpeed": 540.0,
+  "pickupR": 180.0
+ },
+ "prices": {
+  "white": 50,
+  "blue": 110,
+  "purple": 200,
+  "gold": 340
+ },
+ "rerollWicks": 1,
+ "minis": {
+  "_doc": "巡场妖王（每段中途精英）出场的战斗秒；段末守关 Boss 由每段结束触发，不在这里排时间（完整模式 15 分钟：每段 150 秒）",
+  "fullMid": [
+   75,
+   225,
+   375,
+   525,
+   675
+  ],
+  "quickMid": [
+   60,
+   180,
+   330
+  ]
+ },
+ "miniNames": [
+  "跳尸王",
+  "破灯笼王",
+  "剑冢真主",
+  "纸轿冥娘",
+  "百灯鬼王"
+ ],
+ "miniCoins": [
+  60,
+  90,
+  120,
+  150,
+  180
+ ],
+ "guarantee": {
+  "_doc": "第 n 件葫芦最迟在 combat 秒 interval×n 发放（经典口径不发，平衡基线不变）：完整 7×95=665 秒（11分05秒，15分钟终局前）、疾速 7×80=560 秒",
+  "full": 95,
+  "quick": 80
+ }
+}

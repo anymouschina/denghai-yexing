@@ -1,0 +1,206 @@
+[
+ {
+  "id": "talisman",
+  "name": "破阵符",
+  "icon": "r_talisman",
+  "desc": "所有伤害 +5%",
+  "stat": "dmg",
+  "per": 0.05,
+  "tier": "white",
+  "set": "flame"
+ },
+ {
+  "id": "ember",
+  "name": "焚魂炉",
+  "icon": "r_shade",
+  "desc": "所有伤害 +8%",
+  "stat": "dmg",
+  "per": 0.08,
+  "tier": "blue",
+  "set": "flame"
+ },
+ {
+  "id": "coin",
+  "name": "铜钱剑穗",
+  "icon": "r_coin",
+  "desc": "暴击率 +4%",
+  "stat": "crit",
+  "per": 0.04,
+  "tier": "white",
+  "set": "thunder"
+ },
+ {
+  "id": "thunder",
+  "name": "雷纹佩",
+  "icon": "r_bell",
+  "desc": "暴击率 +7%",
+  "stat": "crit",
+  "per": 0.07,
+  "tier": "blue",
+  "set": "thunder"
+ },
+ {
+  "id": "horse",
+  "name": "纸马",
+  "icon": "r_horse",
+  "desc": "移动速度 +5%",
+  "stat": "speed",
+  "per": 0.05,
+  "tier": "white",
+  "set": "swift"
+ },
+ {
+  "id": "blade",
+  "name": "疾影履",
+  "icon": "r_horse",
+  "desc": "冲刺冷却 -10%",
+  "stat": "dashCd",
+  "per": 0.1,
+  "tier": "blue",
+  "set": "swift"
+ },
+ {
+  "id": "bell",
+  "name": "引魂铃",
+  "icon": "r_bell",
+  "desc": "拾取范围 +25%",
+  "stat": "pickup",
+  "per": 0.25,
+  "tier": "white",
+  "set": "wealth"
+ },
+ {
+  "id": "purse",
+  "name": "聚宝袋",
+  "icon": "r_coin",
+  "desc": "拾取范围 +35%",
+  "stat": "pickup",
+  "per": 0.35,
+  "tier": "blue",
+  "set": "wealth"
+ },
+ {
+  "id": "mirror",
+  "name": "护身铜镜",
+  "icon": "r_mirror",
+  "desc": "受到的伤害 -5%",
+  "stat": "dmgTaken",
+  "per": -0.05,
+  "tier": "blue",
+  "set": "ward"
+ },
+ {
+  "id": "shade",
+  "name": "灯罩",
+  "icon": "r_shade",
+  "desc": "最大生命 +15",
+  "stat": "maxHp",
+  "per": 15,
+  "tier": "white",
+  "set": "ward"
+ },
+ {
+  "id": "gold1",
+  "name": "金光珠",
+  "icon": "r_coin",
+  "desc": "暴击率 +8%",
+  "stat": "crit",
+  "per": 0.08,
+  "tier": "purple",
+  "set": "burst"
+ },
+ {
+  "id": "gold2",
+  "name": "爆裂符",
+  "icon": "r_talisman",
+  "desc": "所有伤害 +11%",
+  "stat": "dmg",
+  "per": 0.11,
+  "tier": "purple",
+  "set": "burst"
+ },
+ {
+  "id": "soul1",
+  "name": "回春露",
+  "icon": "r_shade",
+  "desc": "最大生命 +30",
+  "stat": "maxHp",
+  "per": 30,
+  "tier": "purple",
+  "set": "soul"
+ },
+ {
+  "id": "soul2",
+  "name": "汲魂灯",
+  "icon": "r_bell",
+  "desc": "受到的伤害 -9%",
+  "stat": "dmgTaken",
+  "per": -0.09,
+  "tier": "purple",
+  "set": "soul"
+ },
+ {
+  "id": "army1",
+  "name": "百兵令",
+  "icon": "r_mirror",
+  "desc": "所有伤害 +9%",
+  "stat": "dmg",
+  "per": 0.09,
+  "tier": "purple",
+  "set": "army"
+ },
+ {
+  "id": "army2",
+  "name": "鸣锋印",
+  "icon": "r_horse",
+  "desc": "暴击率 +6%",
+  "stat": "crit",
+  "per": 0.06,
+  "tier": "blue",
+  "set": "army"
+ },
+ {
+  "id": "part_fu",
+  "name": "镇魂连爆符",
+  "icon": "evo_wanfu",
+  "desc": "满级驱邪符进化件：命中 35% 触发二次爆裂（范围伤害）",
+  "stat": "none",
+  "per": 0,
+  "tier": "gold",
+  "set": "",
+  "part": "fu"
+ },
+ {
+  "id": "part_huanhuo",
+  "name": "冥火聚魂灯",
+  "icon": "evo_wanfu",
+  "desc": "满级灯火环进化件：灯火 +2 团，击杀回复 1 生命",
+  "stat": "none",
+  "per": 0,
+  "tier": "gold",
+  "set": "",
+  "part": "huanhuo"
+ },
+ {
+  "id": "part_lei",
+  "name": "引雷铜柱",
+  "icon": "evo_wanfu",
+  "desc": "满级掌心雷进化件：落雷 +1 道、连锁 +2",
+  "stat": "none",
+  "per": 0,
+  "tier": "gold",
+  "set": "",
+  "part": "lei"
+ },
+ {
+  "id": "part_sword",
+  "name": "玄铁剑匣•双影",
+  "icon": "sword",
+  "desc": "飞剑 5 阶进化件：剑轮 +3 把、剑气 +2 道",
+  "stat": "none",
+  "per": 0,
+  "tier": "gold",
+  "set": "",
+  "part": "sword"
+ }
+]

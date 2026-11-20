@@ -1,0 +1,9 @@
+{
+ "accelTime": 0.07,
+ "decelTime": 0.025,
+ "turnTime": 0.06,
+ "camFollow": 30.0,
+ "stunSlowScale": 1.0,
+ "joystick": { "deadzone": 0.14, "radius": 104.0, "curveBase": 0.22, "curvePow": 1.25 },
+ "_doc": "accelTime: 从静止到全速秒数(0=瞬时)；decelTime: 松键到停下秒数；turnTime: 渲染朝向翻转的缓动秒数；camFollow: 镜头跟随速率(1/s,越大越紧)；joystick.*: 触屏摇杆死区/半径/曲线"
+}

@@ -1,0 +1,216 @@
+{
+ "wick": {
+  "start": 2,
+  "beforeBoss": 1,
+  "riftCost": 1,
+  "relicCost": 1
+ },
+ "rift": {
+  "maxEntries": 2,
+  "hpGate": 0.6,
+  "arenaRadius": 470,
+  "entries": [
+   {
+    "target": 55,
+    "limit": 70
+   },
+   {
+    "target": 70,
+    "limit": 90
+   }
+  ],
+  "failHpLoss": 0.3,
+  "exitInvuln": 2.0,
+  "dashCdMul": 1.25,
+  "stunMul": 1.2,
+  "hold": 1.0,
+  "spawnDist": 330
+ },
+ "threat": {
+  "intervalMul": 0.8,
+  "hpMul": 1.3,
+  "bossSummonAdd": 2,
+  "bossHpMul": 1.06
+ },
+ "warden": {
+  "name": "剑冢守关者 • 剑灵",
+  "tex": "boss_swordwarden",
+  "h": 170,
+  "r": 34,
+  "scale": 1.0,
+  "armor": 0.2,
+  "minDps": 8,
+  "speed": 78,
+  "dmg": 14,
+  "eff": {
+   "fu": 0.823,
+   "huanhuo": 0.0114,
+   "lei": 0.823,
+   "sword": 0.219
+  },
+  "cycleGap": 2.3,
+  "blades": 3,
+  "bladeRx": 175,
+  "bladeRy": 115,
+  "bladeW": 3.4,
+  "bladeDmg": 12,
+  "bladeHitCd": 0.55,
+  "bladeHitR": 32,
+  "orbitTime": 5.0,
+  "clashDown": 3.0,
+  "clashR": 55,
+  "lunge": {
+   "warn": 0.8,
+   "len": 560,
+   "width": 56,
+   "speed": 950,
+   "dmg": 22,
+   "stagger": 1.5,
+   "staggerTakenMul": 1.35
+  },
+  "rain": {
+   "count": 5,
+   "warn": 0.85,
+   "r": 85,
+   "dmg": 16,
+   "spread": 230
+  },
+  "traits": [
+   "御剑环身",
+   "回鞘突刺",
+   "剑雨"
+  ]
+ },
+ "sword": {
+  "name": "飞剑术",
+  "dmg": 150,
+  "orbitRx": 190,
+  "orbitRy": 115,
+  "orbitW": 5.2,
+  "orbitTime": 6.0,
+  "hitInterval": 0.25,
+  "hitR": 44,
+  "markPer": 0.06,
+  "markMax": 5,
+  "markLife": 5.0,
+  "recallWindow": 0.3,
+  "thrustMul": 1.8,
+  "thrustLen": 480,
+  "thrustHalfW": 52,
+  "dropTime": 3.0,
+  "cd": 2.5,
+  "pierce": true,
+  "stages": {
+   "kills": [
+    300,
+    1000,
+    2400,
+    4800
+   ],
+   "names": [
+    "回旋 • 召回刺出",
+    "双剑交替 • 二次伤害",
+    "环身剑轮",
+    "追踪剑气",
+    "剑阵爆发"
+   ],
+   "need": [
+    "起始",
+    "剑意 300 或击败副本守关者",
+    "剑意 1000 或击败副本守关者",
+    "剑意 2400 或击败副本守关者",
+    "剑意 4800 或击败副本守关者"
+   ],
+   "thrust2": {
+    "delay": 0.22,
+    "mul": 1.0
+   },
+   "wheel": {
+    "blades": 3,
+    "radius": 95,
+    "spin": 6.5,
+    "hitCd": 0.3,
+    "mul": 0.4,
+    "hitR": 34
+   },
+   "qi": {
+    "cd": 2.2,
+    "count": 2,
+    "speed": 720,
+    "life": 1.4,
+    "pierce": 3,
+    "mul": 0.3,
+    "hitR": 30,
+    "turn": 9.0,
+    "range": 650,
+    "cap": 28
+   },
+   "array": {
+    "cd": 10.0,
+    "count": 10,
+    "mul": 0.4,
+    "range": 480,
+    "speed": 800,
+    "life": 1.0
+   },
+   "branch": {
+    "radius": 0.2,
+    "cd": 0.15,
+    "maxLv": 3
+   }
+  }
+ },
+ "fusion": {
+  "atBreak": 1,
+  "names": {
+   "fu": "符剑合璧",
+   "huanhuo": "灯剑合璧",
+   "lei": "雷剑合璧"
+  },
+  "desc": {
+   "fu": "剑气命中留下符印，稍后炸开",
+   "huanhuo": "剑气/剑轮命中点燃妖物",
+   "lei": "召回刺出时引天雷连锁"
+  },
+  "guaranteeSwordStage": 1,
+  "atRealSec": 330
+ },
+ "farms": {
+  "_doc": "大地图练级点（完整/疾速模式）：站定进入，限时生存，期间妖潮不断；结束即通关，可反复刷，冷却按战斗时钟",
+  "coinfarm": {
+   "name": "聚宝鬼市",
+   "dur": 30,
+   "cd": 50,
+   "wave": 2.0,
+   "waveN": 9,
+   "cap": 70,
+   "coinPer": 4,
+   "coinEvery": 120,
+   "clearCoin": 80,
+   "hpGate": 0.5
+  },
+  "soulfarm": {
+   "name": "炼魂坑",
+   "dur": 30,
+   "cd": 50,
+   "wave": 1.8,
+   "waveN": 10,
+   "cap": 80,
+   "xpMul": 3.0,
+   "clearLv": 1,
+   "hpGate": 0.5
+  }
+ },
+ "forge": {
+  "_doc": "游商「灯油淬火」：铜钱的无限出口，每次 +dmg 伤害（加算）、+hp 生命上限，价格逐次上涨",
+  "base": 150,
+  "step": 100,
+  "dmg": 0.06,
+  "hp": 5
+ },
+ "ascend": {
+  "_doc": "升级三选一里武器/被动全满后（完整/疾速模式），先出这两张可无限叠加的「突破」卡，再出补给",
+  "dmg": 0.04,
+  "hp": 12
+ }
+}

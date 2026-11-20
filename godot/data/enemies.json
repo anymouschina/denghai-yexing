@@ -1,0 +1,204 @@
+{
+ "paperman": {
+  "name": "纸扎人",
+  "tex": "enemy_paperman",
+  "h": 66,
+  "r": 18,
+  "hp": 14,
+  "speed": 64,
+  "dmg": 6,
+  "xp": 1,
+  "ai": "chase",
+  "faceRight": true,
+  "knock": 1.0,
+  "fx": "paper"
+ },
+ "foxfire": {
+  "name": "狐火",
+  "tex": "enemy_foxfire",
+  "h": 52,
+  "r": 16,
+  "hp": 8,
+  "speed": 150,
+  "dmg": 5,
+  "xp": 1,
+  "ai": "chase",
+  "faceRight": false,
+  "knock": 1.2,
+  "fx": "wisp"
+ },
+ "lantern": {
+  "name": "破灯笼妖",
+  "tex": "enemy_lanternyokai",
+  "h": 70,
+  "r": 20,
+  "hp": 24,
+  "speed": 72,
+  "dmg": 8,
+  "xp": 2,
+  "ai": "ranged",
+  "faceRight": true,
+  "knock": 0.9,
+  "fx": "spark",
+  "keep": 300,
+  "shootCd": 3.4,
+  "charge": 0.5,
+  "bulletSpeed": 210,
+  "bulletDmg": 7
+ },
+ "jiangshi": {
+  "name": "跳尸",
+  "tex": "enemy_jiangshi",
+  "h": 98,
+  "r": 26,
+  "hp": 80,
+  "speed": 50,
+  "dmg": 14,
+  "xp": 4,
+  "ai": "hop",
+  "faceRight": false,
+  "knock": 0.25,
+  "fx": "paper",
+  "hopPeriod": 0.9
+ },
+ "firecracker": {
+  "name": "爆竹鬼",
+  "tex": "enemy_firecracker",
+  "h": 62,
+  "r": 18,
+  "hp": 20,
+  "speed": 98,
+  "dmg": 8,
+  "xp": 2,
+  "ai": "bomber",
+  "faceRight": true,
+  "knock": 0.9,
+  "fx": "spark",
+  "trigger": 95,
+  "fuse": 0.6,
+  "blastR": 88,
+  "blastDmg": 22,
+  "blastEnemyDmg": 40
+ },
+ "elites": {
+  "jiangshi": {
+   "name": "精英 • 跳尸王",
+   "scale": 1.65,
+   "hp": 900,
+   "dmg": 18,
+   "speed": 58,
+   "xp": 30,
+   "glow": 16729156,
+   "slamCd": 3.4,
+   "slamWarn": 0.55,
+   "slamR": 140,
+   "slamDmg": 20,
+   "sheet": "jiangshi_hop",
+   "sheetDriven": true,
+   "sheetScale": 1.35,
+   "armor": 0.12
+  },
+  "lantern": {
+   "name": "精英 • 破灯笼王",
+   "scale": 1.7,
+   "hp": 2600,
+   "dmg": 12,
+   "speed": 70,
+   "xp": 40,
+   "glow": 16729156,
+   "shootCd": 1.9,
+   "charge": 0.55,
+   "fan": 5,
+   "fanSpread": 0.22,
+   "bulletSpeed": 230,
+   "bulletDmg": 12,
+   "ringCd": 5.5,
+   "ringWarn": 0.5,
+   "ringTeleR": 120,
+   "ringCount": 14,
+   "armor": 0.12
+  }
+ },
+ "boss": {
+  "name": "灯骸老祖",
+  "tex": "boss",
+  "sheet": "boss_idle",
+  "sheetScale": 1.05,
+  "h": 250,
+  "r": 70,
+  "hp": 120000,
+  "speed": 42,
+  "dmg": 22,
+  "xp": 0,
+  "cd": [
+   2.8,
+   1.9
+  ],
+  "ringCount": [
+   16,
+   22
+  ],
+  "ringSpeed": 190,
+  "ringWarn": 0.5,
+  "ringTeleR": 170,
+  "bulletDmg": 14,
+  "slamCount": [
+   3,
+   5
+  ],
+  "slamWarn": [
+   0.6,
+   0.5
+  ],
+  "slamR": 110,
+  "slamDmg": 24,
+  "summon": 8,
+  "summonCap": 160,
+  "armor": 0.25,
+  "hpByMode": {
+   "_doc": "按模式的固定血量（不再乘威胁档）：完整/疾速都是 100 万；经典口径沿用 hp×威胁档作平衡基线",
+   "full": 1000000,
+   "quick": 1000000
+  },
+  "half": {
+   "_doc": "半壁灯海：以玩家为基准一侧整片半屏（宽 w×高 h，视口 1280×720），玩家离安全边 off 像素；二阶段左右连击",
+   "w": 700,
+   "h": 900,
+   "off": 170,
+   "warn": [
+    1.9,
+    1.6
+   ],
+   "gap": 1.25,
+   "dmg": 60
+  },
+  "drop": {
+   "_doc": "灯笼坠天：以玩家为圆心的巨型落点",
+   "r": 330,
+   "warn": 2.1,
+   "dmg": 70
+  },
+  "enrage": {
+   "at": 0.2,
+   "cdMul": 0.7
+  },
+  "cycle": {
+   "_doc": "技能循环（非经典）：ring 鬼火环 / slam 震地 / half 半壁灯海 / drop 灯笼坠天 / summon 召唤",
+   "p0": [
+    "ring",
+    "half",
+    "slam",
+    "summon",
+    "drop"
+   ],
+   "p1": [
+    "half",
+    "ring",
+    "drop",
+    "slam",
+    "half",
+    "summon"
+   ]
+  }
+ }
+}

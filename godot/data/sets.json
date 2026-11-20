@@ -1,0 +1,50 @@
+[
+ {
+  "id": "flame",
+  "name": "烈焰焚魂",
+  "stat": "dmg",
+  "per": 0.08
+ },
+ {
+  "id": "thunder",
+  "name": "雷火超载",
+  "stat": "crit",
+  "per": 0.06
+ },
+ {
+  "id": "swift",
+  "name": "疾行剑影",
+  "stat": "speed",
+  "per": 0.08
+ },
+ {
+  "id": "wealth",
+  "name": "聚财招魂",
+  "stat": "pickup",
+  "per": 0.2
+ },
+ {
+  "id": "ward",
+  "name": "镇邪护心",
+  "stat": "dmgTaken",
+  "per": -0.06
+ },
+ {
+  "id": "burst",
+  "name": "爆裂金光",
+  "stat": "dmg",
+  "per": 0.1
+ },
+ {
+  "id": "soul",
+  "name": "汲魂回春",
+  "stat": "maxHp",
+  "per": 25
+ },
+ {
+  "id": "army",
+  "name": "百兵齐鸣",
+  "stat": "crit",
+  "per": 0.08
+ }
+]

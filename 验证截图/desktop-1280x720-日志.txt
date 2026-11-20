@@ -1,0 +1,18 @@
+mode=desktop viewport=1280x720@1 canvas={"x":0,"y":0,"w":1280,"h":720} touchEnabled=false scale=1.000
+shot desktop-1280x720-01-title.png
+shot desktop-1280x720-02-start.png
+PASS WASD 移动 (1720,960)→(1770,924)
+PASS 方向键移动
+PASS 空格冲刺
+shot desktop-1280x720-03-move.png
+PASS 键鼠流程：自动攻击击杀9，升级三选一
+shot desktop-1280x720-04-levelup.png
+shot desktop-1280x720-05-pause.png
+PASS Esc 暂停
+PASS Esc 继续
+shot desktop-1280x720-06-result.png
+PASS 死亡结算
+shot desktop-1280x720-07-restart.png
+PASS Enter 再来一局
+pageErrors []
+PASS 页面无未捕获错误

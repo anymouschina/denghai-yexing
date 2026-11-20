@@ -1,0 +1,46 @@
+[4.5s] 截图 01-title.png  状态 {"scene":"title"}
+[5.3s] 点按 开始夜行 (169,172)
+[7.1s] 截图 02-start-joystick-and-buttons.png  状态 {"scene":"play","hp":100,"lv":1,"t":2.2,"seg":0,"wicks":2,"art":""}
+[7.1s] 阶段 phase=0 seg=0 t=2.3 hp=100/100 wicks=2 rift_state=none
+[10.5s] 截图 03-moving-and-auto-attacking.png  状态 {"scene":"play","hp":100,"lv":1,"t":7.3,"seg":0,"wicks":2,"art":""}
+[20.8s] 截图 04-levelup-choose-one-of-three.png  状态 {"scene":"levelup","hp":96,"lv":2,"t":21.6,"seg":0,"wicks":2,"art":""}
+[21.3s] 点按 选第 1 张卡 (245,195)
+[25.2s] 截图 05-paused.png  状态 {"scene":"paused","hp":96,"lv":2,"t":25.6,"seg":0,"wicks":2,"art":""}
+[28.9s] 点按 选第 1 张卡 (245,195)
+[46.1s] 点按 选第 1 张卡 (245,195)
+[65.6s] 点按 选第 1 张卡 (245,195)
+[73.5s] 点按 选第 1 张卡 (245,195)
+[100.5s] 点按 选第 1 张卡 (245,195)
+[105.3s] 点按 选第 1 张卡 (245,195)
+[117.8s] 点按 选第 1 张卡 (245,195)
+[129.5s] 点按 选第 1 张卡 (245,195)
+[131.9s] 点按 选第 1 张卡 (245,195)
+[142.8s] 点按 选第 1 张卡 (245,195)
+[147.6s] 阶段 phase=1 seg=0 t=160 hp=8/100 wicks=2 rift_state=weak
+[149.4s] 截图 06-break-field-cleared-rift-appears.png  状态 {"scene":"levelup","hp":58,"lv":12,"t":160,"seg":0,"wicks":2,"art":""}
+[150.6s] 点按 选第 1 张卡 (245,195)
+[155.5s] 阶段 phase=2 seg=0 t=160 hp=83/100 wicks=1 rift_state=none
+[157.0s] 截图 07-rift-entered-warden.png  状态 {"scene":"rift","hp":83,"lv":12,"t":160,"seg":0,"wicks":1,"art":""}
+[167.0s] 截图 08-rift-fighting-warden.png  状态 {"scene":"rift","hp":76,"lv":12,"t":160,"seg":0,"wicks":1,"art":""}
+[189.6s] 阶段 phase=1 seg=0 t=160 hp=3/100 wicks=1 rift_state=sealed
+[219.9s] 阶段 phase=0 seg=1 t=160 hp=3/100 wicks=1 rift_state=none
+[227.9s] 截图 09-result-death.png  状态 {"scene":"result","hp":0,"lv":12,"t":171.3,"seg":1,"wicks":1,"art":""}
+[228.7s] 点按 再来一局 (354,273)
+[230.8s] 截图 10-restart-new-run.png  状态 {"scene":"play","hp":100,"lv":1,"t":3.9,"seg":0,"wicks":2,"art":""}
+{
+ "viewport": "844x390",
+ "seed": "22",
+ "ts": "2",
+ "seen": {
+  "levelup": true,
+  "break_": true,
+  "rift": true,
+  "sword": false,
+  "result": true,
+  "restart": true,
+  "gift": false,
+  "pause": true
+ },
+ "errors": [],
+ "finalScene": "play"
+}

@@ -1,0 +1,53 @@
+[5.3s] 截图 01-title.png  状态 {"scene":"title"}
+[6.0s] 点按 开始夜行 (169,172)
+[7.6s] 截图 02-start-joystick-and-buttons.png  状态 {"scene":"play","hp":100,"lv":1,"t":2.2,"seg":0,"wicks":2,"art":""}
+[7.7s] 阶段 phase=0 seg=0 t=2.3 hp=100/100 wicks=2 rift_state=none
+[11.6s] 截图 03-moving-and-auto-attacking.png  状态 {"scene":"play","hp":100,"lv":1,"t":7,"seg":0,"wicks":2,"art":""}
+[19.1s] 截图 04-levelup-choose-one-of-three.png  状态 {"scene":"levelup","hp":100,"lv":2,"t":17.4,"seg":0,"wicks":2,"art":""}
+[19.6s] 点按 选第 1 张卡 (245,195)
+[26.2s] 截图 05-paused.png  状态 {"scene":"paused","hp":100,"lv":2,"t":25.9,"seg":0,"wicks":2,"art":""}
+[31.9s] 点按 选第 1 张卡 (245,195)
+[42.4s] 点按 选第 1 张卡 (245,195)
+[56.7s] 点按 选第 1 张卡 (245,195)
+[64.5s] 点按 选第 1 张卡 (245,195)
+[70.9s] 点按 选第 1 张卡 (245,195)
+[85.0s] 点按 选第 1 张卡 (245,195)
+[91.6s] 点按 选第 1 张卡 (245,195)
+[97.3s] 点按 选第 1 张卡 (245,195)
+[98.6s] 点按 选第 1 张卡 (245,195)
+[102.9s] 点按 选第 1 张卡 (245,195)
+[109.5s] 阶段 phase=1 seg=0 t=160 hp=129/180 wicks=2 rift_state=ok
+[111.1s] 截图 06-break-field-cleared-rift-appears.png  状态 {"scene":"levelup","hp":129,"lv":12,"t":160,"seg":0,"wicks":2,"art":""}
+[112.2s] 点按 选第 1 张卡 (245,195)
+[118.8s] 阶段 phase=2 seg=0 t=160 hp=179/180 wicks=1 rift_state=none
+[120.6s] 截图 07-rift-entered-warden.png  状态 {"scene":"rift","hp":179,"lv":12,"t":160,"seg":0,"wicks":1,"art":""}
+[130.4s] 截图 08-rift-fighting-warden.png  状态 {"scene":"rift","hp":179,"lv":12,"t":160,"seg":0,"wicks":1,"art":""}
+[155.9s] 阶段 phase=1 seg=0 t=160 hp=121/180 wicks=1 rift_state=sealed
+[157.6s] 阶段 phase=0 seg=1 t=160.2 hp=121/180 wicks=1 rift_state=none
+[167.5s] 点按 选第 1 张卡 (245,195)
+[184.6s] 点按 选第 1 张卡 (245,195)
+[199.0s] 点按 选第 1 张卡 (245,195)
+[207.6s] 点按 选第 1 张卡 (245,195)
+[223.4s] 点按 选第 1 张卡 (245,195)
+[228.5s] 点按 选第 1 张卡 (245,195)
+[230.1s] 点按 选第 1 张卡 (245,195)
+[243.9s] 截图 09-result-death.png  状态 {"scene":"result","hp":0,"lv":19,"t":257.4,"seg":1,"wicks":1,"art":""}
+[245.5s] 点按 再来一局 (354,273)
+[247.8s] 截图 10-restart-new-run.png  状态 {"scene":"play","hp":100,"lv":1,"t":3,"seg":0,"wicks":2,"art":""}
+{
+ "viewport": "844x390",
+ "seed": "21",
+ "ts": "2",
+ "seen": {
+  "levelup": true,
+  "break_": true,
+  "rift": true,
+  "sword": false,
+  "result": true,
+  "restart": true,
+  "gift": false,
+  "pause": true
+ },
+ "errors": [],
+ "finalScene": "play"
+}
