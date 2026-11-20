@@ -31,6 +31,20 @@ var sword_state := 0
 var ctl: Control
 var font: Font
 var sim: Sim
+var flare_tex: Texture2D = null
+var white_tex: Texture2D = null
+var batch := TriBatch.new(64)
+var _dirty := true
+var _prev_active := false
+var _prev_has_sword := false
+var _prev_has_pet := false
+var _prev_sword_state := -1
+var _prev_sword_ready := false
+var _prev_flare_ready := true
+var _prev_flare_active := false
+var _prev_dash_q := -1
+var _prev_combo_q := -1
+var _prev_oil_q := -1
 
 
 func setup(p_sim: Sim, p_enabled: bool) -> void:
@@ -38,12 +52,33 @@ func setup(p_sim: Sim, p_enabled: bool) -> void:
 	enabled = p_enabled
 	layer = 9
 	font = UI.font()
+	var wi := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	wi.fill(Color.WHITE)
+	white_tex = ImageTexture.create_from_image(wi)
+	var fl_ic := UI.icon("flare")
+	flare_tex = fl_ic.texture
+	fl_ic.free()
 	ctl = Control.new()
 	ctl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	ctl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ctl.draw.connect(_draw_ctl)
 	add_child(ctl)
 	visible = enabled
+	refresh_inset()
+	get_viewport().size_changed.connect(refresh_inset)
+
+
+func refresh_inset() -> void:
+	inset = SafeArea.insets(get_viewport())
+	inset = Vector4(minf(inset.x, 120), minf(inset.y, 60), minf(inset.z, 120), minf(inset.w, 60))
+	_dirty = true
+
+
+func _is_pressed(which: String) -> bool:
+	for k in btn_ids:
+		if btn_ids[k] == which:
+			return true
+	return false
 
 
 func vsize() -> Vector2:
@@ -111,6 +146,8 @@ func consume_pause() -> bool:
 
 
 func release_all() -> void:
+	if stick_id != -1 or not btn_ids.is_empty():
+		_dirty = true
 	stick_id = -1
 	move = Vector2.ZERO
 	mag = 0.0
@@ -141,6 +178,7 @@ func _input(ev: InputEvent) -> void:
 					continue
 				if _hit(b, st.position):
 					btn_ids[st.index] = b
+					_dirty = true
 					if b == "dash":
 						dash_q = true
 					elif b == "flare":
@@ -158,17 +196,21 @@ func _input(ev: InputEvent) -> void:
 				origin = Vector2(clampf(st.position.x, inset.x + R * 0.7, v.x * 0.5), clampf(st.position.y, v.y * 0.3, v.y - inset.w - R * 0.5))
 				knob = st.position
 				_update_stick(st.position)
+				_dirty = true
 		else:
 			if btn_ids.has(st.index):
 				btn_ids.erase(st.index)
+				_dirty = true
 			if st.index == stick_id:
 				stick_id = -1
 				move = Vector2.ZERO
 				mag = 0.0
+				_dirty = true
 	elif ev is InputEventScreenDrag:
 		var sd := ev as InputEventScreenDrag
 		if sd.index == stick_id:
 			_update_stick(sd.position)
+			_dirty = true
 
 
 func _update_stick(p: Vector2) -> void:
@@ -191,12 +233,19 @@ func _process(_delta: float) -> void:
 	if not enabled:
 		return
 	visible = active
+	if active != _prev_active:
+		_prev_active = active
+		if active:
+			_dirty = true
 	if not active and (stick_id != -1 or not btn_ids.is_empty()):
 		release_all()
+	if not active:
+		return
 	has_sword = sim.has_sword()
 	has_pet = sim.pet_on and sim.pet_dead_t <= 0.0
 	combo_k = 1.0 - clampf(sim.combo_cd / float(GameData.GD.pet.comboCd), 0.0, 1.0)
 	sword_state = sim.sw_state
+	var sword_ready := sword_state == Sim.SW_STOW and sim.sw_cd <= 0.0
 	dash_k = 1.0 - clampf(sim.dash_cd / maxf(0.01, sim.s_dash_cd), 0.0, 1.0)
 	var oil_v: Variant = sim.get("lantern_oil")
 	var oil: float = float(oil_v) if oil_v != null else 80.0
@@ -205,69 +254,92 @@ func _process(_delta: float) -> void:
 	oil_k = clampf(oil / 100.0, 0.0, 1.0)
 	flare_active = ft > 0.0
 	flare_ready = oil >= 25.0 and not flare_active
-	inset = SafeArea.insets(get_viewport())
-	inset = Vector4(minf(inset.x, 120), minf(inset.y, 60), minf(inset.z, 120), minf(inset.w, 60))
-	if active:
+	var dash_qi := int(round(dash_k * 60.0))
+	var combo_qi := int(round(combo_k * 60.0))
+	var oil_qi := int(round(oil_k * 60.0))
+	if has_sword != _prev_has_sword or has_pet != _prev_has_pet or sword_state != _prev_sword_state or sword_ready != _prev_sword_ready or flare_ready != _prev_flare_ready or flare_active != _prev_flare_active or dash_qi != _prev_dash_q or combo_qi != _prev_combo_q or oil_qi != _prev_oil_q:
+		_prev_has_sword = has_sword
+		_prev_has_pet = has_pet
+		_prev_sword_state = sword_state
+		_prev_sword_ready = sword_ready
+		_prev_flare_ready = flare_ready
+		_prev_flare_active = flare_active
+		_prev_dash_q = dash_qi
+		_prev_combo_q = combo_qi
+		_prev_oil_q = oil_qi
+		_dirty = true
+	if _dirty:
+		_dirty = false
 		ctl.queue_redraw()
 
 
 func _draw_ctl() -> void:
 	var v := vsize()
-	# 摇杆
+	# 摇杆（全部几何体合批到单个 TriBatch）
 	var base := origin if stick_id != -1 else Vector2(inset.x + 170.0, v.y - inset.w - 140.0)
 	var kp := knob if stick_id != -1 else base
-	ctl.draw_circle(base, R, Color(0.15, 0.17, 0.37, 0.28))
-	ctl.draw_arc(base, R, 0, TAU, 48, Color(1.0, 0.6, 0.24, 0.6 if stick_id != -1 else 0.35), 4.0, true)
-	ctl.draw_circle(kp, 44.0, Color(0.95, 0.55, 0.17, 0.78 if stick_id != -1 else 0.45))
-	ctl.draw_arc(kp, 44.0, 0, TAU, 32, UI.INK, 3.0, true)
+	batch.circle(base, R, Color(0.15, 0.17, 0.37, 0.28), 32)
+	batch.ring(base, R, 4.0, Color(1.0, 0.6, 0.24, 0.6 if stick_id != -1 else 0.35), 32)
+	batch.circle(kp, 44.0, Color(0.95, 0.55, 0.17, 0.78 if stick_id != -1 else 0.45), 24)
+	batch.ring(kp, 44.0, 3.0, UI.INK, 24)
 	# 闪
 	var dp := btn_pos("dash")
-	var pressed := btn_ids.values().has("dash")
+	var pressed := _is_pressed("dash")
 	var rr := btn_r("dash") * (0.92 if pressed else 1.0)
-	ctl.draw_circle(dp, rr, Color(0.1, 0.13, 0.28, 0.82))
-	ctl.draw_arc(dp, rr - 2.0, -PI / 2.0, -PI / 2.0 + dash_k * TAU, 48, UI.GHOST, 8.0, true)
+	batch.circle(dp, rr, Color(0.1, 0.13, 0.28, 0.82), 28)
+	batch.arc(dp, rr - 2.0, 8.0, -PI / 2.0, -PI / 2.0 + dash_k * TAU, UI.GHOST, 28)
 	if dash_k >= 1.0:
-		ctl.draw_arc(dp, rr + 4.0, 0, TAU, 48, Color(0.5, 0.9, 1.0, 0.55), 4.0, true)
-	ctl.draw_string(font, dp + Vector2(-38.5, 17.5), "闪", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 44, UI.INK)
-	ctl.draw_string(font, dp + Vector2(-40, 16), "闪", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 44, UI.PAPER)
+		batch.ring(dp, rr + 4.0, 4.0, Color(0.5, 0.9, 1.0, 0.55), 28)
 	# 挑灯（爆焰）
 	var fp := btn_pos("flare")
-	var prf := btn_ids.values().has("flare")
+	var prf := _is_pressed("flare")
 	var rf := btn_r("flare") * (0.92 if prf else 1.0)
 	var fbg := Color(0.28, 0.17, 0.06, 0.88) if (flare_ready or flare_active) else Color(0.12, 0.11, 0.18, 0.78)
-	ctl.draw_circle(fp, rf, fbg)
+	batch.circle(fp, rf, fbg, 24)
 	var fcol := UI.GOLD if flare_active else (UI.ORANGE if flare_ready else Color(0.55, 0.42, 0.35))
-	ctl.draw_arc(fp, rf - 2.0, -PI / 2.0, -PI / 2.0 + oil_k * TAU, 40, fcol, 7.0, true)
+	batch.arc(fp, rf - 2.0, 7.0, -PI / 2.0, -PI / 2.0 + oil_k * TAU, fcol, 24)
 	if flare_ready or flare_active:
-		ctl.draw_arc(fp, rf + 3.0, 0, TAU, 40, Color(1.0, 0.82, 0.42, 0.65 if flare_active else 0.42), 3.0, true)
-	var flab := "焰" if flare_active else "灯"
-	ctl.draw_string(font, fp + Vector2(-38.5, 16.5), flab, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 40, UI.INK)
-	ctl.draw_string(font, fp + Vector2(-40, 15), flab, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 40, UI.GOLD if (flare_ready or flare_active) else Color(0.7, 0.7, 0.75))
+		batch.ring(fp, rf + 3.0, 3.0, Color(1.0, 0.82, 0.42, 0.65 if flare_active else 0.42), 24)
 	# 剑
+	var sp := Vector2.ZERO
 	if has_sword:
-		var sp := btn_pos("skill")
+		sp = btn_pos("skill")
 		var ready := sword_state == Sim.SW_STOW and sim.sw_cd <= 0.0
-		var pr2 := btn_ids.values().has("skill")
+		var pr2 := _is_pressed("skill")
 		var r2 := btn_r("skill") * (0.92 if pr2 else 1.0)
-		ctl.draw_circle(sp, r2, Color(0.1, 0.2, 0.3, 0.85))
+		batch.circle(sp, r2, Color(0.1, 0.2, 0.3, 0.85), 24)
 		var col := UI.GHOST if (ready or sword_state == Sim.SW_ORBIT) else Color(0.5, 0.55, 0.7)
 		if sword_state == Sim.SW_DROP:
 			col = UI.BLOOD
-		ctl.draw_arc(sp, r2, 0, TAU, 40, col, 6.0 if sword_state == Sim.SW_ORBIT else 4.0, true)
-		var label := "剑" if sword_state != Sim.SW_ORBIT else "收"
-		ctl.draw_string(font, sp + Vector2(-38.5, 16.5), label, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 40, UI.INK)
-		ctl.draw_string(font, sp + Vector2(-40, 15), label, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 40, UI.PAPER)
+		batch.ring(sp, r2, 6.0 if sword_state == Sim.SW_ORBIT else 4.0, col, 24)
+	# 葫
+	var gp := Vector2.ZERO
 	if has_pet:
-		var gp := btn_pos("gourd")
-		var prg := btn_ids.values().has("gourd")
+		gp = btn_pos("gourd")
+		var prg := _is_pressed("gourd")
 		var rg := btn_r("gourd") * (0.92 if prg else 1.0)
-		ctl.draw_circle(gp, rg, Color(0.25, 0.12, 0.3, 0.85))
-		ctl.draw_arc(gp, rg - 2.0, -PI / 2.0, -PI / 2.0 + combo_k * TAU, 40, Color(1.0, 0.8, 0.3), 7.0, true)
-		ctl.draw_string(font, gp + Vector2(-38.5, 16.5), "葫", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 40, UI.INK)
-		ctl.draw_string(font, gp + Vector2(-40, 15), "葫", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 40, UI.PAPER)
+		batch.circle(gp, rg, Color(0.25, 0.12, 0.3, 0.85), 24)
+		batch.arc(gp, rg - 2.0, 7.0, -PI / 2.0, -PI / 2.0 + combo_k * TAU, Color(1.0, 0.8, 0.3), 24)
 	# 暂停
 	var pp := btn_pos("pause")
-	ctl.draw_circle(pp, btn_r("pause"), Color(0.1, 0.13, 0.28, 0.8))
-	ctl.draw_arc(pp, btn_r("pause"), 0, TAU, 32, Color(1.0, 0.6, 0.24, 0.7), 3.0, true)
-	ctl.draw_rect(Rect2(pp + Vector2(-10, -12), Vector2(7, 24)), UI.PAPER)
-	ctl.draw_rect(Rect2(pp + Vector2(3, -12), Vector2(7, 24)), UI.PAPER)
+	var prp := btn_r("pause")
+	batch.circle(pp, prp, Color(0.1, 0.13, 0.28, 0.8), 20)
+	batch.ring(pp, prp, 3.0, Color(1.0, 0.6, 0.24, 0.7), 20)
+	batch.full(pp.x - 10.0, pp.y - 12.0, 7.0, 24.0, UI.PAPER)
+	batch.full(pp.x + 3.0, pp.y - 12.0, 7.0, 24.0, UI.PAPER)
+	batch.flush(ctl.get_canvas_item(), white_tex)
+	# 图标（挑灯）
+	if flare_tex != null:
+		var isz := rf * 1.18
+		var fmod := Color.WHITE if (flare_ready or flare_active) else Color(0.55, 0.55, 0.62, 0.72)
+		ctl.draw_texture_rect(flare_tex, Rect2(fp - Vector2(isz * 0.5, isz * 0.5), Vector2(isz, isz)), false, fmod)
+	# 按钮文字（统一 26 号共享 HUD 字形图集，深色圆底免阴影二遍绘制）
+	ctl.draw_string(font, dp + Vector2(-40.0, 10.0), "闪", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 26, UI.PAPER)
+	if flare_tex == null:
+		var flab := "焰" if flare_active else "灯"
+		ctl.draw_string(font, fp + Vector2(-40.0, 10.0), flab, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 26, UI.GOLD if (flare_ready or flare_active) else Color(0.7, 0.7, 0.75))
+	if has_sword:
+		var label := "剑" if sword_state != Sim.SW_ORBIT else "收"
+		ctl.draw_string(font, sp + Vector2(-40.0, 10.0), label, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 26, UI.PAPER)
+	if has_pet:
+		ctl.draw_string(font, gp + Vector2(-40.0, 10.0), "葫", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 26, UI.PAPER)

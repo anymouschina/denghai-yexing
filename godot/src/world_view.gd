@@ -5,10 +5,13 @@ extends Node2D
 
 const LayerScript := preload("res://src/layer.gd")
 const FLASH_SHADER: Shader = preload("res://src/flash.gdshader")
+const MM_ATLAS_SHADER: Shader = preload("res://src/mm_atlas.gdshader")
 
 const FL_MERGE := 0.45
 const PICKUP_KINDS := ["soul", "coin", "oil", "chest"]
 const PICKUP_TEX := {"soul": "drop_soul", "coin": "drop_coin", "oil": "drop_oil", "chest": "drop_chest"}
+const PRELOAD_COMBAT := ["boss_swordwarden", "boss_swordlord", "boss_sedan", "boss_hundredlamps", "pet_huluwa"]
+const PRELOAD_BGS := ["field", "field2", "field3", "field_rift"]
 const FLOATER_SIZES := [20, 26]
 const AIL_COL := [Color(1.0, 0.6, 0.24), Color(0.5, 0.84, 1.0), Color(0.95, 0.76, 0.3), Color(0.62, 0.91, 1.0)]
 const PET_SHOT_COLS := [Color(1.0, 0.45, 0.2), Color(1.0, 0.85, 0.35), Color(0.55, 0.95, 1.0)]
@@ -20,6 +23,16 @@ const POI_TINTS := {
 	"coinfarm": Color(1.0, 0.88, 0.35),
 	"soulfarm": Color(0.55, 0.85, 1.0),
 }
+const LM_HEIGHTS := {
+	"altar": 156.0,
+	"arch": 186.0,
+	"tomb": 156.0,
+	"incense": 142.0,
+}
+const OPT_ASSETS := [
+	"obj_shrine_lamp", "obj_stele_soul",
+	"poi_vine", "poi_altar", "poi_arch", "poi_tomb", "poi_incense",
+]
 const SHEETS := {
 	"jiangshi_hop": {"tex": "res://assets/anim/jiangshi_hop.png", "w": 119, "h": 200, "n": 8},
 }
@@ -35,8 +48,32 @@ var sim: Sim
 var cam: Camera2D
 var bg_layer: Node2D
 var ground_add: Node2D
+var ground_props: Node2D
+var proj_layer: Node2D
 var fx_add: Node2D
 var white_layer: Node2D
+var mm_shadow: MultiMesh
+var mm_shadow_node: MultiMeshInstance2D
+var mm_enemy_back: MultiMesh
+var mm_enemy_back_node: MultiMeshInstance2D
+var mm_enemy_front: MultiMesh
+var mm_enemy_front_node: MultiMeshInstance2D
+var mm_particles: MultiMesh
+var mm_particles_node: MultiMeshInstance2D
+var _mm_sh_rid: RID
+var _mm_eb_rid: RID
+var _mm_ef_rid: RID
+var _mm_pt_rid: RID
+var _mm_sh_cap := 512
+var _mm_eb_cap := 512
+var _mm_ef_cap := 512
+var _mm_sh_n := 0
+var _mm_eb_n := 0
+var _mm_ef_n := 0
+var _mm_sh_buf := PackedFloat32Array()
+var _mm_eb_buf := PackedFloat32Array()
+var _mm_ef_buf := PackedFloat32Array()
+var _mm_pt_buf := PackedFloat32Array()
 var T: Dictionary = {}
 var t_anim := 0.0
 var floaters: Array = []
@@ -76,25 +113,28 @@ var _kinds := PackedInt32Array()
 var _cull := Rect2()
 var _vis_enemies: Array = []
 var _enemy_cache: Dictionary = {}
+var _enemy_type_cache: Dictionary = {}
 var _pk_cache: Dictionary = {}
 var _lamp_cache_seg := -999
 var _lamp_pos_cache := PackedVector2Array()
 var _poi_labels: Array = []
 
-var b_shadow := TriBatch.new(512)
-var b_enemy_back := TriBatch.new(512)
-var b_enemy_front := TriBatch.new(512)
+var b_lamps := TriBatch.new(32)
+var b_teles := TriBatch.new(64)
 var b_pick := {"soul": TriBatch.new(256), "coin": TriBatch.new(128), "oil": TriBatch.new(32), "chest": TriBatch.new(16)}
 var b_talisman := TriBatch.new(256)
 var b_ghostfire := TriBatch.new(128)
 var b_sword := TriBatch.new(64)
 var b_flame := TriBatch.new(64)
+var b_digits := TriBatch.new(128)
 var b_glow_ground := TriBatch.new(128)
-var b_glow_fx := TriBatch.new(512)
-var b_white_fx := TriBatch.new(512)
+var b_glow_fx := TriBatch.new(256)
+var b_ring_fx := TriBatch.new(128)
+var b_ghosts := TriBatch.new(32)
+var b_white_fx := TriBatch.new(128)
 var b_world_white := TriBatch.new(256)
 var b_bg := TriBatch.new(32)
-var b_flash := TriBatch.new(256)
+var b_flash := TriBatch.new(128)
 var b_fxs := {}
 var _ekeys := PackedInt64Array()
 var _eobjs: Array = []
@@ -106,33 +146,104 @@ func setup(p_sim: Sim) -> void:
 	for n in ["hero_run", "enemy_atlas", "proj_talisman", "proj_flame",
 			"proj_ghostfire", "proj_sword", "fx_thunder", "fx_boom", "drop_soul", "drop_coin", "drop_oil", "drop_chest", "field_lantern", "rift_portal", "merchant"]:
 		T[n] = load("res://assets/%s.png" % n)
+	# 启动时预加载战斗贴图（Boss / 小 Boss / 葫芦娃 / 全部场地背景），消除战斗中同步 load() 卡顿
+	T["boss_idle"] = load("res://assets/anim/boss_idle.png")
+	for cn in PRELOAD_COMBAT:
+		T[cn] = load("res://assets/%s.png" % cn)
+	for bn in PRELOAD_BGS:
+		T[bn] = load("res://assets/%s.jpg" % bn)
+	for opt_n in OPT_ASSETS:
+		var opt_path := "res://assets/%s.png" % opt_n
+		T[opt_n] = load(opt_path) if ResourceLoader.exists(opt_path) else null
 	for k in SHEETS:
 		T[k] = load(SHEETS[k].tex)
 	for pk in PICKUP_KINDS:
 		var ptx: Texture2D = T[PICKUP_TEX[pk]]
 		_pk_cache[pk] = [b_pick[pk], float(ptx.get_width()), float(ptx.get_height()), {"soul": 0.42, "coin": 0.42, "oil": 0.62, "chest": 0.75}[pk]]
 	T.glow = Fx.glow()
+	T.ring = Fx.ring_tex()
+	T.digits = Fx.digit_strip_tex()
 	var wi := Image.create(2, 2, false, Image.FORMAT_RGBA8)
 	wi.fill(Color.WHITE)
 	T.white = ImageTexture.create_from_image(wi)
 	var ar: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/enemy_atlas.json"))
+	var aw := float(T.enemy_atlas.get_width())
+	var ah := float(T.enemy_atlas.get_height())
 	for k in ar:
 		var r: Array = ar[k]
-		var aw := float(T.enemy_atlas.get_width())
-		var ah := float(T.enemy_atlas.get_height())
 		_enemy_cache[k] = [T.enemy_atlas, Rect2(r[0], r[1], r[2], r[3]), float(r[2]), float(r[3]), 1.0, Rect2(r[0] / aw, r[1] / ah, r[2] / aw, r[3] / ah), float(GameData.ANCH.get(k, 0.5)), float(r[2]) / float(r[3])]
+	# 预缓存每种普通怪的扁平 PackedFloat32Array：[u0, v0, du, dv, anchor_x, aspect, def_h, is_hop, u1]
+	for et in GameData.EN:
+		var ed: Dictionary = GameData.EN[et]
+		var txk := String(ed.get("tex", ""))
+		if _enemy_cache.has(txk):
+			var info: Array = _enemy_cache[txk]
+			var uv: Rect2 = info[5]
+			_enemy_type_cache[et] = PackedFloat32Array([
+				uv.position.x, uv.position.y, uv.size.x, uv.size.y,
+				float(info[6]), float(info[7]), float(ed.get("h", 66.0)),
+				1.0 if String(ed.get("ai", "")) == "hop" else 0.0,
+				uv.position.x + uv.size.x,
+			])
 	cam = Camera2D.new()
 	cam.position_smoothing_enabled = false
 	add_child(cam)
 	cam.make_current()
-	bg_layer = _mk_layer(-3, false, _draw_bg)
-	ground_add = _mk_layer(-2, true, _draw_ground_add)
-	fx_add = _mk_layer(1, true, _draw_fx_add)
-	white_layer = _mk_layer(2, false, _draw_white)
+	bg_layer = _mk_layer(-5, false, _draw_bg)
+	ground_add = _mk_layer(-4, true, _draw_ground_add)
+	ground_props = _mk_layer(-3, false, _draw_ground_props)
+	var mm_atlas_mat := ShaderMaterial.new()
+	mm_atlas_mat.shader = MM_ATLAS_SHADER
+	var sh_pair := _mk_mm(-2, T.glow, null, false, _mm_sh_cap, false)
+	mm_shadow_node = sh_pair[0]
+	mm_shadow = sh_pair[1]
+	_mm_sh_rid = mm_shadow.get_rid()
+	_mm_sh_buf.resize(_mm_sh_cap * 12)
+	var eb_pair := _mk_mm(-1, T.enemy_atlas, mm_atlas_mat, true, _mm_eb_cap, false)
+	mm_enemy_back_node = eb_pair[0]
+	mm_enemy_back = eb_pair[1]
+	_mm_eb_rid = mm_enemy_back.get_rid()
+	_mm_eb_buf.resize(_mm_eb_cap * 16)
+	var ef_pair := _mk_mm(1, T.enemy_atlas, mm_atlas_mat, true, _mm_ef_cap, false)
+	mm_enemy_front_node = ef_pair[0]
+	mm_enemy_front = ef_pair[1]
+	_mm_ef_rid = mm_enemy_front.get_rid()
+	_mm_ef_buf.resize(_mm_ef_cap * 16)
+	proj_layer = _mk_layer(2, false, _draw_proj_layer)
+	fx_add = _mk_layer(3, true, _draw_fx_add)
+	var pt_pair := _mk_mm(3, T.glow, null, false, part_pool.cap, true)
+	mm_particles_node = pt_pair[0]
+	mm_particles = pt_pair[1]
+	_mm_pt_rid = mm_particles.get_rid()
+	_mm_pt_buf.resize(part_pool.cap * 12)
+	white_layer = _mk_layer(4, false, _draw_white)
 	var mat := ShaderMaterial.new()
 	mat.shader = FLASH_SHADER
 	white_layer.material = mat
 	cam_pos = Vector2(sim.px, sim.py)
+
+
+func _mk_mm(z: int, tex: Texture2D, mat: Material, use_custom: bool, cap: int, additive: bool) -> Array:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_2D
+	mm.use_colors = true
+	mm.use_custom_data = use_custom
+	mm.mesh = Fx.unit_quad()
+	mm.custom_aabb = AABB(Vector3(-1000.0, -1000.0, -10.0), Vector3(Sim.W + 2000.0, Sim.H + 2000.0, 20.0))
+	mm.instance_count = cap
+	mm.visible_instance_count = 0
+	var node := MultiMeshInstance2D.new()
+	node.multimesh = mm
+	node.texture = tex
+	node.z_index = z
+	if mat != null:
+		node.material = mat
+	elif additive:
+		var am := CanvasItemMaterial.new()
+		am.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		node.material = am
+	add_child(node)
+	return [node, mm]
 
 
 func _mk_layer(z: int, additive: bool, cb: Callable) -> Node2D:
@@ -251,11 +362,13 @@ func tick(delta: float) -> void:
 				cam_pos = Vector2(sim.px, sim.py - 30.0)
 		last_phase = sim.phase
 		last_seg = sim.seg
-	# 暂停/弹窗期间（delta == 0 且无转场/震屏）跳过 5 层重绘，降低空转 GPU/CPU 消耗
+	# 暂停/弹窗期间（delta == 0 且无转场/震屏）跳过重绘，降低空转 GPU/CPU 消耗
 	if delta > 0.0 or phase_changed or fade > 0.0 or trauma > 0.001:
 		queue_redraw()
 		bg_layer.queue_redraw()
 		ground_add.queue_redraw()
+		ground_props.queue_redraw()
+		proj_layer.queue_redraw()
 		fx_add.queue_redraw()
 		white_layer.queue_redraw()
 
@@ -290,7 +403,7 @@ func _push_fx_sprite(d: Dictionary) -> void:
 func _float(x: float, y: float, text: String, col: Color, size: int = 22) -> Dictionary:
 	if floaters.size() > 44:
 		_swap_remove(floaters, 0)
-	var f := {"x": x, "y": y, "text": text, "col": col, "size": size, "life": 0.85, "t0": t_anim, "amt": 0.0}
+	var f := {"x": x, "y": y, "text": text, "col": col, "size": size, "life": 0.85, "t0": t_anim, "amt": 0.0, "is_num": Fx.is_digit_str(text)}
 	floaters.append(f)
 	return f
 
@@ -512,8 +625,6 @@ func _consume_events() -> void:
 func _bg_tex() -> Texture2D:
 	var key: String = "field_rift" if sim.phase == Sim.PH_RIFT else String(sim.seg_theme(sim.seg).field)
 	if not T.has(key):
-		for k in ["field", "field2", "field3", "field_rift"]:
-			T.erase(k)
 		T[key] = load("res://assets/%s.jpg" % key)
 	return T[key]
 
@@ -622,6 +733,18 @@ func defer__draw_ground_add(c: Node2D) -> void:
 			elif pk != "merchant":
 				var st := sim.poi_state(i)
 				b_glow_ground.full(px2 - 200.0, py2 - 260.0, 400.0, 300.0, Color(0.7, 0.3, 1.0, 0.45 if st == "ok" else 0.15))
+		# 荒野互动目标（破庙灯龛 / 镇魂断碑）地面光晕（合批进 b_glow_ground）
+		for obj in sim.objectives:
+			if not (obj is Dictionary) or bool(obj.get("done", false)):
+				continue
+			var ox := float(obj.x)
+			var oy := float(obj.y)
+			if _cull.size.x > 0.0 and not _visible(ox, oy, 300.0):
+				continue
+			var is_lamp := String(obj.get("kind", "")) == "shrine_lamp"
+			var opulse := 0.44 + sin(t_anim * 3.4 + ox * 0.01) * 0.10
+			var ocol := Color(1.0, 0.72, 0.25, opulse) if is_lamp else Color(0.42, 0.88, 1.0, opulse)
+			b_glow_ground.full(ox - 165.0, oy - 125.0, 330.0, 250.0, ocol)
 	# 段间：裂隙与游商的光
 	if sim.phase == Sim.PH_BREAK:
 		var rp := sim.break_pos("rift")
@@ -655,9 +778,39 @@ func _is_special(e: SimEnemy) -> bool:
 	return e.boss or e.elite or e.warden or e.ai == "swordlord" or e.ai == "sedan" or e.ai == "lamps"
 
 
+func _push_shadow(x: float, y: float, w: float, h: float, alpha: float) -> void:
+	if _mm_sh_n >= _mm_sh_cap:
+		_mm_sh_cap *= 2
+		mm_shadow.instance_count = _mm_sh_cap
+		_mm_sh_buf.resize(_mm_sh_cap * 12)
+	var o := _mm_sh_n * 12
+	_mm_sh_buf[o] = w
+	_mm_sh_buf[o + 3] = x
+	_mm_sh_buf[o + 5] = h
+	_mm_sh_buf[o + 7] = y
+	_mm_sh_buf[o + 11] = alpha
+	_mm_sh_n += 1
+
+
+func _get_enemy_info(e: SimEnemy) -> PackedFloat32Array:
+	var cached: Variant = _enemy_type_cache.get(e.type)
+	if cached != null:
+		return cached
+	var d: Dictionary = e.def
+	var info: Array = _enemy_cache[d.tex]
+	var uv: Rect2 = info[5]
+	var arr := PackedFloat32Array([
+		uv.position.x, uv.position.y, uv.size.x, uv.size.y,
+		float(info[6]), float(info[7]), float(d.h),
+		1.0 if e.ai == "hop" else 0.0,
+		uv.position.x + uv.size.x,
+	])
+	_enemy_type_cache[e.type] = arr
+	return arr
+
+
 func _draw() -> void:
 	var t_draw := Time.get_ticks_usec()
-	var ci := get_canvas_item()
 	var vis := get_viewport_rect().size / maxf(0.01, cam.zoom.x)
 	_cull = Rect2(cam.position - vis / 2.0, vis)
 	_keys.resize(0)
@@ -667,26 +820,26 @@ func _draw() -> void:
 	_objs.clear()
 	_kinds.resize(0)
 	_poi_labels.clear()
-	for lp in _lamp_positions():
-		if _visible(lp.x, lp.y, 200.0):
-			_draw_lamp(lp)
-	b_shadow.full(sim.px - 28.0, sim.py - 7.0, 56.0, 14.0, Color(0, 0, 0, 0.4))
+	_mm_sh_n = 0
+	_mm_eb_n = 0
+	_mm_ef_n = 0
+	var t_s := Time.get_ticks_usec()
+	_push_shadow(sim.px - 28.0, sim.py - 7.0, 56.0, 14.0, 0.4)
 	if sim.pet_on and sim.pet_dead_t <= 0.0:
-		b_shadow.full(sim.pet_pos.x - 28.0, sim.pet_pos.y + 8.0, 56.0, 14.0, Color(0, 0, 0, 0.42))
+		_push_shadow(sim.pet_pos.x - 28.0, sim.pet_pos.y + 8.0, 56.0, 14.0, 0.42)
 	if sim.phase == Sim.PH_BREAK:
 		var mp_sh := sim.break_pos("merchant")
-		b_shadow.full(mp_sh.x - 44.0, mp_sh.y - 10.0, 88.0, 20.0, Color(0, 0, 0, 0.4))
+		_push_shadow(mp_sh.x - 44.0, mp_sh.y - 10.0, 88.0, 20.0, 0.4)
 	var cx0 := _cull.position.x - 130.0
 	var cx1 := _cull.end.x + 130.0
 	var cy0 := _cull.position.y - 130.0
 	var cy1 := _cull.end.y + 290.0
-	var shc := Color(0, 0, 0, 0.4)
 	for e: SimEnemy in sim.enemies:
 		var ex := e.x
 		var ey := e.y
 		if (ex > cx0 and ex < cx1 and ey > cy0 and ey < cy1) or e.boss or e.elite:
 			var er := e.r
-			b_shadow.full(ex - er * 1.3, ey - er * 0.3, er * 2.6, er * 0.6, shc)
+			_push_shadow(ex - er * 1.3, ey - er * 0.3, er * 2.6, er * 0.6, 0.4)
 			if e.boss or e.elite or e.warden or e.ai == "swordlord" or e.ai == "sedan" or e.ai == "lamps":
 				_push(ey, 1, e)
 				_vis_enemies.append(e)
@@ -696,17 +849,72 @@ func _draw() -> void:
 	_push(sim.py, 2, null)
 	if sim.phase == Sim.PH_SEG:
 		for i in range(sim.pois.size()):
-			if _visible(float(sim.pois[i].x), float(sim.pois[i].y), 260.0):
-				_push(float(sim.pois[i].y), 5, i)
+			var poi_x := float(sim.pois[i].x)
+			var poi_y := float(sim.pois[i].y)
+			if _visible(poi_x, poi_y, 260.0):
+				var pkind := String(sim.pois[i].kind)
+				if (pkind == "vine" and not sim.vine_taken.has(i)) or Sim.LM_KINDS.has(pkind):
+					_push_shadow(poi_x - 52.0, poi_y - 12.0, 104.0, 24.0, 0.4)
+				_push(poi_y, 5, i)
+		for obj in sim.objectives:
+			if not (obj is Dictionary) or bool(obj.get("done", false)):
+				continue
+			var ox := float(obj.x)
+			var oy := float(obj.y)
+			if _visible(ox, oy, 260.0):
+				_push_shadow(ox - 52.0, oy - 12.0, 104.0, 24.0, 0.4)
+				_push(oy, 6, obj)
 	if sim.phase == Sim.PH_BREAK:
 		_push(sim.break_pos("rift").y, 4, "rift")
 		_push(sim.break_pos("merchant").y, 4, "merchant")
 		_push(sim.break_pos("gate").y, 4, "gate")
+	if _mm_sh_n > 0:
+		RenderingServer.multimesh_set_buffer(_mm_sh_rid, _mm_sh_buf)
+	mm_shadow.visible_instance_count = _mm_sh_n
+	PerfStat.add("d_shadow", t_s)
 	_keys.sort()
 	_ekeys.sort()
-	# 预警圈统一进白图批（1 次绘制调用）
+	# 普通小怪：直接写入 MultiMeshInstance2D 扁平缓冲（身后 z=-1 / 身前 z=1，各 1 次绘制调用）
+	var t_e := Time.get_ticks_usec()
+	var py_key := (int(sim.py * 4.0) + 40000)
+	for key in _ekeys:
+		var ee: SimEnemy = _eobjs[int(key & 0xFFFFF)]
+		_batch_enemy_mm(ee, (key >> 20) <= py_key)
+	if _mm_eb_n > 0:
+		RenderingServer.multimesh_set_buffer(_mm_eb_rid, _mm_eb_buf)
+	mm_enemy_back.visible_instance_count = _mm_eb_n
+	if _mm_ef_n > 0:
+		RenderingServer.multimesh_set_buffer(_mm_ef_rid, _mm_ef_buf)
+	mm_enemy_front.visible_instance_count = _mm_ef_n
+	PerfStat.add("d_enemy", t_e)
+	# 主角 / 特殊怪 / 地标 / 荒野目标（z=0，夹在 mm_enemy_back 与 mm_enemy_front 之间）
+	for key in _keys:
+		var idx := int(key & 0xFFFFF)
+		var o: Variant = _objs[idx]
+		match _kinds[idx]:
+			1: _draw_enemy(o)
+			2: _draw_player()
+			4: _draw_zone(o)
+			5: _draw_poi(o)
+			6: _draw_objective(o)
+	PerfStat.add("world_draw", t_draw)
+
+
+func _draw_ground_props(c: Node2D) -> void:
+	var t_draw := Time.get_ticks_usec()
+	var ci := c.get_canvas_item()
+	# 骨灯合批（1 DC）
+	var ltx: Texture2D = T.field_lantern
+	var lw := float(ltx.get_width())
+	var lh := float(ltx.get_height())
+	var lcol := Color.WHITE if _lamps_lit() else Color(0.35, 0.36, 0.5)
+	for lp in _lamp_positions():
+		if _visible(lp.x, lp.y, 200.0):
+			b_lamps.full(lp.x - lw * 0.5, lp.y - lh, lw, lh, lcol)
+	b_lamps.flush(ci, ltx)
+	# 预警圈统一进白图批（1 DC）
 	_batch_teles()
-	b_world_white.flush(ci, T.white)
+	b_teles.flush(ci, T.white)
 	# 掉落物：每种贴图一个批
 	var t_pk := Time.get_ticks_usec()
 	for k: SimPickup in sim.pickups:
@@ -715,50 +923,26 @@ func _draw() -> void:
 	for kind in PICKUP_KINDS:
 		(b_pick[kind] as TriBatch).flush(ci, T[PICKUP_TEX[kind]])
 	PerfStat.add("d_pickup", t_pk)
-	var t_s := Time.get_ticks_usec()
-	b_shadow.flush(ci, T.glow)
-	PerfStat.add("d_shadow", t_s)
-	# 普通小怪：按 y 排序后以主角 y 为界拆成“身后/身前”两批（各 1 次提交）
-	var t_e := Time.get_ticks_usec()
-	var py_key := (int(sim.py * 4.0) + 40000)
-	for key in _ekeys:
-		var ee: SimEnemy = _eobjs[int(key & 0xFFFFF)]
-		_batch_enemy(ee, b_enemy_back if (key >> 20) <= py_key else b_enemy_front)
-	PerfStat.add("d_enemy", t_e)
-	b_enemy_back.flush(ci, T.enemy_atlas)
-	for key in _keys:
-		var idx := int(key & 0xFFFFF)
-		var o: Variant = _objs[idx]
-		match _kinds[idx]:
-			0: _draw_lamp(o)
-			1: _draw_enemy(o)
-			2: _draw_player()
-			3: _draw_pickup(o)
-			4: _draw_zone(o)
-			5: _draw_poi(o)
-	b_enemy_front.flush(ci, T.enemy_atlas)
+	PerfStat.add("world_draw", t_draw)
+
+
+func _draw_proj_layer(c: Node2D) -> void:
+	var t_draw := Time.get_ticks_usec()
+	var ci := c.get_canvas_item()
 	# 叠加层：血条 / 符印 / 剑痕 / 异常色点 / POI 环 / 文字底框 → 统一进 b_world_white 一次提交
 	for e2: SimEnemy in _vis_enemies:
 		if e2.mark_t > 0.0 or e2.marks > 0 or e2.elite or e2.boss or e2.ail_kinds > 0:
 			_batch_enemy_overlays(e2)
 	var t_p := Time.get_ticks_usec()
-	_draw_projectiles()
+	_draw_projectiles(c)
 	PerfStat.add("d_proj", t_p)
 	b_world_white.flush(ci, T.white)
-	# 所有世界文字（POI 标牌 + 飘字）在所有实体/弹幕之后统一提交，避免打断精灵合批
+	# 所有世界文字（POI 标牌 + 位图数字飘字）在所有实体/弹幕之后统一提交
 	var t_f := Time.get_ticks_usec()
-	_draw_poi_labels()
-	_draw_floaters()
+	_draw_poi_labels(c)
+	_draw_floaters(c)
 	PerfStat.add("d_float", t_f)
 	PerfStat.add("world_draw", t_draw)
-
-
-func _draw_lamp(p: Vector2) -> void:
-	var tx: Texture2D = T.field_lantern
-	var lit := _lamps_lit()
-	var sz := Vector2(tx.get_width(), tx.get_height())
-	var col := Color.WHITE if lit else Color(0.35, 0.36, 0.5)
-	draw_texture_rect(tx, Rect2(p.x - sz.x / 2.0, p.y - sz.y, sz.x, sz.y), false, col)
 
 
 func _batch_teles() -> void:
@@ -767,22 +951,22 @@ func _batch_teles() -> void:
 			var kr := clampf(tl.t / maxf(0.01, tl.dur), 0.0, 1.0)
 			var rx := tl.x - tl.rw * 0.5
 			var ry := tl.y - tl.rh * 0.5
-			b_world_white.full(rx, ry, tl.rw, tl.rh, Color(0.95, 0.25, 0.18, 0.10 + 0.22 * kr))
-			b_world_white.rect_frame(rx, ry, tl.rw, tl.rh, 4.0, Color(1.0, 0.45, 0.35, 0.9))
+			b_teles.full(rx, ry, tl.rw, tl.rh, Color(0.95, 0.25, 0.18, 0.10 + 0.22 * kr))
+			b_teles.rect_frame(rx, ry, tl.rw, tl.rh, 4.0, Color(1.0, 0.45, 0.35, 0.9))
 			var inset := minf(tl.rw, tl.rh) * 0.5 * (1.0 - kr)
 			var iw := tl.rw - inset * 2.0
 			var ih := tl.rh - inset * 2.0
 			if iw > 0.0 and ih > 0.0:
-				b_world_white.full(rx + inset, ry + inset, iw, ih, Color(1.0, 0.7, 0.45, 0.22))
+				b_teles.full(rx + inset, ry + inset, iw, ih, Color(1.0, 0.7, 0.45, 0.22))
 			continue
 		if tl.r <= 0.0:
 			continue
 		var k := clampf(tl.t / maxf(0.01, tl.dur), 0.0, 1.0)
 		var cc := Vector2(tl.x, tl.y)
-		b_world_white.circle(cc, tl.r, Color(0.88, 0.27, 0.23, 0.12 + 0.18 * k), 28)
-		b_world_white.ring(cc, tl.r, 3.0, Color(1.0, 0.45, 0.35, 0.8), 28)
+		b_teles.circle(cc, tl.r, Color(0.88, 0.27, 0.23, 0.12 + 0.18 * k), 28)
+		b_teles.ring(cc, tl.r, 3.0, Color(1.0, 0.45, 0.35, 0.8), 28)
 		if k > 0.02:
-			b_world_white.ring(cc, tl.r * k, 2.0, Color(1.0, 0.7, 0.5, 0.7), 24)
+			b_teles.ring(cc, tl.r * k, 2.0, Color(1.0, 0.7, 0.5, 0.7), 24)
 
 
 func _draw_player() -> void:
@@ -830,6 +1014,14 @@ func _tex(name: String) -> Texture2D:
 	return T[name]
 
 
+func _opt_tex(name: String) -> Texture2D:
+	if not T.has(name):
+		var path := "res://assets/%s.png" % name
+		T[name] = load(path) if ResourceLoader.exists(path) else null
+	var v: Variant = T[name]
+	return v as Texture2D if v is Texture2D else null
+
+
 func _enemy_tex(e: SimEnemy) -> Array:
 	if e.warden:
 		var wt: Texture2D = _tex("boss_swordwarden")
@@ -853,17 +1045,16 @@ func _enemy_tex(e: SimEnemy) -> Array:
 	return _enemy_cache[e.def.tex]
 
 
-func _batch_enemy(e: SimEnemy, b: TriBatch) -> void:
-	var d: Dictionary = e.def
-	var info: Array = _enemy_cache[d.tex]
-	var hh: float = float(d.h) * e.scale_mul
+func _batch_enemy_mm(e: SimEnemy, is_back: bool) -> void:
+	var ec := _get_enemy_info(e)
+	var hh: float = ec[6] * e.scale_mul
 	var sq := e.squash
 	var wob := 1.0
 	var sx := 2.0 - sq
-	if e.ai != "hop":
+	if ec[7] == 0.0:
 		wob = 1.0 + sin(t_anim * 9.0 + e.phase) * 0.05
 		sx /= wob
-	var w: float = hh * float(info[7]) * sx
+	var w: float = hh * ec[5] * sx
 	var h := hh * sq * wob
 	var col := Color.WHITE
 	var st := e.state
@@ -878,13 +1069,54 @@ func _batch_enemy(e: SimEnemy, b: TriBatch) -> void:
 		col = _ail_tint(e)
 	elif e.burn_t > 0.0 and st != "fuse" and st != "charge":
 		col = Color(1.0, 0.78, 0.6)
-	var ax: float = info[6]
+	var ax: float = ec[4]
 	var flip: bool = e.flip
 	var px := e.x - ((1.0 - ax) if flip else ax) * w
 	var py := e.y - h * 0.95 - e.lift
-	b.sprite(px, py, w, h, flip, info[5], col)
+	var u0 := ec[8] if flip else ec[0]
+	var du := -ec[2] if flip else ec[2]
+	var v0 := ec[1]
+	var dv := ec[3]
+	if is_back:
+		if _mm_eb_n >= _mm_eb_cap:
+			_mm_eb_cap *= 2
+			mm_enemy_back.instance_count = _mm_eb_cap
+			_mm_eb_buf.resize(_mm_eb_cap * 16)
+		var o := _mm_eb_n * 16
+		_mm_eb_buf[o] = w
+		_mm_eb_buf[o + 3] = px
+		_mm_eb_buf[o + 5] = h
+		_mm_eb_buf[o + 7] = py
+		_mm_eb_buf[o + 8] = col.r
+		_mm_eb_buf[o + 9] = col.g
+		_mm_eb_buf[o + 10] = col.b
+		_mm_eb_buf[o + 11] = col.a
+		_mm_eb_buf[o + 12] = u0
+		_mm_eb_buf[o + 13] = v0
+		_mm_eb_buf[o + 14] = du
+		_mm_eb_buf[o + 15] = dv
+		_mm_eb_n += 1
+	else:
+		if _mm_ef_n >= _mm_ef_cap:
+			_mm_ef_cap *= 2
+			mm_enemy_front.instance_count = _mm_ef_cap
+			_mm_ef_buf.resize(_mm_ef_cap * 16)
+		var o := _mm_ef_n * 16
+		_mm_ef_buf[o] = w
+		_mm_ef_buf[o + 3] = px
+		_mm_ef_buf[o + 5] = h
+		_mm_ef_buf[o + 7] = py
+		_mm_ef_buf[o + 8] = col.r
+		_mm_ef_buf[o + 9] = col.g
+		_mm_ef_buf[o + 10] = col.b
+		_mm_ef_buf[o + 11] = col.a
+		_mm_ef_buf[o + 12] = u0
+		_mm_ef_buf[o + 13] = v0
+		_mm_ef_buf[o + 14] = du
+		_mm_ef_buf[o + 15] = dv
+		_mm_ef_n += 1
 	if e.flash > 0.0:
-		b_flash.sprite(px, py, w, h, flip, info[5], Color(1, 1, 1, 0.8))
+		b_flash.rect(px, py, w, h, u0, v0, u0 + du, v0 + dv, Color(1, 1, 1, 0.8))
 	if e.ail_kinds >= 2:
 		_ail_pips(e, e.x, py - 6.0)
 
@@ -1031,10 +1263,20 @@ func _draw_poi(i: int) -> void:
 		if sim.vine_taken.has(i):
 			return
 		var vp := Vector2(float(poi.x), float(poi.y))
-		for a in range(3):
-			b_world_white.line(vp, vp + Vector2(sin(t_anim + a * 2.1) * 40.0, -70.0 - a * 14.0), 5.0, Color(0.3, 0.8, 0.3))
-		b_world_white.circle(vp + Vector2(0.0, -80.0), 16.0, Color(1.0, 0.7, 0.2), 14)
-		_queue_zone_text(vp + Vector2(0.0, -110.0), "葫芦灵藤", "站定 1 秒采集彩虹葫芦散件", Color("9fffb0"))
+		var vtx := _opt_tex("poi_vine")
+		var label_y := -110.0
+		if vtx != null:
+			var vh_px := 148.0
+			var vw_px := float(vtx.get_width()) * vh_px / maxf(1.0, float(vtx.get_height()))
+			var sway := sin(t_anim * 2.2 + vp.x * 0.01) * 2.0
+			draw_texture_rect(vtx, Rect2(vp.x - vw_px * 0.5, vp.y - vh_px * 0.9 + sway, vw_px, vh_px), false, Color.WHITE)
+			b_world_white.ring(vp, 78.0, 2.5, Color(0.55, 1.0, 0.65, 0.42), 28)
+			label_y = -vh_px - 8.0
+		else:
+			for a in range(3):
+				b_world_white.line(vp, vp + Vector2(sin(t_anim + a * 2.1) * 40.0, -70.0 - a * 14.0), 5.0, Color(0.3, 0.8, 0.3))
+			b_world_white.circle(vp + Vector2(0.0, -80.0), 16.0, Color(1.0, 0.7, 0.2), 14)
+		_queue_zone_text(vp + Vector2(0.0, label_y), "葫芦灵藤", "站定 1 秒采集彩虹葫芦散件", Color("9fffb0"))
 		var vh: float = float(sim.poi_hold.get(i, 0.0))
 		if vh > 0.0:
 			b_world_white.arc(vp, 78.0, 7.0, -PI / 2.0, -PI / 2.0 + clampf(vh / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, Color(1.0, 0.9, 0.5, 0.95), 28)
@@ -1053,9 +1295,17 @@ func _draw_poi(i: int) -> void:
 		var lp := Vector2(float(poi.x), float(poi.y))
 		var lst := sim.lm_state(i)
 		var zr_lm := float(GameData.SEG["break"].zoneR)
+		var lmtx := _opt_tex("poi_" + pk)
+		var lm_label_y := -70.0
+		if lmtx != null:
+			var lmh: float = float(LM_HEIGHTS.get(pk, 156.0))
+			var lmw: float = float(lmtx.get_width()) * lmh / maxf(1.0, float(lmtx.get_height()))
+			var lm_tint := Color.WHITE if lst == "ok" else Color(0.58, 0.58, 0.68)
+			draw_texture_rect(lmtx, Rect2(lp.x - lmw * 0.5, lp.y - lmh * 0.88, lmw, lmh), false, lm_tint)
+			lm_label_y = -lmh * 0.92 - 12.0
 		b_world_white.ring(lp, zr_lm, 3.0, Color(1.0, 0.8, 0.4, 0.5 if lst == "ok" else 0.2), 28)
 		if lp.distance_to(Vector2(sim.px, sim.py)) < 420.0:
-			_queue_zone_text(lp + Vector2(0.0, -70.0), String(poi.name), sim.lm_hint(i), UI.GOLD if lst == "ok" else Color("ff8a7a"))
+			_queue_zone_text(lp + Vector2(0.0, lm_label_y), String(poi.name), sim.lm_hint(i), UI.GOLD if lst == "ok" else Color("ff8a7a"))
 		var lh: float = float(sim.poi_hold.get(i, 0.0))
 		if lh > 0.0:
 			b_world_white.arc(lp, zr_lm, 7.0, -PI / 2.0, -PI / 2.0 + clampf(lh / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, Color(1.0, 0.9, 0.5, 0.95), 28)
@@ -1093,6 +1343,54 @@ func _draw_poi(i: int) -> void:
 	b_world_white.ring(pp, zr, 3.0, Color(1.0, 0.8, 0.4, 0.35), 28)
 	if hv > 0.0:
 		b_world_white.arc(pp, zr, 7.0, -PI / 2.0, -PI / 2.0 + clampf(hv / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, Color(1.0, 0.9, 0.5, 0.95), 28)
+
+
+func _draw_objective(obj: Dictionary) -> void:
+	var is_lamp := String(obj.get("kind", "")) == "shrine_lamp"
+	var op := Vector2(float(obj.x), float(obj.y))
+	var orad := float(obj.get("r", 115.0))
+	var need := maxf(0.01, float(obj.get("need", 3.0)))
+	var prog := clampf(float(obj.get("progress", 0.0)) / need, 0.0, 1.0)
+	var base_col := Color(1.0, 0.82, 0.34, 0.65) if is_lamp else Color(0.45, 0.90, 1.0, 0.65)
+	var accent_col := UI.GOLD if is_lamp else UI.GHOST
+	var tx := _opt_tex("obj_shrine_lamp" if is_lamp else "obj_stele_soul")
+	var label_y := -162.0
+	if tx != null:
+		var oh := 156.0
+		var ow := float(tx.get_width()) * oh / maxf(1.0, float(tx.get_height()))
+		var bob := sin(t_anim * 2.6 + op.x * 0.01) * 2.0
+		draw_texture_rect(tx, Rect2(op.x - ow * 0.5, op.y - oh * 0.92 + bob, ow, oh), false, Color.WHITE)
+		label_y = -oh - 12.0
+	else:
+		# 贴图未导入前的合批几何回退，确保荒野目标永远可见
+		if is_lamp:
+			b_world_white.full(op.x - 20.0, op.y - 86.0, 40.0, 86.0, Color(0.28, 0.22, 0.18, 0.95))
+			b_world_white.circle(op + Vector2(0.0, -78.0), 14.0, Color(1.0, 0.84, 0.36, 0.95), 14)
+		else:
+			b_world_white.full(op.x - 18.0, op.y - 98.0, 36.0, 98.0, Color(0.22, 0.32, 0.42, 0.95))
+			b_world_white.line(op + Vector2(-8.0, -76.0), op + Vector2(8.0, -48.0), 3.0, Color(0.55, 0.94, 1.0, 0.95))
+		label_y = -114.0
+	# 荒野目标光环 + 脉动信标环 + 进度/镇魂环（全部合批进 b_world_white）
+	b_world_white.ring(op, orad, 3.0, base_col, 32)
+	var bp := fmod(t_anim * 0.55, 1.0)
+	b_world_white.ring(op, orad * (0.45 + 0.55 * bp), 2.5, Color(accent_col.r, accent_col.g, accent_col.b, (1.0 - bp) * 0.55), 28)
+	if is_lamp:
+		if prog > 0.0:
+			b_world_white.arc(op, orad, 7.0, -PI / 2.0, -PI / 2.0 + prog * TAU, Color(1.0, 0.90, 0.45, 0.95), 32)
+	else:
+		# 镇魂断碑：内圈残余完整度（HP 环）+ 外圈震碎进度弧
+		var hp_left := 1.0 - prog
+		if hp_left > 0.01:
+			b_world_white.arc(op, orad - 7.0, 4.0, -PI / 2.0, -PI / 2.0 + hp_left * TAU, Color(0.45, 0.88, 1.0, 0.78), 32)
+		if prog > 0.0:
+			b_world_white.arc(op, orad, 7.0, -PI / 2.0, -PI / 2.0 + prog * TAU, Color(0.86, 0.98, 1.0, 0.95), 32)
+	var title := String(obj.get("name", "破庙灯龛" if is_lamp else "镇魂断碑"))
+	var sub := ""
+	if is_lamp:
+		sub = ("点亮中 %d%% • 保持圈内" % int(round(prog * 100.0))) if prog > 0.0 else "站定圈内点亮 • 灯油+护罩+阴律"
+	else:
+		sub = ("震碎中 %d%% • 保持圈内" % int(round(prog * 100.0))) if prog > 0.0 else "站定圈内震碎 • 清弹+葫芦/铜钱"
+	_queue_zone_text(op + Vector2(0.0, label_y), title, sub, accent_col)
 
 
 func _draw_zone(which: String) -> void:
@@ -1145,7 +1443,7 @@ func _queue_zone_text(p: Vector2, title: String, sub: String, col: Color) -> voi
 	_queue_label(p + Vector2(-260.0, 6.0), sub, 520.0, 16, col)
 
 
-func _draw_poi_labels() -> void:
+func _draw_poi_labels(c: Node2D) -> void:
 	if _poi_labels.is_empty():
 		return
 	for pass_i in range(2):
@@ -1155,13 +1453,13 @@ func _draw_poi_labels() -> void:
 					continue
 				var pos: Vector2 = item[0]
 				if pass_i == 0:
-					draw_string(font, pos + Vector2(1.5, 1.5), String(item[1]), HORIZONTAL_ALIGNMENT_CENTER, float(item[2]), sz, UI.INK)
+					c.draw_string(font, pos + Vector2(1.5, 1.5), String(item[1]), HORIZONTAL_ALIGNMENT_CENTER, float(item[2]), sz, UI.INK)
 				else:
-					draw_string(font, pos, String(item[1]), HORIZONTAL_ALIGNMENT_CENTER, float(item[2]), sz, item[4])
+					c.draw_string(font, pos, String(item[1]), HORIZONTAL_ALIGNMENT_CENTER, float(item[2]), sz, item[4])
 
 
-func _draw_projectiles() -> void:
-	var ci := get_canvas_item()
+func _draw_projectiles(c: Node2D) -> void:
+	var ci := c.get_canvas_item()
 	var tx: Texture2D = T.proj_talisman
 	var tw := tx.get_width() * 0.48
 	var th := tx.get_height() * 0.48
@@ -1178,7 +1476,7 @@ func _draw_projectiles() -> void:
 		var ph := 94.0
 		var pw := pt.get_width() * ph / pt.get_height()
 		var bob := sin(t_anim * 6.5) * 6.0
-		draw_texture_rect(pt, Anchors.rect(pp.x, pp.y - ph * 0.72 + bob, pw, ph, "pet_huluwa", sim.pet_flip), false, Color.WHITE)
+		c.draw_texture_rect(pt, Anchors.rect(pp.x, pp.y - ph * 0.72 + bob, pw, ph, "pet_huluwa", sim.pet_flip), false, Color.WHITE)
 		var bw := 54.0
 		var bx := pp.x - bw * 0.5
 		var by := pp.y - ph * 0.78 + bob - 10.0
@@ -1222,24 +1520,56 @@ func _draw_projectiles() -> void:
 	b_flame.flush(ci, fl)
 
 
-func _draw_floaters() -> void:
+func _draw_floaters(c: Node2D) -> void:
 	if floaters.is_empty():
 		return
-	var from_i := maxi(0, floaters.size() - 12)
+	var from_i := maxi(0, floaters.size() - 16)
+	var has_text := false
+	var inv_cnt := 1.0 / float(Fx.DIGIT_COUNT)
+	var aspect := float(Fx.DIGIT_CELL_W) / float(Fx.DIGIT_CELL_H)
+	# 数字/符号伤害飘字统一进位图条 TriBatch（1 DC、零 draw_string 字体图集切换、零阴影 pass）
+	for fi in range(from_i, floaters.size()):
+		var f: Dictionary = floaters[fi]
+		if not bool(f.get("is_num", false)):
+			has_text = true
+			continue
+		var txt: String = f.text
+		var ln := txt.length()
+		if ln == 0:
+			continue
+		var a := clampf(float(f.life) / 0.4, 0.0, 1.0)
+		var col: Color = f.col
+		col.a = a
+		var gh := float(f.size) * 1.1
+		var gw := gh * aspect
+		var step := gw * 0.78
+		var x0 := float(f.x) - (float(ln - 1) * step + gw) * 0.5
+		var y0 := float(f.y) - gh * 0.82
+		for ci_i in range(ln):
+			var cell := Fx.digit_cell(txt.unicode_at(ci_i))
+			if cell < 0:
+				continue
+			var u0 := float(cell) * inv_cnt
+			b_digits.rect(x0 + float(ci_i) * step, y0, gw, gh, u0, 0.0, u0 + inv_cnt, 1.0, col)
+	b_digits.flush(c.get_canvas_item(), T.digits)
+	if not has_text:
+		return
 	for pass_i in range(2):
 		for sz in FLOATER_SIZES:
 			for fi in range(from_i, floaters.size()):
 				var f: Dictionary = floaters[fi]
+				if bool(f.get("is_num", false)):
+					continue
 				if UI.snap_size(int(f.size)) != sz:
 					continue
-				var a := clampf(f.life / 0.4, 0.0, 1.0)
-				var pos := Vector2(f.x - 100.0, f.y)
+				var a := clampf(float(f.life) / 0.4, 0.0, 1.0)
+				var pos := Vector2(float(f.x) - 100.0, float(f.y))
 				if pass_i == 0:
-					draw_string(font, pos + Vector2(1.5, 1.5), f.text, HORIZONTAL_ALIGNMENT_CENTER, 200.0, sz, Color(UI.INK, a))
+					c.draw_string(font, pos + Vector2(1.5, 1.5), String(f.text), HORIZONTAL_ALIGNMENT_CENTER, 200.0, sz, Color(UI.INK, a))
 				else:
 					var col: Color = f.col
 					col.a = a
-					draw_string(font, pos, f.text, HORIZONTAL_ALIGNMENT_CENTER, 200.0, sz, col)
+					c.draw_string(font, pos, String(f.text), HORIZONTAL_ALIGNMENT_CENTER, 200.0, sz, col)
 
 
 func _draw_fx_add(c: Node2D) -> void:
@@ -1248,20 +1578,38 @@ func _draw_fx_add(c: Node2D) -> void:
 	PerfStat.add("fx_add_draw", t_fx)
 
 
+func _fx_ring(cx: float, cy: float, r: float, w: float, col: Color) -> void:
+	if r <= 0.0:
+		return
+	var half := (r + w * 0.5) / 0.90
+	b_ring_fx.full(cx - half, cy - half, half * 2.0, half * 2.0, col)
+
+
 func defer__draw_fx_add(c: Node2D) -> void:
 	var g: Texture2D = T.glow
-	for gh in ghosts:
-		var a: float = clampf(gh.life / 0.32, 0.0, 1.0) * 0.55
-		var tx: Texture2D = T.hero_run
+	var fci := c.get_canvas_item()
+	if not ghosts.is_empty():
+		var htx: Texture2D = T.hero_run
+		var htw := float(htx.get_width())
+		var hth := float(htx.get_height())
 		var fw := 152.0
 		var fh := 192.0
 		var w := fw * 0.44
 		var h := fh * 0.44
-		var fr: int = gh.fr
-		var src := Rect2((fr % 6) * fw, (fr / 6) * fh, fw, fh)
-		var dst := Anchors.rect(gh.x, gh.y - h * 0.92, w, h, "hero_run", gh.flip)
-		c.draw_texture_rect_region(tx, dst, src, Color(0.5, 0.89, 1.0, a))
-	# 挑灯爆焰：金色清弹冲击波 + 爆发光环
+		var du := fw / htw
+		var dv := fh / hth
+		for gh in ghosts:
+			var a: float = clampf(float(gh.life) / 0.32, 0.0, 1.0) * 0.55
+			var fr: int = gh.fr
+			var u0 := float(fr % 6) * du
+			var v0 := float(fr / 6) * dv
+			var dst := Anchors.rect(float(gh.x), float(gh.y) - h * 0.92, w, h, "hero_run", bool(gh.flip))
+			if dst.size.x < 0.0:
+				b_ghosts.rect(dst.position.x, dst.position.y, -dst.size.x, dst.size.y, u0 + du, v0, u0, v0 + dv, Color(0.5, 0.89, 1.0, a))
+			else:
+				b_ghosts.rect(dst.position.x, dst.position.y, dst.size.x, dst.size.y, u0, v0, u0 + du, v0 + dv, Color(0.5, 0.89, 1.0, a))
+		b_ghosts.flush(fci, htx)
+	# 挑灯爆焰：金色清弹冲击波 + 爆发光环（单四边形程序化圆环）
 	var fw_t := maxf(_sim_float("flare_wave_t", 0.0), _local_flare_wave)
 	var fl_t := _sim_float("flare_t", 0.0)
 	var pctr := Vector2(sim.px, sim.py - 30.0)
@@ -1269,12 +1617,12 @@ func defer__draw_fx_add(c: Node2D) -> void:
 		var k_fw := clampf(1.0 - fw_t / 0.55, 0.0, 1.0)
 		var rad_fw := 40.0 + 360.0 * (1.0 - (1.0 - k_fw) * (1.0 - k_fw))
 		var al_fw := (1.0 - k_fw) * 0.95
-		b_white_fx.ring(pctr, rad_fw, 12.0 * (1.0 - k_fw) + 3.0, Color(1.0, 0.84, 0.38, al_fw), 36)
-		b_white_fx.ring(pctr, rad_fw * 0.78, 5.0 * (1.0 - k_fw) + 1.5, Color(1.0, 0.96, 0.82, al_fw * 0.85), 28)
+		_fx_ring(pctr.x, pctr.y, rad_fw, 12.0 * (1.0 - k_fw) + 3.0, Color(1.0, 0.84, 0.38, al_fw))
+		_fx_ring(pctr.x, pctr.y, rad_fw * 0.78, 5.0 * (1.0 - k_fw) + 1.5, Color(1.0, 0.96, 0.82, al_fw * 0.85))
 		b_glow_fx.full(pctr.x - rad_fw * 0.8, pctr.y - rad_fw * 0.8, rad_fw * 1.6, rad_fw * 1.6, Color(1.0, 0.78, 0.3, al_fw * 0.38))
 	if fl_t > 0.0:
 		var pulse_fl := 0.72 + 0.28 * sin(t_anim * 16.0)
-		b_white_fx.ring(pctr, 56.0 + sin(t_anim * 12.0) * 5.0, 3.5, Color(1.0, 0.86, 0.42, 0.65 * pulse_fl), 28)
+		_fx_ring(pctr.x, pctr.y, 56.0 + sin(t_anim * 12.0) * 5.0, 3.5, Color(1.0, 0.86, 0.42, 0.65 * pulse_fl))
 		b_glow_fx.full(pctr.x - 110.0, pctr.y - 110.0, 220.0, 220.0, Color(1.0, 0.82, 0.35, 0.32 * pulse_fl))
 	# 子弹辉光
 	for b: SimBullet in sim.bullets:
@@ -1294,20 +1642,21 @@ func defer__draw_fx_add(c: Node2D) -> void:
 		var fmax: float = maxf(0.01, float(fx[4]) if fx.size() > 4 else 0.4)
 		var fk: float = clampf(float(fx[3]) / fmax, 0.0, 1.0)
 		var frad: float = float(fx[5]) if fx.size() > 5 else 140.0
-		var fp := Vector2(fx[1], fx[2])
+		var fpx := float(fx[1])
+		var fpy := float(fx[2])
 		var ftype := int(fx[0])
 		var fc: Color = PET_FX_COLS[ftype % 3]
 		var rcur := frad * (0.28 + 0.72 * (1.0 - fk))
-		b_white_fx.ring(fp, rcur, 8.0 * fk + 2.0, Color(fc, fk), 28)
-		b_glow_fx.full(fp.x - rcur * 0.7, fp.y - rcur * 0.7, rcur * 1.4, rcur * 1.4, Color(fc, fk * 0.42))
+		_fx_ring(fpx, fpy, rcur, 8.0 * fk + 2.0, Color(fc, fk))
+		b_glow_fx.full(fpx - rcur * 0.7, fpy - rcur * 0.7, rcur * 1.4, rcur * 1.4, Color(fc, fk * 0.42))
 		if ftype == 2:
-			b_white_fx.ring(fp, rcur * 0.68, 5.0 * fk + 1.0, Color(0.55, 0.95, 1.0, fk * 0.85), 24)
+			_fx_ring(fpx, fpy, rcur * 0.68, 5.0 * fk + 1.0, Color(0.55, 0.95, 1.0, fk * 0.85))
 	if sim.combo_fx > 0.0:
 		var ck := clampf(sim.combo_fx / 0.85, 0.0, 1.0)
 		var cr_base := float(GameData.GD.pet.comboR) * (1.12 - ck * 0.85)
 		for ci2 in range(7):
 			var cr2 := cr_base * (0.52 + 0.08 * float(ci2))
-			b_white_fx.ring(pctr, cr2, 8.0 * ck + 2.0, Color(RAINBOW_COLS[ci2], ck * 0.9), 36)
+			_fx_ring(pctr.x, pctr.y, cr2, 8.0 * ck + 2.0, Color(RAINBOW_COLS[ci2], ck * 0.9))
 	# 剑轮/剑气光 + 剑阵环
 	for wp2: Vector2 in sim.sw_wheel_pos:
 		b_glow_fx.full(wp2.x - 40.0, wp2.y - 40.0, 80.0, 80.0, Color(0.4, 0.9, 1.0, 0.55))
@@ -1315,12 +1664,14 @@ func defer__draw_fx_add(c: Node2D) -> void:
 		b_glow_fx.full(qb2.x - 32.0, qb2.y - 32.0, 64.0, 64.0, Color(1.0, 0.85, 0.4, 0.7) if qb2.hits.key == "sw_array" else Color(0.4, 0.95, 1.0, 0.6))
 	if sim.sw_array_fx > 0.0:
 		var ka := sim.sw_array_fx / 0.6
-		b_white_fx.ring(pctr, 340.0 * (1.2 - ka), 8.0 * ka + 2.0, Color(1.0, 0.9, 0.5, ka), 40)
-	# 飞剑光（椭圆轨道零分配）
+		_fx_ring(pctr.x, pctr.y, 340.0 * (1.2 - ka), 8.0 * ka + 2.0, Color(1.0, 0.9, 0.5, ka))
+	# 飞剑光（椭圆轨道单四边形圆环贴图）
 	if sim.has_sword() and (sim.sw_state == Sim.SW_ORBIT or sim.sw_state == Sim.SW_RECALL):
 		b_glow_fx.full(sim.sw_x - 56.0, sim.sw_y - 56.0, 112.0, 112.0, Color(0.4, 0.9, 1.0, 0.7))
 		if sim.sw_state == Sim.SW_ORBIT:
-			b_white_fx.ellipse_ring(pctr, float(GameData.DG.sword.orbitRx), float(GameData.DG.sword.orbitRy), 3.0, Color(0.5, 0.9, 1.0, 0.22), 36)
+			var hx := float(GameData.DG.sword.orbitRx) / 0.90
+			var hy := float(GameData.DG.sword.orbitRy) / 0.90
+			b_ring_fx.full(pctr.x - hx, pctr.y - hy, hx * 2.0, hy * 2.0, Color(0.5, 0.9, 1.0, 0.22))
 	if sim.sw_thrust_fx > 0.0:
 		var k := sim.sw_thrust_fx / 0.25
 		var d := sim.sw_dir.normalized()
@@ -1328,12 +1679,12 @@ func defer__draw_fx_add(c: Node2D) -> void:
 		var L: float = GameData.DG.sword.thrustLen
 		b_white_fx.line(pctr, pctr + d * L, hw * 0.7 * k + 4.0, Color(0.6, 0.95, 1.0, 0.9 * k))
 		b_white_fx.line(pctr, pctr + d * L, 6.0 * k + 1.0, Color(1, 1, 1, k))
-	# 圆环 / 闪电 / 爆炸图 / 粒子池
+	# 圆环（单四边形程序化圆环）/ 闪电 / 爆炸图 / MultiMesh 粒子池
 	for r in rings:
 		var k2: float = 1.0 - float(r.life) / float(r.max)
 		var col: Color = r.col
 		col.a = (1.0 - k2) * 0.9
-		b_white_fx.ring(Vector2(r.x, r.y), r.r * (0.3 + 0.7 * k2), 5.0 * (1.0 - k2) + 1.0, col, 28)
+		_fx_ring(float(r.x), float(r.y), float(r.r) * (0.3 + 0.7 * k2), 5.0 * (1.0 - k2) + 1.0, col)
 	for f in fx_sprites:
 		var tx2: Texture2D = T[f.tex]
 		var k3: float = float(f.life) / float(f.max)
@@ -1354,9 +1705,12 @@ func defer__draw_fx_add(c: Node2D) -> void:
 		var bcol := Color(0.7, 0.95, 1.0, clampf(bl.life / 0.18, 0.0, 1.0))
 		b_white_fx.line(p1, mid, 4.0, bcol)
 		b_white_fx.line(mid, p2, 4.0, bcol)
-	part_pool.draw_into(b_glow_fx)
-	var fci := c.get_canvas_item()
+	var pcnt := part_pool.fill_multimesh(_mm_pt_buf)
+	if pcnt > 0:
+		RenderingServer.multimesh_set_buffer(_mm_pt_rid, _mm_pt_buf)
+	mm_particles.visible_instance_count = pcnt
 	b_white_fx.flush(fci, T.white)
+	b_ring_fx.flush(fci, T.ring)
 	for fk2 in b_fxs:
 		(b_fxs[fk2] as TriBatch).flush(fci, T[fk2])
 	b_glow_fx.flush(fci, g)

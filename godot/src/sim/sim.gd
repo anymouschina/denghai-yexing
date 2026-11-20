@@ -19,6 +19,9 @@ const SW_ORBIT := 2
 const SW_RECALL := 3
 const SW_DROP := 4
 const SW_CD := 5
+const LANTERN_LOW := 0
+const LANTERN_MID := 1
+const LANTERN_HIGH := 2
 
 var rng := RandomNumberGenerator.new()
 var seed_v := 0
@@ -148,9 +151,53 @@ var _q_aoe: Array = [[], [], [], []]
 var _q_sets: Array = [[], [], [], []]
 var _q_leihuo: Array = []
 var _q_fallback: Array = []
+var _q_lei_cands: Array = []
+var _q_mark_hits: Array = []
+var _pk_grid: Array = []
+var _pk_counts := PackedInt32Array([0, 0, 0, 0])
 
 # ---- v2.2 MIT 融合：灯油 / 双阴律 / 灯派 2-4-6 / 荒野目标 / 引魂灯签 / SNKRX 反馈 ----
 var lantern_oil := 80.0
+var lantern_mode: int = LANTERN_HIGH
+var _eff_crit := 0.05
+var _high_reveal_on := false
+var _high_reveal_r2 := 220.0 * 220.0
+var _high_reveal_mul := 1.15
+var _low_frenzy_dmg_add := 0.0
+var _low_frenzy_cd_mul := 1.0
+var _low_speed_mul := 1.0
+var _high_xp_mul := 1.0
+var rules_serial: int = 0
+var schools_serial: int = 0
+var _mark_per := 0.06
+var _evo_add := 0.2
+var _lei_burn_bonus := 0.0
+var _knockback_def := 180.0
+var _stag_boss := 1.35
+var _stag_warden := 1.35
+var _has_set_burst := false
+var _has_set_army := false
+var _has_set_flame := false
+var _has_set_wealth := false
+var _has_set_soul := false
+var _has_set_thunder := false
+var _has_set_swift := false
+var _has_set_ward := false
+var _has_part_fu := false
+var _has_part_huanhuo := false
+var _has_part_lei := false
+var _has_part_sword := false
+var _has_rule_low_frenzy := false
+var _has_rule_graze_oil := false
+var _has_rule_shrine_ward := false
+var _has_rule_step_lotus := false
+var _has_rule_corpse_flame := false
+var _lv_leiyin := 0
+var _lv_huanhuo := 0
+var _lv_zhuohun := 0
+var _evo_fu := false
+var _evo_huanhuo := false
+var _evo_lei := false
 var flare_t := 0.0
 var flare_wave_t := 0.0
 var flare_cd := 0.0
@@ -318,6 +365,15 @@ func _init(p_seed: int = 1, opts: Dictionary = {}) -> void:
 	GameData.load_all()
 	grid = grid_sys._cells
 	dps_breakdown = dps_tracker.breakdown
+	_pk_grid.resize(SpatialGrid.CELL_COUNT)
+	for _pi in range(SpatialGrid.CELL_COUNT):
+		_pk_grid[_pi] = []
+	_mark_per = float(GameData.DG.sword.markPer)
+	_evo_add = float(GameData.BAL.evoAdd)
+	_lei_burn_bonus = float(GameData.BAL.lei.burnBonus)
+	_knockback_def = float(GameData.BAL.knockback)
+	_stag_warden = float(GameData.DG.warden.lunge.staggerTakenMul)
+	_stag_boss = float(GameData.EN.boss.get("stagger", {}).get("takenMul", _stag_warden))
 	seed_v = p_seed
 	rng.seed = p_seed
 	emit = opts.get("emit", false)
@@ -574,11 +630,36 @@ func has_part(id: String) -> bool:
 
 
 func _recalc() -> void:
-	_sets_dirty = true
+	_sets_cache = active_sets()
+	_sets_dirty = false
+	_has_set_burst = _sets_cache.has("burst")
+	_has_set_army = _sets_cache.has("army")
+	_has_set_flame = _sets_cache.has("flame")
+	_has_set_wealth = _sets_cache.has("wealth")
+	_has_set_soul = _sets_cache.has("soul")
+	_has_set_thunder = _sets_cache.has("thunder")
+	_has_set_swift = _sets_cache.has("swift")
+	_has_set_ward = _sets_cache.has("ward")
+	_has_part_fu = relics.has("part_fu")
+	_has_part_huanhuo = relics.has("part_huanhuo")
+	_has_part_lei = relics.has("part_lei")
+	_has_part_sword = relics.has("part_sword")
+	_has_rule_low_frenzy = active_rules.has("rule_low_frenzy")
+	_has_rule_graze_oil = active_rules.has("rule_graze_oil")
+	_has_rule_shrine_ward = active_rules.has("rule_shrine_ward")
+	_has_rule_step_lotus = active_rules.has("rule_step_lotus")
+	_has_rule_corpse_flame = active_rules.has("rule_corpse_flame")
+	_lv_leiyin = lv("leiyin")
+	_lv_huanhuo = lv("huanhuo")
+	_lv_zhuohun = lv("zhuohun")
+	_evo_fu = evo.has("fu")
+	_evo_huanhuo = evo.has("huanhuo")
+	_evo_lei = evo.has("lei")
 	var sc_res := SchoolRules.compute_schools(levels, relics, active_rules)
 	school_counts = sc_res.counts
 	active_schools = sc_res.active
 	school_stats = sc_res.stats
+	schools_serial += 1
 	var P: Dictionary = GameData.BAL.player
 	var T: Dictionary = GameData.BAL.touch
 	maxhp = P.hp + meta.maxHp + _per("yupei", "maxHp") + _relic_sum("maxHp") + float(school_stats.get("maxHp", 0.0)) + forge_n * float(GameData.DG.forge.hp) + asc_hp_n * float(GameData.DG.ascend.hp)
@@ -610,6 +691,7 @@ func _recalc() -> void:
 	s_regen = _relic_sum("regen") + float(school_stats.get("regen", 0.0))
 	hp = minf(hp, maxhp)
 	_sync_orbs()
+	LanternRules.sync_lantern_cache(self)
 
 
 func _sync_orbs() -> void:
@@ -624,19 +706,14 @@ func _sync_orbs() -> void:
 ## 伤害乘区（加算）：1 + 局外 + 桃木心 + 遗物 + 灯派 + 进化增伤 + 残灯狂澜 + 剑痕 × 6%。盛灯照妖为近身独立易伤。
 func _dmg_mul(e: SimEnemy, weapon: String) -> float:
 	var m := 1.0
-	var dg: Dictionary = GameData.DG
 	if weapon != "burn" and weapon != "blast" and weapon != "ail":
 		m += s_dmg_add
-		var evo_key := weapon
-		if weapon == "mark":
-			evo_key = "fu"
-		if evo.has(evo_key):
-			m += GameData.BAL.evoAdd
-	if has_rule("rule_low_frenzy"):
-		var rp_f: Dictionary = GameData.RULE_BY_ID.get("rule_low_frenzy", {}).get("params", {})
-		if lantern_oil < float(rp_f.get("oilThreshold", 30.0)):
-			m += float(rp_f.get("dmgAdd", 0.28))
-	m += e.marks * float(dg.sword.markPer)
+		if not evo.is_empty():
+			var evo_key := "fu" if weapon == "mark" else weapon
+			if evo.has(evo_key):
+				m += _evo_add
+	m += _low_frenzy_dmg_add
+	m += float(e.marks) * _mark_per
 	return m
 
 
@@ -837,9 +914,7 @@ func _clamp_player() -> void:
 func _update_player(dt: float) -> void:
 	var P: Dictionary = GameData.BAL.player
 	var T: Dictionary = GameData.BAL.touch
-	var eff_spd := s_speed
-	if lantern_state() == "low":
-		eff_spd *= 1.0 + float(LanternRules.lcfg().get("lowSpeedAdd", 0.20))
+	var eff_spd := s_speed * _low_speed_mul
 	var mv := in_move
 	var ln := mv.length()
 	if ln > 1.0:
@@ -1161,7 +1236,14 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 	e.face_right = def.get("faceRight", true)
 	e.phase = rng.randf() * TAU
 	e.hop = rng.randf()
-	e.ai = "boss" if is_boss else def.ai
+	e.set_ai("boss" if is_boss else String(def.ai))
+	e.set_state("move", SimEnemy.ST_MOVE)
+	e.knock = 0.15 if e.elite else float(def.get("knock", 1.0))
+	e.hop_period = float(def.get("hopPeriod", 1.0))
+	e.keep_dist = float(def.get("keep", 0.0))
+	e.trigger_dist = float(def.get("trigger", 0.0))
+	e.fuse_dur = float(def.get("fuse", 0.0))
+	e.blast_r = float(def.get("blastR", 0.0))
 	e.shoot_t = (el.shootCd if e.elite and el.has("shootCd") else def.get("shootCd", 0.0)) * (0.5 + rng.randf() * 0.5)
 	e.slam_t = el.slamCd if e.elite and el.has("slamCd") else 0.0
 	e.atk_t = 2.5 if is_boss else 0.0
@@ -1180,30 +1262,70 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 # 伤害 / 击杀
 # ======================================================================
 func damage(e: SimEnemy, base: float, weapon: String, o: Dictionary = O_NONE) -> void:
+	if o.is_empty():
+		damage_fast(e, base, weapon)
+		return
+	var has_kb := o.has("kx")
+	damage_fast(
+		e,
+		base,
+		weapon,
+		o.has("noCrit"),
+		o.has("forceCrit"),
+		o.has("noFlash"),
+		o.has("pierce"),
+		float(o["armor_pierce"]) if o.has("armor_pierce") else -1.0,
+		has_kb,
+		float(o["kx"]) if has_kb else 0.0,
+		float(o["ky"]) if has_kb else 0.0,
+		float(o["kb"]) if o.has("kb") else -1.0
+	)
+
+
+func damage_fast(
+	e: SimEnemy,
+	base: float,
+	weapon: String,
+	no_crit: bool = false,
+	force_crit: bool = false,
+	no_flash: bool = false,
+	pierce: bool = false,
+	armor_pierce: float = -1.0,
+	has_kb: bool = false,
+	kx: float = 0.0,
+	ky: float = 0.0,
+	kb: float = -1.0
+) -> void:
 	if not e.alive:
 		return
-	var dmg := base * _dmg_mul(e, weapon)
+	var m := 1.0
+	if weapon != "burn" and weapon != "blast" and weapon != "ail":
+		m += s_dmg_add
+		if not evo.is_empty():
+			var evo_key := "fu" if weapon == "mark" else weapon
+			if evo.has(evo_key):
+				m += _evo_add
+	m += _low_frenzy_dmg_add + float(e.marks) * _mark_per
+	var dmg := base * m
 	var crit := false
-	var eff_crit := s_crit + (float(LanternRules.lcfg().get("lowCritAdd", 0.25)) if lantern_state() == "low" else 0.0)
-	if not o.has("noCrit") and (o.has("forceCrit") or rng.randf() < eff_crit):
+	if not no_crit and (force_crit or rng.randf() < _eff_crit):
 		crit = true
 		dmg *= s_crit_mul
-	var synergy := weapon == "lei" and e.burn_t > 0.0 and lv("leiyin") > 0
+	var synergy := weapon == "lei" and e.burn_t > 0.0 and _lv_leiyin > 0
 	if synergy:
-		dmg *= 1.0 + GameData.BAL.lei.burnBonus
+		dmg *= 1.0 + _lei_burn_bonus
 	if e.stagger_t > 0.0:
-		var stag_mul := float(GameData.EN.boss.get("stagger", {}).get("takenMul", GameData.DG.warden.lunge.staggerTakenMul)) if e.boss else float(GameData.DG.warden.lunge.staggerTakenMul)
-		dmg *= stag_mul
+		dmg *= _stag_boss if e.boss else _stag_warden
 	# 盛灯（>70%）或挑灯爆焰期间：近身照妖 +15% 易伤
-	if lantern_state() == "high" or flare_t > 0.0:
-		var L_hi := LanternRules.lcfg()
-		var rr_hi := float(L_hi.get("highRevealRadius", 220.0))
-		if (e.x - px) * (e.x - px) + (e.y - py) * (e.y - py) <= rr_hi * rr_hi:
-			dmg *= 1.0 + float(L_hi.get("highRevealDmg", 0.15))
+	if _high_reveal_on:
+		var rx := e.x - px
+		var ry := e.y - py
+		if rx * rx + ry * ry <= _high_reveal_r2:
+			dmg *= _high_reveal_mul
 	if e.armor > 0.0:
-		if o.has("armor_pierce"):
-			dmg *= 1.0 - e.armor * clampf(1.0 - float(o.armor_pierce), 0.0, 1.0)
-		elif not o.has("pierce"):
+		if armor_pierce >= 0.0:
+			dmg *= 1.0 - e.armor * clampf(1.0 - armor_pierce, 0.0, 1.0)
+		elif not pierce:
 			dmg *= 1.0 - e.armor
 	dmg *= e.ail_mul
 	e.hp -= dmg
@@ -1213,30 +1335,30 @@ func damage(e: SimEnemy, base: float, weapon: String, o: Dictionary = O_NONE) ->
 		rift_by[rk] = float(rift_by.get(rk, 0.0)) + dmg
 	var key := weapon
 	if weapon == "burn":
-		key = "huanhuo" if lv("huanhuo") > 0 else "fu"
+		key = "huanhuo" if _lv_huanhuo > 0 else "fu"
 	elif weapon == "mark":
 		key = "fu"
 	dmg_by[key] = float(dmg_by.get(key, 0.0)) + dmg
 	dps_tracker.record(key, dmg)
 	if e.boss:
 		boss_by[key] = float(boss_by.get(key, 0.0)) + dmg
-	if o.has("kx") and not e.boss:
-		var l := maxf(0.001, Vector2(o.kx, o.ky).length())
-		var kb: float = o.get("kb", GameData.BAL.knockback)
-		var kk := 0.15 if e.elite else float(e.def.get("knock", 1.0))
-		e.kvx += o.kx / l * kb * kk
-		e.kvy += o.ky / l * kb * kk
-	if not o.has("noFlash"):
+	if has_kb and not e.boss:
+		var l := maxf(0.001, sqrt(kx * kx + ky * ky))
+		var kb_v := kb if kb >= 0.0 else _knockback_def
+		var fac := kb_v * e.knock / l
+		e.kvx += kx * fac
+		e.kvy += ky * fac
+	if not no_flash:
 		e.flash = 0.08
 	if emit:
 		_ev("dmg", e, dmg, crit, synergy)
 	if weapon != "burn" and weapon != "huanhuo" and s_ignite > 0.0 and rng.randf() < s_ignite:
 		_ignite(e)
-	if crit and has_set("burst") and set_depth < 2 and weapon != "setsplash":
+	if crit and _has_set_burst and set_depth < 2 and weapon != "setsplash":
 		set_depth += 1
 		_aoe(e.x, e.y - e.h * 0.4, 90.0, base * 0.3, "setsplash")
 		set_depth -= 1
-	if weapon == "sword" and has_set("army"):
+	if weapon == "sword" and _has_set_army:
 		set_army_n += 1
 		if set_army_n % 8 == 0 and set_depth < 2:
 			set_depth += 1
@@ -1319,13 +1441,9 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 # 武器（驱邪符 / 灯火环 / 掌心雷 + 进化）
 # ======================================================================
 func _weapon_cd_mul() -> float:
-	var m := 1.0
+	var m := _low_frenzy_cd_mul
 	if flare_t > 0.0:
 		m *= 0.85
-	if has_rule("rule_low_frenzy"):
-		var rp_f: Dictionary = GameData.RULE_BY_ID.get("rule_low_frenzy", {}).get("params", {})
-		if lantern_oil < float(rp_f.get("oilThreshold", 30.0)):
-			m *= float(rp_f.get("cdMul", 0.82))
 	return m
 
 
@@ -1394,30 +1512,38 @@ func _update_weapons(dt: float) -> void:
 					_detonate_mark(e)
 				if not e.alive:
 					continue
-				damage(e, st2.dmg, "huanhuo", {"kx": e.x - px, "ky": e.y - py, "kb": BAL.huanhuo.knock})
-				if e.alive and (ail_on or lv("zhuohun") > 0):
+				damage_fast(e, st2.dmg, "huanhuo", false, false, false, false, -1.0, true, e.x - px, e.y - py, float(BAL.huanhuo.knock))
+				if e.alive and (ail_on or _lv_zhuohun > 0):
 					_ignite(e)
 			if evo_h and w_trail <= 0.0 and trails.size() < 80:
 				trails.append({"x": ox, "y": oy + 20.0, "life": GameData.EVOS.huanhuo.stats.trailLife, "tick": 0.0})
 		if evo_h and w_trail <= 0.0:
 			w_trail = GameData.EVOS.huanhuo.stats.trailEvery
-	# 火路
-	for i in range(trails.size() - 1, -1, -1):
-		var tr: Dictionary = trails[i]
+	# 火路（原地 swap-remove，零移位）
+	var trail_dmg := float(GameData.EVOS.huanhuo.stats.trailDmg) if _evo_huanhuo else 0.0
+	var ti := trails.size() - 1
+	while ti >= 0:
+		var tr: Dictionary = trails[ti]
 		tr.life -= dt
 		if tr.life <= 0.0:
-			trails.remove_at(i)
+			var tlast := trails.size() - 1
+			if ti != tlast:
+				trails[ti] = trails[tlast]
+			trails.pop_back()
+			ti -= 1
 			continue
 		tr.tick -= dt
 		if tr.tick <= 0.0:
 			tr.tick = 0.5
-			grid_sys.query_into(float(tr.x), float(tr.y), 70.0, _q_trail)
+			var trx := float(tr.x)
+			var try_ := float(tr.y)
+			grid_sys.query_into(trx, try_, 70.0, _q_trail)
 			for j in range(_q_trail.size()):
 				var e: SimEnemy = _q_trail[j]
 				if not e.alive:
 					continue
-				var dx := e.x - float(tr.x)
-				var dy := e.y - float(tr.y)
+				var dx := e.x - trx
+				var dy := e.y - try_
 				var rr := 30.0 + e.r
 				if dx * dx + dy * dy >= rr * rr:
 					continue
@@ -1425,16 +1551,18 @@ func _update_weapons(dt: float) -> void:
 					_detonate_mark(e)
 				if not e.alive:
 					continue
-				damage(e, GameData.EVOS.huanhuo.stats.trailDmg, "huanhuo", {"noFlash": true, "noCrit": true})
-				if e.alive and (ail_on or lv("zhuohun") > 0):
+				damage_fast(e, trail_dmg, "huanhuo", true, false, true)
+				if e.alive and (ail_on or _lv_zhuohun > 0):
 					_ignite(e)
+		ti -= 1
 	# 掌心雷
 	if lv("lei") > 0:
 		w_lei -= dt
 		if w_lei <= 0.0:
 			var st3 := wstat("lei")
-			var evl := evo.has("lei")
-			var cands: Array = []
+			var evl := _evo_lei
+			var cands := _q_lei_cands
+			cands.clear()
 			var lr := float(BAL.lei.range)
 			var lr2 := lr * lr
 			grid_sys.query_into(px, py, lr, _q_lei)
@@ -1445,7 +1573,7 @@ func _update_weapons(dt: float) -> void:
 			if cands.size() > 0:
 				var evs: Dictionary = GameData.EVOS.lei.stats
 				w_lei = (evs.cd if evl else st3.cd) * wcdm
-				var strikes: int = int(evs.strikes if evl else st3.strikes) + (1 if has_part("part_lei") else 0)
+				var strikes: int = int(evs.strikes if evl else st3.strikes) + (1 if _has_part_lei else 0)
 				var chain: int = int(st3.chain) + s_chain + (int(evs.chainBonus) if evl else 0)
 				var hit_set: Dictionary = {}
 				var k := 0
@@ -1457,13 +1585,18 @@ func _update_weapons(dt: float) -> void:
 					k += 1
 			else:
 				w_lei = 0.2
-	# 落雷排队（等价于原版 delayedCall）
-	for i in range(lei_queue.size() - 1, -1, -1):
-		var q: Dictionary = lei_queue[i]
+	# 落雷排队（原地 swap-remove，等价于原版 delayedCall）
+	var qi := lei_queue.size() - 1
+	while qi >= 0:
+		var q: Dictionary = lei_queue[qi]
 		q.t -= dt
 		if q.t <= 0.0:
-			lei_queue.remove_at(i)
+			var qlast := lei_queue.size() - 1
+			if qi != qlast:
+				lei_queue[qi] = lei_queue[qlast]
+			lei_queue.pop_back()
 			_thunder(q.tgt, q.dmg, q.chain, q.set, q.evo)
+		qi -= 1
 
 
 func _fire_talisman(angle: float, st: Dictionary) -> void:
@@ -1484,36 +1617,67 @@ func _fire_talisman(angle: float, st: Dictionary) -> void:
 
 
 func _update_bullets(dt: float) -> void:
-	for i in range(bullets.size() - 1, -1, -1):
+	var mark_delay := float(GameData.EVOS.fu.stats.markDelay) if _evo_fu else 0.0
+	var buckets := grid_sys._buckets
+	var i := bullets.size() - 1
+	while i >= 0:
 		var b: SimBullet = bullets[i]
-		b.x += b.vx * dt
-		b.y += b.vy * dt
+		var bx := b.x + b.vx * dt
+		var by := b.y + b.vy * dt
+		b.x = bx
+		b.y = by
 		b.life -= dt
 		var dead := b.life <= 0.0
 		if not dead:
-			grid_sys.query_into(b.x, b.y, 70.0, _q_bullet)
-			for j in range(_q_bullet.size()):
-				var e: SimEnemy = _q_bullet[j]
-				if not e.alive or b.hits.has(e.uid):
-					continue
-				var cy := e.y - e.h * 0.45
-				if absf(e.x - b.x) > e.r + 16.0 or absf(cy - b.y) > e.h * 0.5 + 6.0:
-					continue
-				b.hits[e.uid] = true
-				if b.mark and not (e.mark_t > 0.0):
-					e.mark_t = GameData.EVOS.fu.stats.markDelay
-					e.mark_dmg = b.dmg
-				damage(e, b.dmg, "fu", {"kx": b.vx, "ky": b.vy})
-				if ail_on and e.alive:
-					_ail_add(e, AIL_SEAL, 1)
-				if has_part("part_fu") and rng.randf() < 0.35:
-					_aoe(b.x, b.y, 80.0, b.dmg * 0.5, "mark")
-				b.pierce -= 1
-				if b.pierce < 0:
-					dead = true
-					break
+			var x0 := int((bx - 70.0) * SpatialGrid.INV_CELL)
+			var x1 := int((bx + 70.0) * SpatialGrid.INV_CELL)
+			var y0 := int((by - 70.0) * SpatialGrid.INV_CELL)
+			var y1 := int((by + 70.0) * SpatialGrid.INV_CELL)
+			if x1 >= 0 and x0 < SpatialGrid.COLS and y1 >= 0 and y0 < SpatialGrid.ROWS:
+				if x0 < 0: x0 = 0
+				if x1 >= SpatialGrid.COLS: x1 = SpatialGrid.COLS - 1
+				if y0 < 0: y0 = 0
+				if y1 >= SpatialGrid.ROWS: y1 = SpatialGrid.ROWS - 1
+				var bhits := b.hits
+				for cy in range(y0, y1 + 1):
+					var row := cy * SpatialGrid.COLS
+					for cx in range(x0, x1 + 1):
+						var cell: Array = buckets[row + cx]
+						var csz := cell.size()
+						for j in range(csz):
+							var e: SimEnemy = cell[j]
+							if not e.alive:
+								continue
+							if absf(e.x - bx) > e.r + 16.0:
+								continue
+							var eh := e.h
+							if absf(e.y - eh * 0.45 - by) > eh * 0.5 + 6.0:
+								continue
+							if bhits.has(e.uid):
+								continue
+							bhits[e.uid] = true
+							if b.mark and not (e.mark_t > 0.0):
+								e.mark_t = mark_delay
+								e.mark_dmg = b.dmg
+							damage_fast(e, b.dmg, "fu", false, false, false, false, -1.0, true, b.vx, b.vy)
+							if ail_on and e.alive:
+								_ail_add(e, AIL_SEAL, 1)
+							if _has_part_fu and rng.randf() < 0.35:
+								_aoe(bx, by, 80.0, b.dmg * 0.5, "mark")
+							b.pierce -= 1
+							if b.pierce < 0:
+								dead = true
+								break
+						if dead:
+							break
+					if dead:
+						break
 		if dead:
-			bullets.remove_at(i)
+			var last := bullets.size() - 1
+			if i != last:
+				bullets[i] = bullets[last]
+			bullets.pop_back()
+		i -= 1
 
 
 func _update_marks() -> void:
@@ -1522,19 +1686,26 @@ func _update_marks() -> void:
 
 func _detonate_mark(e: SimEnemy) -> void:
 	var ev: Dictionary = GameData.EVOS.fu.stats
-	var dmg: float = (e.mark_dmg if e.mark_dmg > 0.0 else 10.0) * ev.markRatio
+	var dmg: float = (e.mark_dmg if e.mark_dmg > 0.0 else 10.0) * float(ev.markRatio)
+	var mrad := float(ev.markRadius)
 	e.mark_t = 0.0
 	var x := e.x
 	var y := e.y - e.h * 0.4
-	_ev("ring", x, y, ev.markRadius)
-	grid_sys.query_into(x, y + 40.0, ev.markRadius + 80.0, _q_mark)
-	var hits: Array = []
+	_ev("ring", x, y, mrad)
+	grid_sys.query_into(x, y + 40.0, mrad + 80.0, _q_mark)
+	var hits := _q_mark_hits
+	hits.clear()
 	for j in range(_q_mark.size()):
 		var o: SimEnemy = _q_mark[j]
-		if Vector2(o.x - x, o.y - o.h * 0.4 - y).length() < ev.markRadius + o.r:
+		var dx := o.x - x
+		var dy := o.y - o.h * 0.4 - y
+		var rr := mrad + o.r
+		if dx * dx + dy * dy < rr * rr:
 			hits.append(o)
-	for o: SimEnemy in hits:
-		damage(o, dmg, "mark", {"noCrit": true, "kx": o.x - x, "ky": o.y - y, "kb": GameData.BAL.knockback * 0.6})
+	var kb_m := _knockback_def * 0.6
+	for j in range(hits.size()):
+		var o: SimEnemy = hits[j]
+		damage_fast(o, dmg, "mark", true, false, false, false, -1.0, true, o.x - x, o.y - y, kb_m)
 		if ail_on and o.alive:
 			_ail_add(o, AIL_SEAL, 1)
 
@@ -1545,33 +1716,29 @@ func _thunder(tgt: SimEnemy, dmg: float, chain: int, hit_set: Dictionary, evl: b
 	var L: Dictionary = GameData.BAL.lei
 	_ev("thunder", tgt.x, tgt.y)
 	hit_set[tgt.uid] = true
-	var o1 := {"kx": tgt.x - px, "ky": tgt.y - py, "kb": L.knock}
-	if evl:
-		o1["forceCrit"] = true
 	var was_burn := tgt.burn_t > 0.0
-	damage(tgt, dmg, "lei", o1)
+	damage_fast(tgt, dmg, "lei", false, evl, false, false, -1.0, true, tgt.x - px, tgt.y - py, float(L.knock))
 	if ail_on and tgt.alive:
 		_ail_add(tgt, AIL_SHOCK, 2 if evl else 1)
-	if was_burn and has_set("thunder") and set_depth < 2:
+	if was_burn and _has_set_thunder and set_depth < 2:
 		set_depth += 1
 		_aoe(tgt.x, tgt.y - 40.0, 130.0, dmg * 0.5, "setsplash")
 		set_depth -= 1
 	var from := tgt
 	var d := dmg
+	var ch_range := float(L.chainRange)
+	var ch_ratio := float(L.chainRatio)
 	for c in range(chain):
-		var nxt := grid_sys.nearest(from.x, from.y, float(L.chainRange), hit_set)
+		var nxt := grid_sys.nearest(from.x, from.y, ch_range, hit_set)
 		if nxt == null:
 			break
 		hit_set[nxt.uid] = true
-		d *= L.chainRatio
+		d *= ch_ratio
 		if emit:
 			if bolts.size() >= 48:
 				bolts.pop_front()
 			bolts.append({"x1": from.x, "y1": from.y - 40.0, "x2": nxt.x, "y2": nxt.y - 40.0, "life": 0.18, "seed": rng.randf()})
-		var o2 := {}
-		if evl:
-			o2["forceCrit"] = true
-		damage(nxt, d, "lei", o2)
+		damage_fast(nxt, d, "lei", false, evl)
 		if ail_on and nxt.alive:
 			_ail_add(nxt, AIL_SHOCK, 1)
 		from = nxt
@@ -1626,14 +1793,19 @@ func _update_sword(dt: float) -> void:
 			sw_x = px + cos(sw_ang) * sw.orbitRx * sw_rm()
 			sw_y = py - 30.0 + sin(sw_ang) * sw.orbitRy * sw_rm()
 			grid_sys.query_into(sw_x, sw_y + 20.0, 80.0, _q_sw_orbit)
+			var sw_hit_r := float(sw.hitR)
+			var sw_hit_iv := float(sw.hitInterval)
 			for j in range(_q_sw_orbit.size()):
 				var e: SimEnemy = _q_sw_orbit[j]
 				if not e.alive:
 					continue
 				var last: float = sw_hit.get(e.uid, -10.0)
-				if real_t - last < sw.hitInterval:
+				if real_t - last < sw_hit_iv:
 					continue
-				if Vector2(e.x - sw_x, e.y - e.h * 0.4 - sw_y).length() > e.r + sw.hitR:
+				var sdx := e.x - sw_x
+				var sdy := e.y - e.h * 0.4 - sw_y
+				var srr := e.r + sw_hit_r
+				if sdx * sdx + sdy * sdy > srr * srr:
 					continue
 				sw_hit[e.uid] = real_t
 				_sword_strike(e, sw.dmg, false)
@@ -1682,12 +1854,10 @@ func _sword_strike(e: SimEnemy, base: float, thrust: bool, key: String = "sword"
 		_ail_collapse_check(e)
 		if not e.alive:
 			return
-	var o := {"armor_pierce": float(sw.get("armor_pierce", 0.5)), "kx": e.x - px, "ky": e.y - py, "kb": 60.0}
-	if crit:
-		o["forceCrit"] = true
 	# 阶段与剑冢通关带来的剑意增益（加算，随飞剑成长）：+30%/阶 +25%/次剑冢通关
-	var grow: float = 1.0 + 0.3 * float(sw_stage - 1) + float([0.0, 0.5, 0.6][mini(rift_clears, 2)]) + 0.08 * float(sw_master)
-	damage(e, base * grow * (sw.thrustMul if thrust else 1.0), key, o)
+	var clear_add := 0.0 if rift_clears <= 0 else (0.5 if rift_clears == 1 else 0.6)
+	var grow: float = 1.0 + 0.3 * float(sw_stage - 1) + clear_add + 0.08 * float(sw_master)
+	damage_fast(e, base * grow * (float(sw.thrustMul) if thrust else 1.0), key, false, crit, false, false, float(sw.get("armor_pierce", 0.5)), true, e.x - px, e.y - py, 60.0)
 
 
 func _sword_thrust(dir_override: Vector2 = Vector2.ZERO, key: String = "sword") -> void:
@@ -1729,17 +1899,26 @@ func _sword_thrust(dir_override: Vector2 = Vector2.ZERO, key: String = "sword") 
 # ======================================================================
 func _update_enemies(dt: float) -> void:
 	var BAL: Dictionary = GameData.BAL
+	var burn_tick_v := float(BAL.burn.tick)
+	var seal_slow_per := float(GameData.AIL.seal.slowPer)
 	var tx := px
 	var ty := py - 20.0
-	var alive_list: Array = []
 	var decay := pow(0.0015, dt)
 	var touch_r: float = float(BAL.player.radius) + 6.0
+	var buckets := grid_sys._buckets
 	var cur := enemies   # 循环里玩家可能在副本中倒下 → _return_world 把 enemies 换成大地图妖物；那时不能再用本帧的副本名单覆盖回去
-	for e: SimEnemy in cur:
+	var i := 0
+	var w := 0
+	while i < cur.size():
+		var e: SimEnemy = cur[i]
+		i += 1
 		if not e.alive:
 			continue
-		var dx := tx - e.x
-		var dy := ty - e.y
+		var ex := e.x
+		var ey := e.y
+		var er := e.r
+		var dx := tx - ex
+		var dy := ty - ey
 		var dist := maxf(0.001, sqrt(dx * dx + dy * dy))
 		var ux := dx / dist
 		var uy := dy / dist
@@ -1753,8 +1932,8 @@ func _update_enemies(dt: float) -> void:
 			e.burn_t -= dt
 			e.burn_tick -= dt
 			if e.burn_tick <= 0.0:
-				e.burn_tick = BAL.burn.tick
-				damage(e, e.burn_dps * BAL.burn.tick * maxi(1, e.burn_n), "burn", O_DOT)
+				e.burn_tick = burn_tick_v
+				damage_fast(e, e.burn_dps * burn_tick_v * maxi(1, e.burn_n), "burn", true, false, true)
 				if not e.alive:
 					continue
 		if e.mark_t > 0.0:
@@ -1764,14 +1943,34 @@ func _update_enemies(dt: float) -> void:
 			if not e.alive:
 				continue
 		if e.ail_kinds > 0 or e.collapse_cd > 0.0:
-			_ail_tick(e, dt)
-		match e.ai:
-			"chase":
+			var ch := false
+			if e.collapse_cd > 0.0:
+				e.collapse_cd -= dt
+			if e.shock_n > 0:
+				e.shock_t -= dt
+				if e.shock_t <= 0.0:
+					e.shock_n = 0
+					ch = true
+			if e.seal_n > 0:
+				e.seal_t -= dt
+				if e.seal_t <= 0.0:
+					e.seal_n = 0
+					ch = true
+			if e.bind_t > 0.0:
+				e.bind_t -= dt
+				if e.bind_t <= 0.0:
+					ch = true
+			if e.burn_n > 0 and e.burn_t <= 0.0:
+				e.burn_n = 0
+				ch = true
+			if ch:
+				_ail_refresh(e)
+		match e.ai_id:
+			SimEnemy.AI_CHASE:
 				vx = ux * e.speed
 				vy = uy * e.speed
-			"hop":
-				var per: float = e.def.hopPeriod
-				e.hop += dt / per
+			SimEnemy.AI_HOP:
+				e.hop += dt / e.hop_period
 				var ph := fmod(e.hop, 1.0)
 				if ph < 0.6:
 					var s := sin(ph / 0.6 * PI)
@@ -1784,15 +1983,15 @@ func _update_enemies(dt: float) -> void:
 					_elite_slam(e, dt, dist)
 					if e.ember:
 						_warden_ember(e, dt)
-			"ranged":
-				var keep: float = e.def.keep
+			SimEnemy.AI_RANGED:
+				var keep := e.keep_dist
 				var sp := e.speed
-				if e.state == "charge":
+				if e.state_id == SimEnemy.ST_CHARGE:
 					e.timer -= dt
 					e.squash = 1.15
 					if e.timer <= 0.0:
 						_enemy_shoot(e, ux, uy)
-						e.state = "move"
+						e.set_state("move", SimEnemy.ST_MOVE)
 				else:
 					if dist > keep + 40.0:
 						vx = ux * sp
@@ -1808,39 +2007,39 @@ func _update_enemies(dt: float) -> void:
 						_elite_ring(e, dt)
 					if e.shoot_t <= 0.0 and dist < 620.0:
 						e.shoot_t = e.el.shootCd if e.elite else e.def.shootCd
-						e.state = "charge"
+						e.set_state("charge", SimEnemy.ST_CHARGE)
 						e.timer = e.el.charge if e.elite else e.def.charge
 				if e.warn_t > 0.0:
 					e.warn_t -= dt
 					vx *= 0.2
 					vy *= 0.2
 				e.lift = sin(real_t * 3.0 + e.phase) * 6.0
-			"bomber":
-				if e.state == "fuse":
+			SimEnemy.AI_BOMBER:
+				if e.state_id == SimEnemy.ST_FUSE:
 					e.timer -= dt
-					e.squash = 1.0 + (1.0 - e.timer / e.def.fuse) * 0.3
+					e.squash = 1.0 + (1.0 - e.timer / e.fuse_dur) * 0.3
 					if e.timer <= 0.0:
 						_explode_bomber(e)
 						continue
 				else:
 					vx = ux * e.speed
 					vy = uy * e.speed
-					if dist < e.def.trigger:
-						e.state = "fuse"
-						e.timer = e.def.fuse
-						_add_tele(e.x, e.y, e.def.blastR, e.def.fuse, Callable(), e)
+					if dist < e.trigger_dist:
+						e.set_state("fuse", SimEnemy.ST_FUSE)
+						e.timer = e.fuse_dur
+						_add_tele(e.x, e.y, e.blast_r, e.fuse_dur, Callable(), e)
 						_ev("sfx", "warn")
-			"swordwarden":
+			SimEnemy.AI_SWORDWARDEN:
 				var wv := _swordwarden_ai(e, dt, ux, uy, dist)
 				vx = wv.x
 				vy = wv.y
 				e.lift = sin(real_t * 2.0) * 8.0
-			"swordlord", "sedan", "lamps":
+			SimEnemy.AI_SWORDLORD, SimEnemy.AI_SEDAN, SimEnemy.AI_LAMPS:
 				var mvv := _mini_ai(e, dt, ux, uy, dist)
 				vx = mvv.x
 				vy = mvv.y
 				e.lift = sin(real_t * 2.0) * 8.0
-			"boss":
+			SimEnemy.AI_BOSS:
 				_boss_ai(e, dt)
 				if e.warn_t > 0.0:
 					e.warn_t -= dt
@@ -1849,40 +2048,40 @@ func _update_enemies(dt: float) -> void:
 				vy = uy * e.speed * f
 				e.lift = sin(real_t * 1.6) * 10.0
 		if e.seal_n > 0 or e.bind_t > 0.0:
-			var sf := maxf(0.3, 1.0 - float(e.seal_n) * float(GameData.AIL.seal.slowPer))
+			var sf := maxf(0.3, 1.0 - float(e.seal_n) * seal_slow_per)
 			if e.bind_t > 0.0 and not e.boss and not e.warden:
 				sf = 0.0   # 符缚叠满：定身
 			vx *= sf
 			vy *= sf
-		# 击退衰减 + 同格分离（每实体最多检测 8 个同格邻居，彻底消除后期 O(K^2) 尖峰）
-		e.kvx *= decay
-		e.kvy *= decay
+		# 击退衰减 + 同格分离（每实体最多检测 8 个同格邻居，直接索引预存 grid_idx，零哈希/函数调用）
+		var kvx := e.kvx * decay
+		var kvy := e.kvy * decay
+		e.kvx = kvx
+		e.kvy = kvy
 		var sx := 0.0
 		var sy := 0.0
-		var arr: Variant = grid_sys.get_cell_at(e.x, e.y)
-		if arr != null:
-			var bucket: Array = arr
-			var bsz := bucket.size()
-			if bsz > 1:
-				var sep_n := 0
-				for bi in range(bsz):
-					var o: SimEnemy = bucket[bi]
-					if o == e:
-						continue
-					sep_n += 1
-					var ox := e.x - o.x
-					var oy := e.y - o.y
-					var d2 := ox * ox + oy * oy
-					var rr := e.r + o.r
-					if d2 < rr * rr and d2 > 0.01:
-						var d := sqrt(d2)
-						var push := (rr - d) / rr
-						sx += ox / d * push * 90.0
-						sy += oy / d * push * 90.0
-					if sep_n >= SpatialGrid.MAX_SEP_NEIGHBORS:
-						break
-		e.x += (vx + e.kvx + sx) * dt
-		e.y += (vy + e.kvy + sy) * dt
+		var bucket: Array = buckets[e.grid_idx]
+		var bsz := bucket.size()
+		if bsz > 1:
+			var sep_n := 0
+			for bi in range(bsz):
+				var o: SimEnemy = bucket[bi]
+				if o == e:
+					continue
+				sep_n += 1
+				var ox := ex - o.x
+				var oy := ey - o.y
+				var d2 := ox * ox + oy * oy
+				var rr := er + o.r
+				if d2 < rr * rr and d2 > 0.01:
+					var d := sqrt(d2)
+					var fac := (rr - d) / (rr * d) * 90.0
+					sx += ox * fac
+					sy += oy * fac
+				if sep_n >= SpatialGrid.MAX_SEP_NEIGHBORS:
+					break
+		e.x = ex + (vx + kvx + sx) * dt
+		e.y = ey + (vy + kvy + sy) * dt
 		e.vx = vx
 		e.vy = vy
 		if absf(vx) > 4.0:
@@ -1904,15 +2103,18 @@ func _update_enemies(dt: float) -> void:
 		if not over and e.contact_cd <= 0.0 and dist < e.r + touch_r:
 			hurt_player(e.dmg, e.x, e.y, ("warden" if e.warden else ("boss" if e.boss else e.type)) + ":contact")
 			e.contact_cd = 0.5
+			if not is_same(cur, enemies):
+				return
 		# 离太远的普通妖物回收
 		if not e.alive:
 			continue
 		if not e.boss and not e.elite and dist > 1500.0:
 			e.alive = false
 			continue
-		alive_list.append(e)
+		cur[w] = e
+		w += 1
 	if is_same(cur, enemies):
-		enemies = alive_list
+		cur.resize(w)
 
 
 func warden_blade_pos(e: SimEnemy, i: int) -> Vector2:
@@ -1944,20 +2146,20 @@ func _swordwarden_ai(e: SimEnemy, dt: float, ux: float, uy: float, dist: float) 
 				hurt_player(float(C.bladeDmg), bp.x, bp.y, "warden:blade")
 				e.blade_hit_cd = float(C.bladeHitCd)
 	# 回鞘突刺：红线预警 → 沿锁定方向冲撞 → 冲完露出破绽（承伤 ×staggerTakenMul）
-	if e.state == "lunge":
+	if e.state_id == SimEnemy.ST_LUNGE:
 		e.timer -= dt
 		if not e.lunge_hit and not over and Vector2(px, py - 20.0).distance_to(Vector2(e.x, e.y - 20.0)) < e.r + 22.0 + float(L.width) * 0.5:
 			e.lunge_hit = true
 			hurt_player(float(L.dmg), e.x, e.y, "warden:lunge")
 		if e.timer <= 0.0:
-			e.state = "move"
+			e.set_state("move", SimEnemy.ST_MOVE)
 			e.stagger_t = float(L.stagger)
 			_ev("stagger", e.x, e.y)
 		return e.lunge_dir * float(L.speed)
 	if e.warn_t > 0.0:
 		e.warn_t -= dt
 		if e.warn_t <= 0.0:
-			e.state = "lunge"
+			e.set_state("lunge", SimEnemy.ST_LUNGE)
 			e.timer = float(L.len) / float(L.speed)
 			e.lunge_hit = false
 		return Vector2.ZERO
@@ -2193,17 +2395,27 @@ func _enemy_shoot(e: SimEnemy, ux: float, uy: float) -> void:
 
 func _explode_bomber(e: SimEnemy) -> void:
 	var d: Dictionary = e.def
+	var br := e.blast_r
 	_ev("boom", e.x, e.y - 20.0)
-	if Vector2(px - e.x, py - e.y).length() < d.blastR + 10.0:
+	var pdx := px - e.x
+	var pdy := py - e.y
+	var pr := br + 10.0
+	if pdx * pdx + pdy * pdy < pr * pr:
 		hurt_player(float(d.blastDmg) * e.dmg_mul, e.x, e.y, "firecracker:blast")
 	var x := e.x
 	var y := e.y
 	_kill(e, "blast")
-	grid_sys.query_into(x, y, d.blastR + 30.0, _q_bomber)
+	grid_sys.query_into(x, y, br + 30.0, _q_bomber)
+	var bdmg := float(d.blastEnemyDmg)
 	for j in range(_q_bomber.size()):
 		var o: SimEnemy = _q_bomber[j]
-		if o.alive and Vector2(o.x - x, o.y - y).length() < d.blastR + o.r:
-			damage(o, d.blastEnemyDmg, "blast", {"kx": o.x - x, "ky": o.y - y, "noCrit": true})
+		if not o.alive:
+			continue
+		var odx := o.x - x
+		var ody := o.y - y
+		var orr := br + o.r
+		if odx * odx + ody * ody < orr * orr:
+			damage_fast(o, bdmg, "blast", true, false, false, false, -1.0, true, odx, ody)
 
 
 func _spawn_ebullet(x: float, y: float, vx: float, vy: float, dmg: float, src: String) -> void:
@@ -2221,27 +2433,34 @@ func _spawn_ebullet(x: float, y: float, vx: float, vy: float, dmg: float, src: S
 	ebullets.append(b)
 
 
-## 受击会整体清弹（护心套清屏、副本内阵亡结束副本、合击清弹），所以不能边按下标遍历边删：
-## 先在本帧的数组上推进、把存活的收进新数组；一旦受击让 ebullets 被清空或换成别的数组，本帧剩下的弹幕视为已被清掉，直接收手。
+## 受击会整体清弹（护心套清屏、副本内阵亡结束副本、合击清弹）：原地 swap-remove，零数组分配；一旦受击让 ebullets 被清空或换成别的数组，直接收手。
 func _update_ebullets(dt: float) -> void:
 	var cur := ebullets
-	var kept: Array = []
+	var pyc := py - 34.0
 	var i := 0
 	while i < cur.size():
 		var b: SimBullet = cur[i]
-		i += 1
 		b.x += b.vx * dt
 		b.y += b.vy * dt
 		b.life -= dt
 		if b.life <= 0.0:
+			var last := cur.size() - 1
+			if i != last:
+				cur[i] = cur[last]
+			cur.pop_back()
 			continue
-		if not over and Vector2(b.x - px, b.y - (py - 34.0)).length() < 26.0:
+		var dx := b.x - px
+		var dy := b.y - pyc
+		if not over and dx * dx + dy * dy < 676.0:
 			hurt_player(b.dmg, b.x, b.y, b.hits.src)
 			if not is_same(cur, ebullets) or cur.is_empty():
 				return
+			var last2 := cur.size() - 1
+			if i != last2:
+				cur[i] = cur[last2]
+			cur.pop_back()
 			continue
-		kept.append(b)
-	ebullets = kept
+		i += 1
 
 
 func _add_tele(x: float, y: float, r: float, dur: float, cb: Callable, follow: SimEnemy) -> void:
@@ -2256,83 +2475,158 @@ func _add_tele(x: float, y: float, r: float, dur: float, cb: Callable, follow: S
 
 
 func _update_teles(dt: float) -> void:
-	for i in range(teles.size() - 1, -1, -1):
-		if i >= teles.size():
+	var cur := teles
+	var i := cur.size() - 1
+	while i >= 0:
+		if i >= cur.size():
+			i -= 1
 			continue
-		var tl: SimTele = teles[i]
+		var tl: SimTele = cur[i]
 		tl.t += dt
 		if tl.follow != null:
 			if not tl.follow.alive:
-				teles.remove_at(i)
+				var last := cur.size() - 1
+				if i != last:
+					cur[i] = cur[last]
+				cur.pop_back()
+				i -= 1
 				continue
 			tl.x = tl.follow.x
 			tl.y = tl.follow.y
 		if tl.t >= tl.dur:
-			teles.remove_at(i)
+			var last2 := cur.size() - 1
+			if i != last2:
+				cur[i] = cur[last2]
+			cur.pop_back()
 			if tl.cb.is_valid():
 				tl.cb.call()
+			if not is_same(cur, teles):
+				return
+		i -= 1
 
 
 # ======================================================================
 # 掉落与拾取
 # ======================================================================
+func _pk_cell_of(x: float, y: float) -> int:
+	var cx := clampi(int(x * SpatialGrid.INV_CELL), 0, SpatialGrid.COLS - 1)
+	var cy := clampi(int(y * SpatialGrid.INV_CELL), 0, SpatialGrid.ROWS - 1)
+	return cx + cy * SpatialGrid.COLS
+
+
+func _pk_grid_add(k: SimPickup) -> void:
+	if k.mag or (k.kind_id != SimPickup.PK_SOUL and k.kind_id != SimPickup.PK_COIN):
+		k.cell = -1
+		return
+	var idx := _pk_cell_of(k.x, k.y)
+	k.cell = idx
+	(_pk_grid[idx] as Array).append(k)
+
+
+func _pk_grid_remove(k: SimPickup) -> void:
+	var idx := k.cell
+	if idx < 0:
+		return
+	k.cell = -1
+	var b: Array = _pk_grid[idx]
+	var pos := b.find(k)
+	if pos >= 0:
+		var last := b.size() - 1
+		if pos != last:
+			b[pos] = b[last]
+		b.pop_back()
+
+
+func _clear_pickups() -> void:
+	for i in range(pickups.size()):
+		var k: SimPickup = pickups[i]
+		if k.cell >= 0:
+			(_pk_grid[k.cell] as Array).clear()
+			k.cell = -1
+	pickups.clear()
+	gem_count = 0
+	_pk_counts[0] = 0
+	_pk_counts[1] = 0
+	_pk_counts[2] = 0
+	_pk_counts[3] = 0
+
+
 func _spawn_pickup(kind: String, x: float, y: float, val: int) -> void:
 	var D: Dictionary = GameData.BAL.drops
+	var kid := SimPickup.kind_to_id(kind)
 	if mode != "classic" and D.has("modeCaps"):
 		var MC: Dictionary = D.modeCaps
 		var cap := int(MC.get(kind, 80))
-		var mr := float(MC.get("mergeR", 78.0))
-		var mr2 := mr * mr
-		var cnt := 0
-		var near_p: SimPickup = null
-		var near_d := 1e18
-		var far_p: SimPickup = null
-		var far_d := -1.0
-		var any_p: SimPickup = null
-		var any_d := 1e18
-		for k: SimPickup in pickups:
-			if k.kind != kind:
-				continue
-			cnt += 1
-			if k.mag:
-				continue
-			var d := (k.x - x) * (k.x - x) + (k.y - y) * (k.y - y)
-			if d < any_d:
-				any_d = d
-				any_p = k
-			if d <= mr2 and d < near_d:
-				near_d = d
-				near_p = k
-			var dp := (k.x - px) * (k.x - px) + (k.y - py) * (k.y - py)
-			if dp > far_d:
-				far_d = dp
-				far_p = k
-		if kind == "soul" or kind == "coin":
+		var cnt := _pk_counts[kid]
+		if kid == SimPickup.PK_SOUL or kid == SimPickup.PK_COIN:
+			var mr := float(MC.get("mergeR", 78.0))
+			var mr2 := mr * mr
+			var near_p: SimPickup = null
+			var near_d := 1e18
+			var cx0 := maxi(0, int((x - mr) * SpatialGrid.INV_CELL))
+			var cx1 := mini(SpatialGrid.COLS - 1, int((x + mr) * SpatialGrid.INV_CELL))
+			var cy0 := maxi(0, int((y - mr) * SpatialGrid.INV_CELL))
+			var cy1 := mini(SpatialGrid.ROWS - 1, int((y + mr) * SpatialGrid.INV_CELL))
+			for cy in range(cy0, cy1 + 1):
+				var row := cy * SpatialGrid.COLS
+				for cx in range(cx0, cx1 + 1):
+					var b: Array = _pk_grid[row + cx]
+					for bi in range(b.size()):
+						var k: SimPickup = b[bi]
+						if k.kind_id != kid or k.mag:
+							continue
+						var dx := k.x - x
+						var dy := k.y - y
+						var d := dx * dx + dy * dy
+						if d <= mr2 and d < near_d:
+							near_d = d
+							near_p = k
 			if near_p != null:
 				near_p.val += val
 				return
 			if cnt >= cap:
+				var any_p: SimPickup = null
+				var any_d := 1e18
+				for i in range(pickups.size()):
+					var k2: SimPickup = pickups[i]
+					if k2.kind_id != kid or k2.mag:
+						continue
+					var d2 := (k2.x - x) * (k2.x - x) + (k2.y - y) * (k2.y - y)
+					if d2 < any_d:
+						any_d = d2
+						any_p = k2
 				if any_p != null:
 					any_p.val += val
-				elif kind == "soul":
+				elif kid == SimPickup.PK_SOUL:
 					_gain_xp(val)
 				else:
 					coins += val
 				return
-		elif kind == "oil" and cnt >= cap:
+		elif kid == SimPickup.PK_OIL and cnt >= cap:
+			var far_p: SimPickup = null
+			var far_d := -1.0
+			for i in range(pickups.size()):
+				var k3: SimPickup = pickups[i]
+				if k3.kind_id != SimPickup.PK_OIL or k3.mag:
+					continue
+				var dp := (k3.x - px) * (k3.x - px) + (k3.y - py) * (k3.y - py)
+				if dp > far_d:
+					far_d = dp
+					far_p = k3
 			if far_p != null:
 				far_p.x = x
 				far_p.y = y - 18.0
 				far_p.born = real_t
 			return
-		elif kind == "chest" and cnt >= cap:
+		elif kid == SimPickup.PK_CHEST and cnt >= cap:
 			pending_chest += 1
 			return
-	elif kind == "soul" and gem_count >= int(D.maxGems):
+	elif kid == SimPickup.PK_SOUL and gem_count >= int(D.maxGems):
 		var best: SimPickup = null
 		var bd := 1e18
-		for k: SimPickup in pickups:
-			if k.kind != "soul" or k.mag:
+		for i in range(pickups.size()):
+			var k: SimPickup = pickups[i]
+			if k.kind_id != SimPickup.PK_SOUL or k.mag:
 				continue
 			var d := (k.x - x) * (k.x - x) + (k.y - y) * (k.y - y)
 			if d < bd:
@@ -2341,16 +2635,19 @@ func _spawn_pickup(kind: String, x: float, y: float, val: int) -> void:
 		if best != null:
 			best.val += val
 			return
-	var k2 := SimPickup.new()
-	k2.kind = kind
-	k2.x = x
-	k2.y = y - 18.0
-	k2.val = val
-	k2.bob = rng.randf() * TAU
-	k2.born = real_t
-	if kind == "soul":
+	var k_new := SimPickup.new()
+	k_new.kind = kind
+	k_new.kind_id = kid
+	k_new.x = x
+	k_new.y = y - 18.0
+	k_new.val = val
+	k_new.bob = rng.randf() * TAU
+	k_new.born = real_t
+	if kid == SimPickup.PK_SOUL:
 		gem_count += 1
-	pickups.append(k2)
+	_pk_counts[kid] += 1
+	pickups.append(k_new)
+	_pk_grid_add(k_new)
 
 
 func _update_pickups(dt: float) -> void:
@@ -2358,55 +2655,95 @@ func _update_pickups(dt: float) -> void:
 	var D: Dictionary = GameData.BAL.drops
 	var tx := px
 	var ty := py - 30.0
-	var pull_r := s_pickup * (1.15 if lantern_state() == "high" else 1.0)
-	for i in range(pickups.size() - 1, -1, -1):
+	var pull_r := s_pickup * (1.15 if lantern_mode == LANTERN_HIGH else 1.0)
+	var pull_r2 := pull_r * pull_r
+	var light_r := float(B.lightPull)
+	var light_r2 := light_r * light_r
+	var light_spd := float(B.lightPullSpeed)
+	var mag_spd := float(B.magnetSpeed)
+	var mag_pop := float(D.magnetPop)
+	var i := pickups.size() - 1
+	while i >= 0:
 		var k: SimPickup = pickups[i]
 		var dx := tx - k.x
 		var dy := ty - k.y
-		var d := maxf(0.001, sqrt(dx * dx + dy * dy))
+		var d2 := dx * dx + dy * dy
 		if not over:
-			if not k.mag and d < pull_r:
-				k.mag = true
-				k.spd = -D.magnetPop
+			if not k.mag:
+				if d2 < pull_r2:
+					k.mag = true
+					k.spd = -mag_pop
+					_pk_grid_remove(k)
+				elif k.kind_id == SimPickup.PK_SOUL and d2 < light_r2:
+					var dl := maxf(0.001, sqrt(d2))
+					k.x += dx / dl * light_spd * dt
+					k.y += dy / dl * light_spd * dt
+					if k.cell >= 0:
+						var nc := _pk_cell_of(k.x, k.y)
+						if nc != k.cell:
+							_pk_grid_remove(k)
+							k.cell = nc
+							(_pk_grid[nc] as Array).append(k)
+					if d2 < 484.0 and k.spd >= 0.0:
+						_pk_grid_remove(k)
+						_pk_counts[k.kind_id] = maxi(0, _pk_counts[k.kind_id] - 1)
+						var last0 := pickups.size() - 1
+						if i != last0:
+							pickups[i] = pickups[last0]
+						pickups.pop_back()
+						_collect(k)
+						i -= 1
+						continue
+					k.bob += dt * 4.0
+					i -= 1
+					continue
+				else:
+					k.bob += dt * 4.0
+					i -= 1
+					continue
 			if k.mag:
-				k.spd = minf(B.magnetSpeed, k.spd + 1600.0 * dt)
+				var d := maxf(0.001, sqrt(d2))
+				k.spd = minf(mag_spd, k.spd + 1600.0 * dt)
 				k.x += dx / d * k.spd * dt
 				k.y += dy / d * k.spd * dt
-			elif k.kind == "soul" and d < B.lightPull:
-				k.x += dx / d * B.lightPullSpeed * dt
-				k.y += dy / d * B.lightPullSpeed * dt
-			if d < 22.0 and k.spd >= 0.0:
-				pickups.remove_at(i)
-				_collect(k)
-				continue
+				if d < 22.0 and k.spd >= 0.0:
+					_pk_counts[k.kind_id] = maxi(0, _pk_counts[k.kind_id] - 1)
+					var last := pickups.size() - 1
+					if i != last:
+						pickups[i] = pickups[last]
+					pickups.pop_back()
+					_collect(k)
+					i -= 1
+					continue
 		k.bob += dt * 4.0
+		i -= 1
 
 
 func _collect(k: SimPickup) -> void:
 	var D: Dictionary = GameData.BAL.drops
-	match k.kind:
-		"soul":
+	match k.kind_id:
+		SimPickup.PK_SOUL:
 			gem_count = maxi(0, gem_count - 1)
 			_ev("pickup", k.val)
 			_gain_xp(k.val)
-		"coin":
+		SimPickup.PK_COIN:
 			_ev("sfx", "coin")
 			coins += k.val
-		"oil":
+		SimPickup.PK_OIL:
 			LanternRules.add_oil(self, float(LanternRules.lcfg().get("oilPickupGain", 28.0)))
 			if phase != PH_RIFT:
 				var h := minf(D.oilHeal, maxhp - hp)
 				hp += h
 				_ev("heal", h)
-		"chest":
+		SimPickup.PK_CHEST:
 			_ev("sfx", "chest")
 			pending_chest += 1
 
 
 func _gain_xp(v: int) -> void:
 	var gain := v
-	if lantern_state() == "high":
-		gain = maxi(v, int(round(float(v) * (1.0 + float(LanternRules.lcfg().get("highXpMul", 0.20))))))
+	if lantern_mode == LANTERN_HIGH:
+		gain = maxi(v, int(round(float(v) * _high_xp_mul)))
 	xp += gain
 	while xp >= need:
 		xp -= need
@@ -2602,6 +2939,7 @@ func choose(i: int) -> void:
 	elif c.kind == "rule":
 		if not active_rules.has(c.id) and active_rules.size() < SchoolRules.max_rules():
 			active_rules.append(c.id)
+			rules_serial += 1
 		_ev("banner", "习得阴律 • %s" % c.name, "#ffcf5a")
 	elif c.kind == "asc":
 		if c.id == "asc_dmg":
@@ -2683,9 +3021,10 @@ func _start_break(k: int) -> void:
 	teles.clear()
 	trails.clear()
 	lei_queue.clear()
-	for p in pickups:
+	for p: SimPickup in pickups:
 		p.mag = true
 		p.spd = 120.0
+		_pk_grid_remove(p)
 	boss = null
 	# BOSS 前额外 1 枚灯芯
 	if k == seg_n() - 1:
@@ -3145,8 +3484,7 @@ func enter_rift(poi: int = -1) -> bool:
 	rift_target = float(tcfg.target) + 10.0 * extra
 	rift_limit = float(tcfg.limit) + 10.0 * extra
 	_leave_world()
-	pickups.clear()   # 经典口径不收掉落，进副本即清（平衡基线不变）
-	gem_count = 0
+	_clear_pickups()   # 经典口径不收掉落，进副本即清（平衡基线不变）
 	var c := Vector2(W / 2.0, H / 2.0)
 	px = c.x - 260.0
 	py = c.y
@@ -3186,8 +3524,7 @@ func enter_arena(poi: int, kind: String) -> void:
 	if FARM_KINDS.has(kind):
 		_enter_farm(kind)
 		return
-	pickups.clear()
-	gem_count = 0
+	_clear_pickups()
 	var c := Vector2(W / 2.0, H / 2.0)
 	px = c.x - 260.0
 	py = c.y
@@ -3205,8 +3542,7 @@ func _enter_vine() -> void:
 	coins -= vine_ticket_paid
 	vine_runs += 1
 	var n := vine_runs
-	pickups.clear()
-	gem_count = 0
+	_clear_pickups()
 	var c := Vector2(W / 2.0, H / 2.0)
 	px = c.x - 260.0
 	py = c.y
@@ -3268,12 +3604,11 @@ func _stash_pickups() -> void:
 	if mode == "classic":
 		return
 	for k: SimPickup in pickups:
-		if arena_stash.size() >= 140 and (k.kind == "coin" or k.kind == "soul"):
+		if arena_stash.size() >= 140 and (k.kind_id == SimPickup.PK_COIN or k.kind_id == SimPickup.PK_SOUL):
 			_collect(k)
 		else:
 			arena_stash.append(k)
-	pickups.clear()
-	gem_count = 0
+	_clear_pickups()
 
 
 func _unstash_pickups() -> void:
@@ -3281,10 +3616,9 @@ func _unstash_pickups() -> void:
 		return
 	# 秘境里没捡完的：直接入账（场地已经关了，不让玩家白打）
 	for k: SimPickup in pickups:
-		if k.kind == "coin" or k.kind == "soul":
+		if k.kind_id == SimPickup.PK_COIN or k.kind_id == SimPickup.PK_SOUL:
 			_collect(k)
-	pickups.clear()
-	gem_count = 0
+	_clear_pickups()
 	if arena_stash.is_empty():
 		return
 	var stashed := arena_stash
@@ -3590,7 +3924,7 @@ func fork() -> Sim:
 		if pr.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
 			var n: String = pr.name
 			# 妖物/掉落对象不能浅共享：duplicate(true) 不复制对象，克隆里打怪会改到真局面。大地图收起的妖物、收起的掉落不进克隆（试射只看当前场地）。
-			if n in ["rng", "enemies", "bullets", "ebullets", "pickups", "teles", "bolts", "trails", "grid", "grid_sys", "dps_tracker", "dps_breakdown", "_q_bullet", "_q_orb", "_q_trail", "_q_lei", "_q_mark", "_q_qi", "_q_qi_pick", "_q_wheel", "_q_sw_orbit", "_q_thrust", "_q_pet", "_q_pet_shot", "_q_pet_sub", "_q_bomber", "_q_flare", "_q_rule", "_q_corpse", "_q_aoe", "_q_sets", "_q_leihuo", "_q_fallback", "events", "lei_queue", "boss", "rift_warden", "guard_ref", "vine_boss", "world_stash", "arena_stash", "orb_pos", "choice"]:
+			if n in ["rng", "enemies", "bullets", "ebullets", "pickups", "teles", "bolts", "trails", "grid", "grid_sys", "dps_tracker", "dps_breakdown", "_q_bullet", "_q_orb", "_q_trail", "_q_lei", "_q_mark", "_q_qi", "_q_qi_pick", "_q_wheel", "_q_sw_orbit", "_q_thrust", "_q_pet", "_q_pet_shot", "_q_pet_sub", "_q_bomber", "_q_flare", "_q_rule", "_q_corpse", "_q_aoe", "_q_sets", "_q_leihuo", "_q_fallback", "_q_lei_cands", "_q_mark_hits", "_pk_grid", "_pk_counts", "events", "lei_queue", "boss", "rift_warden", "guard_ref", "vine_boss", "world_stash", "arena_stash", "orb_pos", "choice"]:
 				continue
 			var v: Variant = get(n)
 			if v is Dictionary or v is Array:
@@ -3710,8 +4044,9 @@ func from_save(d: Dictionary) -> void:
 	extract_choice_open = false
 	rng.seed = seed_v + int(real_t * 10.0)
 	_recalc()
+	rules_serial += 1
 	hp = minf(float(d.get("hp", maxhp)), maxhp)
-	enemies.clear(); ebullets.clear(); bullets.clear(); pickups.clear(); teles.clear(); trails.clear(); lei_queue.clear(); pet_shots.clear(); pet_fx.clear()
+	enemies.clear(); ebullets.clear(); bullets.clear(); _clear_pickups(); teles.clear(); trails.clear(); lei_queue.clear(); pet_shots.clear(); pet_fx.clear()
 	combo_waves = 0
 	pet_pos = Vector2(px + 90.0, py - 40.0)
 	boss = null
@@ -3735,8 +4070,13 @@ func _aoe(x: float, y: float, r: float, dmg: float, key: String) -> void:
 	grid_sys.query_into(x, y, r + 40.0, q)
 	for j in range(q.size()):
 		var e: SimEnemy = q[j]
-		if e.alive and Vector2(e.x - x, e.y - e.h * 0.4 - y).length() < r + e.r:
-			damage(e, dmg, key, {"noCrit": true, "kx": e.x - x, "ky": e.y - y, "kb": 90.0})
+		if not e.alive:
+			continue
+		var dx := e.x - x
+		var dy := e.y - e.h * 0.4 - y
+		var rr := r + e.r
+		if dx * dx + dy * dy < rr * rr:
+			damage_fast(e, dmg, key, true, false, false, false, -1.0, true, e.x - x, e.y - y, 90.0)
 
 
 func grant_gourd(src: String = "") -> bool:
@@ -3868,7 +4208,7 @@ func _pet_chain_thunder(tgt: SimEnemy, dmg: float) -> void:
 			bolts.append({"x1": from_p.x, "y1": from_p.y, "x2": cur.x, "y2": cur.y - cur.h * 0.45, "life": 0.24, "seed": rng.randf()})
 		_ev("thunder", cur.x, cur.y)
 		_pet_add_fx(1, cur.x, cur.y - cur.h * 0.4, 0.34, 85.0)
-		damage(cur, d, "pet", {"kx": cur.x - pet_pos.x, "ky": cur.y - pet_pos.y, "kb": 80.0})
+		damage_fast(cur, d, "pet", false, false, false, false, -1.0, true, cur.x - pet_pos.x, cur.y - pet_pos.y, 80.0)
 		if ail_on and cur.alive:
 			_ail_add(cur, AIL_SHOCK, 1)
 		from_p = Vector2(cur.x, cur.y - cur.h * 0.45)
@@ -3890,14 +4230,25 @@ func _pet_shockwave(tgt: SimEnemy, dmg: float) -> void:
 	grid_sys.query_into(pet_pos.x, pet_pos.y, rad + 40.0, _q_pet_sub)
 	for j in range(_q_pet_sub.size()):
 		var e: SimEnemy = _q_pet_sub[j]
-		if e.alive and Vector2(e.x - pet_pos.x, e.y - e.h * 0.4 - pet_pos.y).length() < rad + e.r:
-			damage(e, dmg * 1.25, "pet", {"kx": e.x - pet_pos.x, "ky": e.y - pet_pos.y, "kb": 160.0})
-	# 顺带震碎身边敌弹护主
-	var kept: Array = []
-	for b: SimBullet in ebullets:
-		if Vector2(b.x - pet_pos.x, b.y - pet_pos.y).length() > 150.0:
-			kept.append(b)
-	ebullets = kept
+		if not e.alive:
+			continue
+		var dx := e.x - pet_pos.x
+		var dy := e.y - e.h * 0.4 - pet_pos.y
+		var rr := rad + e.r
+		if dx * dx + dy * dy < rr * rr:
+			damage_fast(e, dmg * 1.25, "pet", false, false, false, false, -1.0, true, dx, e.y - pet_pos.y, 160.0)
+	# 顺带震碎身边敌弹护主（原地 swap-remove）
+	var bi := ebullets.size() - 1
+	while bi >= 0:
+		var b: SimBullet = ebullets[bi]
+		var bdx := b.x - pet_pos.x
+		var bdy := b.y - pet_pos.y
+		if bdx * bdx + bdy * bdy <= 22500.0:
+			var blast := ebullets.size() - 1
+			if bi != blast:
+				ebullets[bi] = ebullets[blast]
+			ebullets.pop_back()
+		bi -= 1
 
 
 func _pet_trigger_combo(G: Dictionary) -> void:
@@ -3908,16 +4259,29 @@ func _pet_trigger_combo(G: Dictionary) -> void:
 	combo_wave_t = 0.05
 	var cdmg := maxf(float(G.comboDmg), build_dps() * float(G.get("comboDpsRatio", 2.2)) / maxf(1.0, 1.0 + s_dmg_add)) * (1.0 + 0.12 * float(pet_marks))
 	var cr := float(G.comboR)
-	grid_sys.query_into(px, py - 30.0, cr + 50.0, _q_pet_sub)
+	var cr2 := cr * cr
+	var py30 := py - 30.0
+	grid_sys.query_into(px, py30, cr + 50.0, _q_pet_sub)
 	for j in range(_q_pet_sub.size()):
 		var e: SimEnemy = _q_pet_sub[j]
-		if e.alive and Vector2(e.x - px, e.y - e.h * 0.4 - (py - 30.0)).length() < cr + e.r:
-			damage(e, cdmg, "pet", {"forceCrit": true, "kx": e.x - px, "ky": e.y - py, "kb": 220.0})
-	var kept: Array = []
-	for b: SimBullet in ebullets:
-		if Vector2(b.x - px, b.y - py).length() > cr:
-			kept.append(b)
-	ebullets = kept
+		if not e.alive:
+			continue
+		var dx := e.x - px
+		var dy := e.y - e.h * 0.4 - py30
+		var rr := cr + e.r
+		if dx * dx + dy * dy < rr * rr:
+			damage_fast(e, cdmg, "pet", false, true, false, false, -1.0, true, dx, e.y - py, 220.0)
+	var bi2 := ebullets.size() - 1
+	while bi2 >= 0:
+		var b: SimBullet = ebullets[bi2]
+		var bdx := b.x - px
+		var bdy := b.y - py
+		if bdx * bdx + bdy * bdy <= cr2:
+			var blast2 := ebullets.size() - 1
+			if bi2 != blast2:
+				ebullets[bi2] = ebullets[blast2]
+			ebullets.pop_back()
+		bi2 -= 1
 	var heal_amt := maxhp * 0.15
 	hp = minf(maxhp, hp + heal_amt)
 	pet_hp = minf(pet_maxhp(), pet_hp + pet_maxhp() * 0.35)
@@ -3926,50 +4290,79 @@ func _pet_trigger_combo(G: Dictionary) -> void:
 
 
 func _update_pet_shots(dt: float) -> void:
-	for i in range(pet_shots.size() - 1, -1, -1):
+	var i := pet_shots.size() - 1
+	while i >= 0:
 		var sh: Dictionary = pet_shots[i]
 		sh.life -= dt
 		if sh.life <= 0.0:
-			pet_shots.remove_at(i)
+			var last0 := pet_shots.size() - 1
+			if i != last0:
+				pet_shots[i] = pet_shots[last0]
+			pet_shots.pop_back()
+			i -= 1
 			continue
 		# 轻微追踪最近敌人
-		var nt := nearest_enemy(float(sh.x), float(sh.y), 320.0)
+		var sx := float(sh.x)
+		var sy := float(sh.y)
+		var nt := nearest_enemy(sx, sy, 320.0)
 		if nt != null:
-			var desired := Vector2(nt.x - float(sh.x), nt.y - nt.h * 0.4 - float(sh.y)).normalized() * 680.0
+			var desired := Vector2(nt.x - sx, nt.y - nt.h * 0.4 - sy).normalized() * 680.0
 			var cur_v := Vector2(float(sh.vx), float(sh.vy))
 			var nv := cur_v.lerp(desired, clampf(dt * 8.0, 0.0, 1.0))
 			sh.vx = nv.x
 			sh.vy = nv.y
-		sh.x = float(sh.x) + float(sh.vx) * dt
-		sh.y = float(sh.y) + float(sh.vy) * dt
+		sx += float(sh.vx) * dt
+		sy += float(sh.vy) * dt
+		sh.x = sx
+		sh.y = sy
 		var hit_e: SimEnemy = null
-		grid_sys.query_into(float(sh.x), float(sh.y), 60.0, _q_pet_shot)
+		grid_sys.query_into(sx, sy, 60.0, _q_pet_shot)
 		for j in range(_q_pet_shot.size()):
 			var e: SimEnemy = _q_pet_shot[j]
-			if e.alive and Vector2(e.x - float(sh.x), e.y - e.h * 0.45 - float(sh.y)).length() < e.r + 22.0:
+			if not e.alive:
+				continue
+			var edx := e.x - sx
+			var edy := e.y - e.h * 0.45 - sy
+			var err := e.r + 22.0
+			if edx * edx + edy * edy < err * err:
 				hit_e = e
 				break
 		if hit_e != null:
 			var sr := float(sh.r)
-			_pet_add_fx(0, float(sh.x), float(sh.y), 0.32, sr)
-			grid_sys.query_into(float(sh.x), float(sh.y), sr + 30.0, _q_pet_sub)
+			var sdmg := float(sh.dmg)
+			_pet_add_fx(0, sx, sy, 0.32, sr)
+			grid_sys.query_into(sx, sy, sr + 30.0, _q_pet_sub)
 			for j in range(_q_pet_sub.size()):
 				var o: SimEnemy = _q_pet_sub[j]
-				if o.alive and Vector2(o.x - float(sh.x), o.y - o.h * 0.4 - float(sh.y)).length() < sr + o.r:
-					damage(o, float(sh.dmg), "pet", {"kx": o.x - float(sh.x), "ky": o.y - float(sh.y), "kb": 80.0})
+				if not o.alive:
+					continue
+				var odx := o.x - sx
+				var ody := o.y - o.h * 0.4 - sy
+				var orr := sr + o.r
+				if odx * odx + ody * ody < orr * orr:
+					damage_fast(o, sdmg, "pet", false, false, false, false, -1.0, true, odx, o.y - sy, 80.0)
 					if o.alive and s_burn_dps > 0.0:
 						_ignite(o)
-			pet_shots.remove_at(i)
+			var last1 := pet_shots.size() - 1
+			if i != last1:
+				pet_shots[i] = pet_shots[last1]
+			pet_shots.pop_back()
+		i -= 1
 
 
 func _update_pet(dt: float) -> void:
 	set_ward_cd = maxf(0.0, set_ward_cd - dt)
 	combo_cd = maxf(0.0, combo_cd - dt)
 	combo_fx = maxf(0.0, combo_fx - dt)
-	for i in range(pet_fx.size() - 1, -1, -1):
-		pet_fx[i][3] -= dt
-		if pet_fx[i][3] <= 0.0:
-			pet_fx.remove_at(i)
+	var fi := pet_fx.size() - 1
+	while fi >= 0:
+		pet_fx[fi][3] -= dt
+		if pet_fx[fi][3] <= 0.0:
+			var flast := pet_fx.size() - 1
+			if fi != flast:
+				pet_fx[fi] = pet_fx[flast]
+			pet_fx.pop_back()
+		fi -= 1
 	_update_pet_shots(dt)
 	if not pet_on:
 		return
@@ -4010,12 +4403,13 @@ func _update_pet(dt: float) -> void:
 	var pr := float(G.get("pickupR", 180.0))
 	var pr2 := pr * pr
 	for k: SimPickup in pickups:
-		if not k.mag and (k.kind == "soul" or k.kind == "coin"):
+		if not k.mag and (k.kind_id == SimPickup.PK_SOUL or k.kind_id == SimPickup.PK_COIN):
 			var dkx := k.x - pet_pos.x
 			var dky := k.y - pet_pos.y
 			if dkx * dkx + dky * dky < pr2:
 				k.mag = true
 				k.spd = 120.0
+				_pk_grid_remove(k)
 	# Q 七彩合击触发
 	if in_combo and combo_cd <= 0.0 and phase != PH_BREAK:
 		_pet_trigger_combo(G)
@@ -4037,8 +4431,13 @@ func _update_pet(dt: float) -> void:
 				grid_sys.query_into(wt.x, wt.y, 170.0, _q_pet_sub)
 				for j in range(_q_pet_sub.size()):
 					var o: SimEnemy = _q_pet_sub[j]
-					if o.alive and Vector2(o.x - wt.x, o.y - wt.y).length() < 150.0 + o.r:
-						damage(o, wd, "pet", {"forceCrit": true, "kx": o.x - wt.x, "ky": o.y - wt.y, "kb": 140.0})
+					if not o.alive:
+						continue
+					var odx := o.x - wt.x
+					var ody := o.y - wt.y
+					var orr := 150.0 + o.r
+					if odx * odx + ody * ody < orr * orr:
+						damage_fast(o, wd, "pet", false, true, false, false, -1.0, true, odx, ody, 140.0)
 	# 高频主动技能循环（0.55s 一轮）
 	pet_atk_t -= dt
 	if pet_atk_t <= 0.0 and phase != PH_BREAK:
@@ -4099,27 +4498,27 @@ func _mini_ai(e: SimEnemy, dt: float, ux: float, uy: float, dist: float) -> Vect
 	var C: Dictionary = GameData.MB[e.ai]
 	var dirp := Vector2(ux, uy)
 	e.blade_hit_cd = maxf(0.0, e.blade_hit_cd - dt)
-	if e.ai == "lamps":
+	if e.ai_id == SimEnemy.AI_LAMPS:
 		e.blade_ang += float(C.lampW) * dt
 		for i in range(int(C.lamps)):
 			var lp := lamp_pos(e, i)
 			if e.blade_hit_cd <= 0.0 and not over and lp.distance_to(Vector2(px, py - 34.0)) < float(C.lampHitR):
 				hurt_player(float(C.lampDmg), lp.x, lp.y, "lamps:lamp")
 				e.blade_hit_cd = float(C.lampHitCd)
-	if e.state == "lunge":
+	if e.state_id == SimEnemy.ST_LUNGE:
 		e.timer -= dt
 		if not e.lunge_hit and not over and Vector2(px, py - 20.0).distance_to(Vector2(e.x, e.y - 20.0)) < e.r + 30.0:
 			e.lunge_hit = true
 			hurt_player(float(C.chargeDmg), e.x, e.y, "sedan:charge")
 		if e.timer <= 0.0:
-			e.state = "move"
+			e.set_state("move", SimEnemy.ST_MOVE)
 			e.stagger_t = 1.2
 			_spawn_paper(e)
 		return e.lunge_dir * float(C.chargeSpeed)
 	if e.warn_t > 0.0:
 		e.warn_t -= dt
-		if e.warn_t <= 0.0 and e.ai == "sedan" and e.state == "aim":
-			e.state = "lunge"
+		if e.warn_t <= 0.0 and e.ai_id == SimEnemy.AI_SEDAN and e.state_id == SimEnemy.ST_AIM:
+			e.set_state("lunge", SimEnemy.ST_LUNGE)
 			e.timer = float(C.chargeLen) / float(C.chargeSpeed)
 			e.lunge_hit = false
 		return Vector2.ZERO
@@ -4132,8 +4531,8 @@ func _mini_ai(e: SimEnemy, dt: float, ux: float, uy: float, dist: float) -> Vect
 		e.atk_t = float(C.gap)
 		var phase_i := e.atk_idx % 3
 		e.atk_idx += 1
-		match e.ai:
-			"swordlord":
+		match e.ai_id:
+			SimEnemy.AI_SWORDLORD:
 				if phase_i != 1:
 					# 环形飞剑阵：预警圈 → 一圈飞剑
 					var cb := func() -> void:
@@ -4157,10 +4556,10 @@ func _mini_ai(e: SimEnemy, dt: float, ux: float, uy: float, dist: float) -> Vect
 								_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a2) * float(C.fanSpeed), sin(a2) * float(C.fanSpeed), float(C.fanDmg), "swordlord:rain")
 						_add_tele(e.x, e.y, 0.0, float(C.warn) + wave * 0.35, cb2, e)
 				_ev("sfx", "warn")
-			"sedan":
+			SimEnemy.AI_SEDAN:
 				if phase_i == 0:
 					e.lunge_dir = Vector2(px - e.x, py - 20.0 - (e.y - 20.0)).normalized()
-					e.state = "aim"
+					e.set_state("aim", SimEnemy.ST_AIM)
 					e.warn_t = float(C.chargeWarn)
 					_ev("sfx", "warn")
 				elif phase_i == 1:
@@ -4171,7 +4570,7 @@ func _mini_ai(e: SimEnemy, dt: float, ux: float, uy: float, dist: float) -> Vect
 						var g := spawn_enemy("paperman", 0.0, 0.0, {"pos": Vector2(e.x + cos(a3) * 120.0, e.y + sin(a3) * 80.0)})
 						g.speed *= 1.3
 					_ev("sfx", "roar")
-			"lamps":
+			SimEnemy.AI_LAMPS:
 				if phase_i != 2:
 					var a0 := atan2(py - e.y, px - e.x) - 0.9
 					for i in range(int(C.beamBullets)):
@@ -4344,25 +4743,32 @@ func _update_sword_stages(dt: float) -> void:
 	# 阶段3：环身剑轮（贴身持续切割）
 	if sw_stage >= 3:
 		var W: Dictionary = ST.wheel
-		var n := int(W.blades) + int(sw_br.get("count", 0)) + (3 if has_part("part_sword") else 0)
+		var n := int(W.blades) + int(sw_br.get("count", 0)) + (3 if _has_part_sword else 0)
 		var rad: float = float(W.radius) * sw_rm()
+		var w_hit_cd := float(W.hitCd)
+		var w_hit_r := float(W.hitR)
+		var w_dmg := float(sw.dmg) * float(W.mul)
 		sw_wheel_ang += float(W.spin) * dt
 		for i in range(n):
 			var a := sw_wheel_ang + float(i) / n * TAU
-			var wp := Vector2(px + cos(a) * rad, py - 30.0 + sin(a) * rad * 0.8)
-			sw_wheel_pos.append(wp)
-			grid_sys.query_into(wp.x, wp.y + 20.0, 70.0, _q_wheel)
+			var wpx := px + cos(a) * rad
+			var wpy := py - 30.0 + sin(a) * rad * 0.8
+			sw_wheel_pos.append(Vector2(wpx, wpy))
+			grid_sys.query_into(wpx, wpy + 20.0, 70.0, _q_wheel)
 			for j in range(_q_wheel.size()):
 				var e: SimEnemy = _q_wheel[j]
 				if not e.alive:
 					continue
 				var hk := e.uid * 16 + i
-				if real_t - float(sw_wheel_hit.get(hk, -10.0)) < float(W.hitCd):
+				if real_t - float(sw_wheel_hit.get(hk, -10.0)) < w_hit_cd:
 					continue
-				if Vector2(e.x - wp.x, e.y - e.h * 0.4 - wp.y).length() > e.r + float(W.hitR):
+				var wdx := e.x - wpx
+				var wdy := e.y - e.h * 0.4 - wpy
+				var wrr := e.r + w_hit_r
+				if wdx * wdx + wdy * wdy > wrr * wrr:
 					continue
 				sw_wheel_hit[hk] = real_t
-				_sword_strike(e, float(sw.dmg) * float(W.mul), false, "sw_wheel")
+				_sword_strike(e, w_dmg, false, "sw_wheel")
 				if fusion == "huanhuo" and e.alive:
 					_fusion_ignite(e)
 		if sw_wheel_hit.size() > 600:
@@ -4426,19 +4832,23 @@ func _spawn_qi(speed: float, ang: float, dmg: float, life: float, pierce: int, c
 
 func _update_qi(dt: float) -> void:
 	var Q: Dictionary = GameData.DG.sword.stages.qi
-	for i in range(sw_qi.size() - 1, -1, -1):
+	var q_range := float(Q.range)
+	var q_turn := float(Q.turn)
+	var q_hit_r := float(Q.hitR)
+	var i := sw_qi.size() - 1
+	while i >= 0:
 		var b: SimBullet = sw_qi[i]
 		var key: String = b.hits.key
 		if key == "sw_qi":
 			var tgt: Variant = b.hits.get("e")
 			if tgt == null or not (tgt as SimEnemy).alive:
-				tgt = nearest_enemy(b.x, b.y, float(Q.range))
+				tgt = nearest_enemy(b.x, b.y, q_range)
 				b.hits["e"] = tgt
 			if tgt != null:
 				var te: SimEnemy = tgt
 				var want := Vector2(te.x - b.x, te.y - te.h * 0.4 - b.y).normalized()
 				var cur := Vector2(b.vx, b.vy)
-				var nd := cur.normalized().lerp(want, clampf(float(Q.turn) * dt, 0.0, 1.0)).normalized() * cur.length()
+				var nd := cur.normalized().lerp(want, clampf(q_turn * dt, 0.0, 1.0)).normalized() * cur.length()
 				b.vx = nd.x
 				b.vy = nd.y
 				b.ang = nd.angle()
@@ -4452,7 +4862,10 @@ func _update_qi(dt: float) -> void:
 				var e: SimEnemy = _q_qi[j]
 				if not e.alive or b.hits.has(e.uid):
 					continue
-				if Vector2(e.x - b.x, e.y - e.h * 0.4 - b.y).length() > e.r + float(Q.hitR):
+				var qdx := e.x - b.x
+				var qdy := e.y - e.h * 0.4 - b.y
+				var qrr := e.r + q_hit_r
+				if qdx * qdx + qdy * qdy > qrr * qrr:
 					continue
 				b.hits[e.uid] = true
 				_sword_strike(e, b.dmg, false, key, b.mark)
@@ -4466,7 +4879,11 @@ func _update_qi(dt: float) -> void:
 					dead = true
 					break
 		if dead:
-			sw_qi.remove_at(i)
+			var last := sw_qi.size() - 1
+			if i != last:
+				sw_qi[i] = sw_qi[last]
+			sw_qi.pop_back()
+		i -= 1
 
 
 func _fusion_ignite(e: SimEnemy) -> void:
@@ -4621,9 +5038,9 @@ func _leihuo(e: SimEnemy) -> void:
 				near_l.append(o)
 				if near_l.size() >= n_spl:
 					break
-	damage(e, dmg, "ail", O_AIL)
+	damage_fast(e, dmg, "ail", true, false, true, true)
 	for o: SimEnemy in near_l:
-		damage(o, dmg * spl_mul, "ail", O_AIL)
+		damage_fast(o, dmg * spl_mul, "ail", true, false, true, true)
 
 
 func _ail_collapse_check(e: SimEnemy) -> void:
@@ -4645,7 +5062,7 @@ func _ail_collapse_check(e: SimEnemy) -> void:
 	e.marks = int(e.marks * keep)
 	_ail_refresh(e)
 	_react(e, "collapse")
-	damage(e, e.maxhp * pct, "ail", O_AIL)
+	damage_fast(e, e.maxhp * pct, "ail", true, false, true, true)
 
 
 func _react(e: SimEnemy, id: String) -> void:

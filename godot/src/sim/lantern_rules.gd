@@ -20,11 +20,39 @@ static func lantern_state(oil: float) -> String:
 	return "mid"
 
 
+static func sync_lantern_cache(sim: Sim) -> void:
+	var L := lcfg()
+	var hi_thr := float(L.get("highThreshold", 70.0))
+	var lo_thr := float(L.get("lowThreshold", 30.0))
+	var oil := sim.lantern_oil
+	if oil > hi_thr:
+		sim.lantern_mode = Sim.LANTERN_HIGH
+	elif oil < lo_thr:
+		sim.lantern_mode = Sim.LANTERN_LOW
+	else:
+		sim.lantern_mode = Sim.LANTERN_MID
+	sim._eff_crit = sim.s_crit + (float(L.get("lowCritAdd", 0.25)) if sim.lantern_mode == Sim.LANTERN_LOW else 0.0)
+	sim._high_reveal_on = (sim.lantern_mode == Sim.LANTERN_HIGH) or (sim.flare_t > 0.0)
+	var rr_hi := float(L.get("highRevealRadius", 220.0))
+	sim._high_reveal_r2 = rr_hi * rr_hi
+	sim._high_reveal_mul = 1.0 + float(L.get("highRevealDmg", 0.15))
+	sim._low_speed_mul = 1.0 + (float(L.get("lowSpeedAdd", 0.20)) if sim.lantern_mode == Sim.LANTERN_LOW else 0.0)
+	sim._high_xp_mul = 1.0 + (float(L.get("highXpMul", 0.20)) if sim.lantern_mode == Sim.LANTERN_HIGH else 0.0)
+	sim._low_frenzy_dmg_add = 0.0
+	sim._low_frenzy_cd_mul = 1.0
+	if sim._has_rule_low_frenzy:
+		var rp_f: Dictionary = GameData.RULE_BY_ID.get("rule_low_frenzy", {}).get("params", {})
+		if oil < float(rp_f.get("oilThreshold", 30.0)):
+			sim._low_frenzy_dmg_add = float(rp_f.get("dmgAdd", 0.28))
+			sim._low_frenzy_cd_mul = float(rp_f.get("cdMul", 0.82))
+
+
 static func add_oil(sim: Sim, amount: float) -> void:
 	if amount <= 0.0:
 		return
 	var mul := 1.0 + float(sim.school_stats.get("oilGainMul", 0.0))
 	sim.lantern_oil = clampf(sim.lantern_oil + amount * mul, 0.0, oil_max())
+	sync_lantern_cache(sim)
 
 
 static func activate_shrine_ward(sim: Sim, dur_override: float = -1.0) -> void:
@@ -50,17 +78,21 @@ static func trigger_flare(sim: Sim) -> bool:
 	var clear_r2 := clear_r * clear_r
 	var fy := sim.py - 30.0
 	# 立即清除 260px 内全部敌弹（正面反制灯笼怪弹幕海）
-	var kept: Array = []
 	var cleared := 0
-	for i in range(sim.ebullets.size()):
-		var b: SimBullet = sim.ebullets[i]
+	var eb := sim.ebullets
+	var bi := eb.size() - 1
+	while bi >= 0:
+		var b: SimBullet = eb[bi]
 		var dx := b.x - sim.px
 		var dy := b.y - fy
-		if dx * dx + dy * dy > clear_r2:
-			kept.append(b)
-		else:
+		if dx * dx + dy * dy <= clear_r2:
+			var last := eb.size() - 1
+			if bi != last:
+				eb[bi] = eb[last]
+			eb.pop_back()
 			cleared += 1
-	sim.ebullets = kept
+		bi -= 1
+	sync_lantern_cache(sim)
 	# 点燃并击退周围妖物
 	var base_dmg := float(L.get("flareDmg", 45.0)) * (1.0 + float(sim.school_stats.get("flareDmgMul", 0.0)))
 	var near := sim._q_flare
@@ -71,8 +103,9 @@ static func trigger_flare(sim: Sim) -> bool:
 			continue
 		var dx := e.x - sim.px
 		var dy := e.y - e.h * 0.4 - fy
-		if dx * dx + dy * dy < (clear_r + e.r) * (clear_r + e.r):
-			sim.damage(e, base_dmg, "flare", {"kx": dx, "ky": dy, "kb": 240.0})
+		var rr := clear_r + e.r
+		if dx * dx + dy * dy < rr * rr:
+			sim.damage_fast(e, base_dmg, "flare", false, false, false, false, -1.0, true, dx, dy, 240.0)
 			if e.alive:
 				sim._fusion_ignite(e)
 	if sim.has_rule("rule_shrine_ward"):
@@ -102,6 +135,7 @@ static func step_lantern_and_rules(sim: Sim, dt: float) -> void:
 	if sim.phase != Sim.PH_BREAK and sim.flare_t <= 0.0:
 		var drain := float(L.get("drainPerSec", 1.6))
 		sim.lantern_oil = maxf(0.0, sim.lantern_oil - drain * dt)
+	sync_lantern_cache(sim)
 	# 生命自然回复（来自聚魂派羁绊 + 绿葫芦）
 	if sim.s_regen > 0.0 and sim.hp < sim.maxhp and sim.phase != Sim.PH_BREAK:
 		sim.hp = minf(sim.maxhp, sim.hp + sim.s_regen * dt)
@@ -169,14 +203,14 @@ static func step_lantern_and_rules(sim: Sim, dt: float) -> void:
 				if not e.alive:
 					continue
 				if (e.x - sim.px) * (e.x - sim.px) + (e.y - sim.py) * (e.y - sim.py) < (ar + e.r) * (ar + e.r):
-					sim.damage(e, admg, "rule", {"noCrit": true, "noFlash": true})
+					sim.damage_fast(e, admg, "rule", true, false, true)
 	# 开局加速（12s 首次三选一保底）+ 荒野互动目标（24s 首个破庙灯龛/镇魂断碑）
 	if sim.mode != "classic" and sim.phase == Sim.PH_SEG:
 		_step_opening_and_objectives(sim, dt)
 
 
 static func on_player_move(sim: Sim, dist: float) -> void:
-	if not sim.has_rule("rule_step_lotus") or sim.phase == Sim.PH_BREAK:
+	if not sim._has_rule_step_lotus or sim.phase == Sim.PH_BREAK:
 		return
 	var rp: Dictionary = GameData.RULE_BY_ID.get("rule_step_lotus", {}).get("params", {})
 	var need_d := float(rp.get("stepDist", 180.0))
@@ -195,7 +229,7 @@ static func on_player_move(sim: Sim, dist: float) -> void:
 			if not e.alive:
 				continue
 			if (e.x - lx) * (e.x - lx) + (e.y - ly) * (e.y - ly) < (rad + e.r) * (rad + e.r):
-				sim.damage(e, dmg, "rule", {"kx": e.x - lx, "ky": e.y - ly, "kb": 110.0})
+				sim.damage_fast(e, dmg, "rule", false, false, false, false, -1.0, true, e.x - lx, e.y - ly, 110.0)
 				if e.alive:
 					sim._fusion_ignite(e)
 
@@ -212,13 +246,12 @@ static func on_enemy_kill(sim: Sim, e: SimEnemy) -> void:
 		sim.add_trauma(0.45 if e.boss else 0.28)
 		sim.hitstop_t = maxf(sim.hitstop_t, 0.06 if e.boss else 0.035)
 	# 阴律：残灯狂澜击杀回血
-	if sim.has_rule("rule_low_frenzy"):
+	if sim._has_rule_low_frenzy and sim._low_frenzy_dmg_add > 0.0:
 		var rp_f: Dictionary = GameData.RULE_BY_ID.get("rule_low_frenzy", {}).get("params", {})
-		if sim.lantern_oil < float(rp_f.get("oilThreshold", 30.0)):
-			var heal := float(rp_f.get("killHeal", 2.0))
-			sim.hp = minf(sim.maxhp, sim.hp + heal)
+		var heal := float(rp_f.get("killHeal", 2.0))
+		sim.hp = minf(sim.maxhp, sim.hp + heal)
 	# 阴律：尸爆传火（严格递归上限 maxDepth = 1）
-	if sim.has_rule("rule_corpse_flame") and e.burn_t > 0.0:
+	if sim._has_rule_corpse_flame and e.burn_t > 0.0:
 		var rp_c: Dictionary = GameData.RULE_BY_ID.get("rule_corpse_flame", {}).get("params", {})
 		var max_d := int(rp_c.get("maxDepth", 1))
 		if sim.corpse_flame_depth < max_d:
@@ -235,7 +268,7 @@ static func on_enemy_kill(sim: Sim, e: SimEnemy) -> void:
 				if o == e or not o.alive:
 					continue
 				if (o.x - ex) * (o.x - ex) + (o.y - ey) * (o.y - ey) < (rad + o.r) * (rad + o.r):
-					sim.damage(o, cdmg, "rule", {"noCrit": true, "kx": o.x - ex, "ky": o.y - ey, "kb": 120.0})
+					sim.damage_fast(o, cdmg, "rule", true, false, false, false, -1.0, true, o.x - ex, o.y - ey, 120.0)
 					if o.alive:
 						sim._fusion_ignite(o)
 			sim.corpse_flame_depth -= 1
@@ -317,12 +350,17 @@ static func _complete_objective(sim: Sim, obj: Dictionary, OP: Dictionary) -> vo
 		var ox := float(obj.x)
 		var oy := float(obj.y)
 		var rr := 320.0
-		var kept: Array = []
-		for i in range(sim.ebullets.size()):
-			var b: SimBullet = sim.ebullets[i]
-			if (b.x - ox) * (b.x - ox) + (b.y - oy) * (b.y - oy) > rr * rr:
-				kept.append(b)
-		sim.ebullets = kept
+		var rr2 := rr * rr
+		var eb2 := sim.ebullets
+		var bi2 := eb2.size() - 1
+		while bi2 >= 0:
+			var b: SimBullet = eb2[bi2]
+			if (b.x - ox) * (b.x - ox) + (b.y - oy) * (b.y - oy) <= rr2:
+				var last2 := eb2.size() - 1
+				if bi2 != last2:
+					eb2[bi2] = eb2[last2]
+				eb2.pop_back()
+			bi2 -= 1
 		sim._ev("ring", ox, oy, rr)
 		var near := sim._q_rule
 		sim.grid_sys.query_into(ox, oy, rr + 40.0, near)
@@ -331,7 +369,7 @@ static func _complete_objective(sim: Sim, obj: Dictionary, OP: Dictionary) -> vo
 			if not e.alive:
 				continue
 			if (e.x - ox) * (e.x - ox) + (e.y - oy) * (e.y - oy) < (rr + e.r) * (rr + e.r):
-				sim.damage(e, 75.0, "rule", {"kx": e.x - ox, "ky": e.y - oy, "kb": 300.0})
+				sim.damage_fast(e, 75.0, "rule", false, false, false, false, -1.0, true, e.x - ox, e.y - oy, 300.0)
 		var got := sim.grant_gourd("镇魂断碑")
 		if not got:
 			sim.coins += 65

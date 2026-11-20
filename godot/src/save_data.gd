@@ -1,7 +1,7 @@
 class_name SaveData
 extends RefCounted
-## 存档：user://save.json（Web 上落在浏览器 IndexedDB + localStorage 双写）。
-## 采用原子写入（.tmp -> 轮转 .bak -> 重命名 .json），损坏时自动从 .bak 恢复；写失败时降级为内存存档。
+## 存档：Web 端仅写浏览器 localStorage（主/备双键，避免 IndexedDB 同步读写与 .tmp/.bak 重命名导致主线程卡顿）；
+## 桌面端落盘 user://save.json，采用原子写入（.tmp -> 轮转 .bak -> 重命名 .json），损坏时自动从 .bak 恢复；写失败时降级为内存存档。
 
 const PATH := "user://save.json"
 const TMP_PATH := "user://save.json.tmp"
@@ -72,11 +72,13 @@ static func write_save(d: Dictionary) -> void:
 	mem = d.duplicate(true)
 	var payload := JSON.stringify(d)
 	if OS.has_feature("web"):
-		var prev := str(JavaScriptBridge.eval("localStorage.getItem('%s')||''" % LS_KEY, true))
-		if prev != "":
-			JavaScriptBridge.eval("try{localStorage.setItem('%s',%s)}catch(e){}" % [LS_BAK_KEY, JSON.stringify(prev)], true)
-		JavaScriptBridge.eval("try{localStorage.setItem('%s',%s)}catch(e){}" % [LS_KEY, JSON.stringify(payload)], true)
-	# 原子写：先写 .tmp，确认落盘后再轮转 .json -> .bak 并 .tmp -> .json
+		# Web 端单次 JS 调用完成 localStorage 备份+写入，跳过同步 IndexedDB 4步文件重命名，消除检查点 50ms+ 卡顿
+		JavaScriptBridge.eval(
+			"try{var p=localStorage.getItem('%s');if(p)localStorage.setItem('%s',p);localStorage.setItem('%s',%s)}catch(e){}" % [LS_KEY, LS_BAK_KEY, LS_KEY, JSON.stringify(payload)],
+			true
+		)
+		return
+	# 桌面端原子写：先写 .tmp，确认落盘后再轮转 .json -> .bak 并 .tmp -> .json
 	var f := FileAccess.open(TMP_PATH, FileAccess.WRITE)
 	if f == null:
 		return

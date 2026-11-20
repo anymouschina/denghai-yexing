@@ -6,8 +6,15 @@ extends RefCounted
 
 const INIT_VCAP := 256
 const INIT_ICAP := 384
+const UV00 := Vector2(0.0, 0.0)
+const UV10 := Vector2(1.0, 0.0)
+const UV11 := Vector2(1.0, 1.0)
+const UV01 := Vector2(0.0, 1.0)
+const UV_MID := Vector2(0.5, 0.5)
 
 static var _circle_lut: Dictionary = {}
+static var _EMPTY_INT := PackedInt32Array()
+static var _EMPTY_FLOAT := PackedFloat32Array()
 
 var pts := PackedVector2Array()
 var uvs := PackedVector2Array()
@@ -43,21 +50,29 @@ static func _get_lut(segs: int) -> PackedVector2Array:
 	return arr
 
 
+static func _next_pow2(v: int) -> int:
+	if v <= 64:
+		return 64
+	var p := v - 1
+	p |= p >> 1
+	p |= p >> 2
+	p |= p >> 4
+	p |= p >> 8
+	p |= p >> 16
+	return p + 1
+
+
 func _ensure(add_v: int, add_i: int) -> void:
 	var need_v := _vc + add_v
 	if need_v > _vcap:
-		var nv := _vcap if _vcap > 0 else INIT_VCAP
-		while nv < need_v:
-			nv *= 2
+		var nv := _next_pow2(need_v)
 		_vcap = nv
 		pts.resize(nv)
 		uvs.resize(nv)
 		cols.resize(nv)
 	var need_i := _ic + add_i
 	if need_i > _icap:
-		var ni := _icap if _icap > 0 else INIT_ICAP
-		while ni < need_i:
-			ni *= 2
+		var ni := _next_pow2(need_i)
 		_icap = ni
 		idx.resize(ni)
 
@@ -105,10 +120,10 @@ func full(x: float, y: float, w: float, h: float, col: Color) -> void:
 	pts[v + 1] = Vector2(x + w, y)
 	pts[v + 2] = Vector2(x + w, y + h)
 	pts[v + 3] = Vector2(x, y + h)
-	uvs[v] = Vector2(0.0, 0.0)
-	uvs[v + 1] = Vector2(1.0, 0.0)
-	uvs[v + 2] = Vector2(1.0, 1.0)
-	uvs[v + 3] = Vector2(0.0, 1.0)
+	uvs[v] = UV00
+	uvs[v + 1] = UV10
+	uvs[v + 2] = UV11
+	uvs[v + 3] = UV01
 	cols[v] = col
 	cols[v + 1] = col
 	cols[v + 2] = col
@@ -149,10 +164,10 @@ func rot(c: Vector2, ang: float, w: float, h: float, col: Color) -> void:
 	pts[v + 1] = Vector2(cx + hwx - hhx, cy + hwy - hhy)
 	pts[v + 2] = Vector2(cx + hwx + hhx, cy + hwy + hhy)
 	pts[v + 3] = Vector2(cx - hwx + hhx, cy - hwy + hhy)
-	uvs[v] = Vector2(0.0, 0.0)
-	uvs[v + 1] = Vector2(1.0, 0.0)
-	uvs[v + 2] = Vector2(1.0, 1.0)
-	uvs[v + 3] = Vector2(0.0, 1.0)
+	uvs[v] = UV00
+	uvs[v + 1] = UV10
+	uvs[v + 2] = UV11
+	uvs[v + 3] = UV01
 	cols[v] = col
 	cols[v + 1] = col
 	cols[v + 2] = col
@@ -174,11 +189,16 @@ func flush(ci: RID, tex: Texture2D) -> void:
 	if npts > 0 and nidx > 0:
 		var rid := tex.get_rid()
 		if npts <= 60000:
-			var s_idx := idx.slice(0, nidx)
-			var s_pts := pts.slice(0, npts)
-			var s_cols := cols.slice(0, npts)
-			var s_uvs := uvs.slice(0, npts)
-			RenderingServer.canvas_item_add_triangle_array(ci, s_idx, s_pts, s_cols, s_uvs, PackedInt32Array(), PackedFloat32Array(), rid)
+			# 原地调整逻辑长度（同 2 的幂桶内零分配零拷贝），彻底消除逐 flush .slice() 拷贝
+			if _vcap != npts:
+				pts.resize(npts)
+				uvs.resize(npts)
+				cols.resize(npts)
+				_vcap = npts
+			if _icap != nidx:
+				idx.resize(nidx)
+				_icap = nidx
+			RenderingServer.canvas_item_add_triangle_array(ci, idx, pts, cols, uvs, _EMPTY_INT, _EMPTY_FLOAT, rid)
 		else:
 			# WebGL 顶点安全分段提交：防止极端同屏特效撑破单次绘制缓冲区
 			var i := 0
@@ -189,7 +209,7 @@ func flush(ci: RID, tex: Texture2D) -> void:
 			var remap: Dictionary = {}
 			while i + 2 < nidx:
 				if cpts.size() >= 54000:
-					RenderingServer.canvas_item_add_triangle_array(ci, cidx, cpts, ccols, cuvs, PackedInt32Array(), PackedFloat32Array(), rid)
+					RenderingServer.canvas_item_add_triangle_array(ci, cidx, cpts, ccols, cuvs, _EMPTY_INT, _EMPTY_FLOAT, rid)
 					cpts.resize(0); cuvs.resize(0); ccols.resize(0); cidx.resize(0); remap.clear()
 				for k in range(3):
 					var oi := idx[i + k]
@@ -205,7 +225,7 @@ func flush(ci: RID, tex: Texture2D) -> void:
 					cidx.append(ni)
 				i += 3
 			if cpts.size() > 0:
-				RenderingServer.canvas_item_add_triangle_array(ci, cidx, cpts, ccols, cuvs, PackedInt32Array(), PackedFloat32Array(), rid)
+				RenderingServer.canvas_item_add_triangle_array(ci, cidx, cpts, ccols, cuvs, _EMPTY_INT, _EMPTY_FLOAT, rid)
 	clear()
 
 

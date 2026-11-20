@@ -30,7 +30,7 @@ var rift_banner_shown := false
 # HUD 脏检查与缓存（避免每帧 60Hz 全量文本重排与字符串拼接）
 var _redraw_t := 0.0
 var _dirty := true
-var _last_state_sig := ""
+var _last_state_sig := -1
 var _mm_rect := Rect2()
 var _mm_draw := false
 var _arrow_pts := PackedVector2Array([Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
@@ -57,9 +57,9 @@ var _c_clock := -1
 var _s_clock := ""
 var _c_sets_sig := ""
 var _s_sets := ""
-var _c_rules_sig := ""
+var _c_rules_serial := -1
 var _rules_disp: Array = []
-var _c_schools_sig := ""
+var _c_schools_serial := -1
 var _schools_disp: Array = []
 
 var _rules_by_id: Dictionary = {}
@@ -69,6 +69,18 @@ var _beacons_by_id: Dictionary = {}
 
 const GCOLS := {"red": Color("ff4a3a"), "orange": Color("ff9a3c"), "yellow": Color("ffe04a"), "green": Color("5ade6a"), "cyan": Color("4adfe0"), "blue": Color("4a7aff"), "purple": Color("b05aff")}
 const POI_COLS := {"sword": Color(0.8, 0.45, 1.0), "merchant": Color(1.0, 0.8, 0.3), "vine": Color(0.4, 1.0, 0.5), "gourd": Color(0.5, 1.0, 0.8), "vault": Color(1.0, 0.4, 0.3), "altar": Color(0.6, 0.8, 1.0), "arch": Color(1.0, 0.7, 0.4), "tomb": Color(0.8, 0.6, 1.0), "incense": Color(1.0, 0.5, 0.4), "coinfarm": Color(1.0, 0.9, 0.2), "soulfarm": Color(0.4, 0.8, 1.0)}
+const SCHOOL_ICONS := {
+	"符": "school_fu", "fu": "school_fu",
+	"阵": "school_zhen", "zhen": "school_zhen",
+	"蛊": "school_gu", "gu": "school_gu",
+	"煞": "school_sha", "sha": "school_sha",
+	"魂": "school_hun", "hun": "school_hun",
+}
+const OPT_HUD_ICONS := [
+	"flare",
+	"school_fu", "school_zhen", "school_gu", "school_sha", "school_hun",
+	"oil", "lotus", "flame", "frenzy", "ward", "echo",
+]
 
 
 func setup(p_game: Node, p_sim: Sim, p_touch: bool) -> void:
@@ -90,12 +102,13 @@ func setup(p_game: Node, p_sim: Sim, p_touch: bool) -> void:
 	root.add_child(canvas)
 	wick_tex = load("res://assets/icons/wick.png")
 	_build_hud_batch()
-	banner = UI.label("", 30, UI.GOLD, 6)
+	banner = UI.label("", 26, UI.GOLD, 6)
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	banner.custom_minimum_size = Vector2(560, 50)
 	banner.position = Vector2(-280, 128)
 	banner.modulate.a = 0.0
+	banner.visible = false
 	root.add_child(banner)
 	refresh_inset()
 	get_viewport().size_changed.connect(refresh_inset)
@@ -147,17 +160,22 @@ func refresh_inset() -> void:
 func show_banner(text: String, color: String = "#ffc977", big: bool = false) -> void:
 	banner.text = text
 	banner.add_theme_color_override("font_color", Color(color))
-	banner.add_theme_font_size_override("font_size", 40 if big else 30)
+	banner.add_theme_font_size_override("font_size", 26)
+	banner.visible = true
 	banner.modulate.a = 0.0
-	banner.scale = Vector2(0.9, 0.9)
+	var target_scale := Vector2(1.3, 1.3) if big else Vector2.ONE
+	banner.scale = target_scale * 0.9
 	banner.pivot_offset = banner.size / 2.0
+	var vw := get_viewport().get_visible_rect().size
+	banner.position = Vector2(vw.x / 2.0 - 360.0, 220.0 + inset.y)
 	if banner_tw != null:
 		banner_tw.kill()
 	banner_tw = create_tween()
 	banner_tw.tween_property(banner, "modulate:a", 1.0, 0.2)
-	banner_tw.parallel().tween_property(banner, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK)
+	banner_tw.parallel().tween_property(banner, "scale", target_scale, 0.25).set_trans(Tween.TRANS_BACK)
 	banner_tw.tween_interval(1.6)
 	banner_tw.tween_property(banner, "modulate:a", 0.0, 0.5)
+	banner_tw.tween_callback(func() -> void: banner.visible = false)
 
 
 func flash_hurt() -> void:
@@ -175,8 +193,12 @@ func tick(delta: float) -> void:
 		hurt_flash = 0.3
 		_dirty = true
 	last_hp = sim.hp
-	var vw := get_viewport().get_visible_rect().size
-	banner.position = Vector2(vw.x / 2.0 - 360.0, 220.0 + inset.y)
+	if banner != null and banner.visible:
+		if banner.modulate.a <= 0.001 and (banner_tw == null or not banner_tw.is_running()):
+			banner.visible = false
+		else:
+			var vw := get_viewport().get_visible_rect().size
+			banner.position = Vector2(vw.x / 2.0 - 360.0, 220.0 + inset.y)
 	# 幽冥抉择（Boss 战后撤离/深入）
 	var ext_open := bool(sim.get("extract_choice_open"))
 	if ext_open:
@@ -213,7 +235,7 @@ func tick(delta: float) -> void:
 			canvas.queue_redraw()
 		return
 	_redraw_t += delta
-	var sig := "%d|%d|%d|%d|%d|%d" % [sim.level, sim.phase, sim.seg, sim.wicks, sim.relics.size(), sim.gourds.size()]
+	var sig := sim.level + (sim.phase << 10) + (sim.seg << 14) + (sim.wicks << 18) + (sim.relics.size() << 24) + (sim.gourds.size() << 32)
 	if sig != _last_state_sig:
 		_last_state_sig = sig
 		_dirty = true
@@ -248,9 +270,9 @@ var _qt26: Array = []
 
 
 ## 文字按 3 档字号分桶入队，避免每帧 sort_custom 排序与闭包分配
-func _text(pos: Vector2, s: String, size: int, col: Color, w: float = -1.0, align: int = HORIZONTAL_ALIGNMENT_LEFT) -> void:
+func _text(pos: Vector2, s: String, size: int, col: Color, w: float = -1.0, align: int = HORIZONTAL_ALIGNMENT_LEFT, shadow: bool = true) -> void:
 	var sz := _snap(size)
-	var item := [pos, s, col, w, align]
+	var item := [pos, s, col, w, align, shadow]
 	if sz == 16:
 		_qt16.append(item)
 	elif sz == 20:
@@ -266,7 +288,8 @@ func _snap(size: int) -> int:
 func _flush_bucket(bucket: Array, sz: int) -> void:
 	var off := Vector2(1.5, 1.5)
 	for q in bucket:
-		canvas.draw_string(font, q[0] + off, q[1], q[4], q[3], sz, UI.INK)
+		if q[5]:
+			canvas.draw_string(font, q[0] + off, q[1], q[4], q[3], sz, UI.INK)
 	for q in bucket:
 		canvas.draw_string(font, q[0], q[1], q[4], q[3], sz, q[2])
 	bucket.clear()
@@ -313,20 +336,32 @@ func _build_hud_batch() -> void:
 		ids.append(String(e.icon))
 	for r in GameData.RELIC_BY_ID.values():
 		ids.append(String(r.icon))
+	for opt_id in OPT_HUD_ICONS:
+		if ResourceLoader.exists("res://assets/icons/%s.png" % opt_id):
+			ids.append(opt_id)
 	var uniq: Array = []
 	for i in ids:
 		if not uniq.has(i):
 			uniq.append(i)
 	var cols := 8
-	var rows := int(ceil(float(uniq.size()) / float(cols)))
+	var rows := maxi(1, int(ceil(float(uniq.size()) / float(cols))))
 	var img := Image.create(cols * 64, rows * 64, false, Image.FORMAT_RGBA8)
 	for n in range(uniq.size()):
 		var id: String = uniq[n]
-		var src: Image
+		var src: Image = null
 		if id == "portrait":
-			src = (load("res://assets/hero.png") as Texture2D).get_image().get_region(Rect2i(60, 8, 232, 232))
+			if ResourceLoader.exists("res://assets/hero.png"):
+				var htex := load("res://assets/hero.png") as Texture2D
+				if htex != null:
+					src = htex.get_image().get_region(Rect2i(60, 8, 232, 232))
 		else:
-			src = (load("res://assets/icons/%s.png" % id) as Texture2D).get_image()
+			var ipath := "res://assets/icons/%s.png" % id
+			if ResourceLoader.exists(ipath):
+				var itex := load(ipath) as Texture2D
+				if itex != null:
+					src = itex.get_image()
+		if src == null:
+			continue
 		src.convert(Image.FORMAT_RGBA8)
 		src.resize(64, 64, Image.INTERPOLATE_LANCZOS)
 		img.blit_rect(src, Rect2i(0, 0, 64, 64), Vector2i((n % cols) * 64, (n / cols) * 64))
@@ -353,6 +388,7 @@ func _icon_q(id: String, r: Rect2) -> void:
 
 
 var mm_tex: ImageTexture = null
+var _mm_img: Image = null
 var mm_n := -1
 var owned_cache: Array = []
 var owned_hash := -1
@@ -405,7 +441,7 @@ func _draw_hud_inner() -> void:
 		_c_hp = hp_i
 		_c_maxhp = mhp_i
 		_s_hp = "%d / %d" % [hp_i, mhp_i]
-	_text(Vector2(bx + 8, T + 44 * k), _s_hp, _fs(18), UI.PAPER)
+	_text(Vector2(bx + 8, T + 44 * k), _s_hp, _fs(18), UI.PAPER, -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 	# 灯油槽 + 盛灯/残灯状态 + [Q] 挑灯爆焰指示
 	var oil_v: Variant = sim.get("lantern_oil")
 	var oil: float = float(oil_v) if oil_v != null else 80.0
@@ -430,18 +466,24 @@ func _draw_hud_inner() -> void:
 	var oil_w := 178.0 * k
 	var oil_col := UI.GOLD if (ft > 0.0 or lstate == "high") else (UI.BLOOD if lstate == "low" else UI.ORANGE)
 	_bar(Rect2(bx, oil_y, oil_w, 16 * k), oil / 100.0, oil_col)
-	_text(Vector2(bx + 6, oil_y + 14 * k), _s_oil, _fs(15), UI.PAPER)
+	_text(Vector2(bx + 6, oil_y + 14 * k), _s_oil, _fs(15), UI.PAPER, -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 	var badge_x := bx + oil_w + 8.0
 	var st_col := UI.GOLD if lstate == "high" else (UI.BLOOD if lstate == "low" else UI.ORANGE)
 	_rect(Rect2(badge_x, oil_y - 2, 46 * k, 20 * k), Color(0.08, 0.09, 0.2, 0.92))
 	_frame(Rect2(badge_x, oil_y - 2, 46 * k, 20 * k), st_col, 1.5)
-	_text(Vector2(badge_x, oil_y + 14 * k), _s_lstate, _fs(15), st_col, 46 * k, HORIZONTAL_ALIGNMENT_CENTER)
+	_text(Vector2(badge_x, oil_y + 14 * k), _s_lstate, _fs(15), st_col, 46 * k, HORIZONTAL_ALIGNMENT_CENTER, false)
 	var fl_x := badge_x + 52.0 * k
-	var fl_w := (78.0 if touch_mode else 104.0) * k
+	var has_fl_ic := icon_uv.has("flare")
+	var fl_ic_sz := 16.0 * k
+	var fl_w := ((78.0 if touch_mode else 104.0) + (20.0 if has_fl_ic else 0.0)) * k
 	var fl_col := UI.GOLD if (ft > 0.0 or oil >= 25.0) else Color(0.55, 0.56, 0.68)
 	_rect(Rect2(fl_x, oil_y - 2, fl_w, 20 * k), Color(0.18, 0.12, 0.05, 0.92) if ft > 0.0 else Color(0.08, 0.09, 0.2, 0.9))
 	_frame(Rect2(fl_x, oil_y - 2, fl_w, 20 * k), fl_col, 1.5)
-	_text(Vector2(fl_x, oil_y + 14 * k), _s_flare, _fs(15), fl_col, fl_w, HORIZONTAL_ALIGNMENT_CENTER)
+	if has_fl_ic:
+		_icon_q("flare", Rect2(fl_x + 3.0 * k, oil_y, fl_ic_sz, fl_ic_sz))
+		_text(Vector2(fl_x + fl_ic_sz + 4.0 * k, oil_y + 14 * k), _s_flare, _fs(15), fl_col, fl_w - fl_ic_sz - 6.0 * k, HORIZONTAL_ALIGNMENT_CENTER, false)
+	else:
+		_text(Vector2(fl_x, oil_y + 14 * k), _s_flare, _fs(15), fl_col, fl_w, HORIZONTAL_ALIGNMENT_CENTER, false)
 	# 构筑图标行
 	var hsh := sim.levels.hash() + sim.evo.hash()
 	if hsh != owned_hash:
@@ -453,7 +495,7 @@ func _draw_hud_inner() -> void:
 	for o in ([] if Playtest.hide.contains("hbuild") else owned_cache):
 		_rect(Rect2(ox - 2, oy - 2, isz + 4, isz + 4), UI.INK)
 		_icon_q(o.icon, Rect2(ox, oy, isz, isz))
-		_text(Vector2(ox + isz - 14, oy + isz + 1), str(o.lv), _fs(15), UI.GOLD)
+		_text(Vector2(ox + isz - 14, oy + isz + 1), str(o.lv), _fs(15), UI.GOLD, -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 		ox += isz + 7.0
 	# 灯芯 / 遗物 / 法宝
 	var rx := bx
@@ -474,17 +516,31 @@ func _draw_hud_inner() -> void:
 	var tag_x := L
 	if not Playtest.hide.contains("hbuild"):
 		for rd in _rules_disp:
-			var pw := maxf(76.0, float(String(rd.name).length()) * 16.0 + 26.0) * k
+			var r_ic := String(rd.get("icon", ""))
+			var has_r_ic := r_ic != "" and icon_uv.has(r_ic)
+			var pw := (maxf(76.0, float(String(rd.name).length()) * 16.0 + 26.0) + (18.0 if has_r_ic else 0.0)) * k
 			_rect(Rect2(tag_x, tag_y, pw, 22 * k), Color(0.14, 0.08, 0.24, 0.92))
 			_frame(Rect2(tag_x, tag_y, pw, 22 * k), Color("c08cff"), 1.5)
-			_text(Vector2(tag_x + 6, tag_y + 16 * k), "律•" + String(rd.name), _fs(15), Color("e6ccff"))
+			if has_r_ic:
+				var risz := 16.0 * k
+				_icon_q(r_ic, Rect2(tag_x + 4.0 * k, tag_y + 3.0 * k, risz, risz))
+				_text(Vector2(tag_x + risz + 7.0 * k, tag_y + 16 * k), "律•" + String(rd.name), _fs(15), Color("e6ccff"), -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
+			else:
+				_text(Vector2(tag_x + 6, tag_y + 16 * k), "律•" + String(rd.name), _fs(15), Color("e6ccff"), -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 			tag_x += pw + 6.0
 		for sd2 in _schools_disp:
-			var sw := 58.0 * k
+			var sc_ic := String(sd2.get("icon", ""))
+			var has_sc_ic := sc_ic != "" and icon_uv.has(sc_ic)
+			var sw := (74.0 if has_sc_ic else 58.0) * k
 			var scol: Color = sd2.col
 			_rect(Rect2(tag_x, tag_y, sw, 22 * k), Color(0.08, 0.1, 0.2, 0.92))
 			_frame(Rect2(tag_x, tag_y, sw, 22 * k), scol, 1.5)
-			_text(Vector2(tag_x, tag_y + 16 * k), String(sd2.label), _fs(15), scol, sw, HORIZONTAL_ALIGNMENT_CENTER)
+			if has_sc_ic:
+				var sisz := 16.0 * k
+				_icon_q(sc_ic, Rect2(tag_x + 4.0 * k, tag_y + 3.0 * k, sisz, sisz))
+				_text(Vector2(tag_x + sisz + 5.0 * k, tag_y + 16 * k), String(sd2.label), _fs(15), scol, sw - sisz - 7.0 * k, HORIZONTAL_ALIGNMENT_CENTER, false)
+			else:
+				_text(Vector2(tag_x, tag_y + 16 * k), String(sd2.label), _fs(15), scol, sw, HORIZONTAL_ALIGNMENT_CENTER, false)
 			tag_x += sw + 6.0
 	var extra_row_h := 28.0 * k if (not _rules_disp.is_empty() or not _schools_disp.is_empty()) else 4.0 * k
 	# 飞剑状态
@@ -499,19 +555,19 @@ func _draw_hud_inner() -> void:
 			Sim.SW_CD: st = "飞剑 • 归鞘 %.1f" % maxf(0.0, sim.sw_t)
 		if touch_mode:
 			st = st.replace("（E / J 出鞘）", "").replace("（再按召回刺出）", "")
-		_text(Vector2(rx, ry + 22 * k), st, _fs(16), UI.GHOST if sim.sw_state != Sim.SW_DROP else UI.BLOOD)
+		_text(Vector2(rx, ry + 22 * k), st, _fs(16), UI.GHOST if sim.sw_state != Sim.SW_DROP else UI.BLOOD, -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 		var SS: Dictionary = GameData.DG.sword.stages
 		var nms: Array = SS.names
 		var line := "飞剑 第 %d / 5 阶 • 已解锁：%s" % [sim.sw_stage, " / ".join(PackedStringArray(sim.sword_unlocked()))]
-		_text(Vector2(L, cur_y + 16 * k), line, _fs(16), UI.GOLD)
+		_text(Vector2(L, cur_y + 16 * k), line, _fs(16), UI.GOLD, -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 		if sim.sw_stage < 5:
 			var nxt := "下一阶「%s」：剑意 %d / %d（击杀）或击败守关者" % [nms[sim.sw_stage], sim.sw_kills, int(SS.kills[sim.sw_stage - 1])]
-			_text(Vector2(L, cur_y + 36 * k), nxt, _fs(15), Color(0.8, 0.9, 1.0))
+			_text(Vector2(L, cur_y + 36 * k), nxt, _fs(15), Color(0.8, 0.9, 1.0), -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 		else:
-			_text(Vector2(L, cur_y + 36 * k), "飞剑已臻圆满 • 精通 %d / 5（+%d%% 伤害）" % [sim.sw_master, 8 * sim.sw_master], _fs(15), Color(0.8, 0.9, 1.0))
+			_text(Vector2(L, cur_y + 36 * k), "飞剑已臻圆满 • 精通 %d / 5（+%d%% 伤害）" % [sim.sw_master, 8 * sim.sw_master], _fs(15), Color(0.8, 0.9, 1.0), -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 		cur_y += 48.0 * k
 	if sim.fusion != "":
-		_text(Vector2(L, cur_y + 16 * k), "融合 • %s" % GameData.DG.fusion.names[sim.fusion], _fs(16), Color(1.0, 0.85, 0.4))
+		_text(Vector2(L, cur_y + 16 * k), "融合 • %s" % GameData.DG.fusion.names[sim.fusion], _fs(16), Color(1.0, 0.85, 0.4), -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 		cur_y += 24.0 * k
 	# 彩虹葫芦进度珠 / 小金刚 / 套装
 	var gy := cur_y + 18.0 * k
@@ -531,11 +587,11 @@ func _draw_hud_inner() -> void:
 	if sim.pet_on:
 		var pdmg := int(sim.dmg_by.get("pet", 0.0))
 		var ptxt := "小金刚 复活 %ds" % int(ceil(sim.pet_dead_t)) if sim.pet_dead_t > 0.0 else "小金刚 %d/%d 印%d 伤%s R合击:%s" % [int(sim.pet_hp), int(sim.pet_maxhp()), sim.pet_marks, UI.fmt_int(pdmg), "就绪" if sim.combo_cd <= 0.0 else "%ds" % int(ceil(sim.combo_cd))]
-		_text(Vector2(bx2 + 6, by2 + 6), ptxt, _fs(15), Color("ffcf5a") if sim.pet_dead_t <= 0.0 else UI.BLOOD)
+		_text(Vector2(bx2 + 6, by2 + 6), ptxt, _fs(15), Color("ffcf5a") if sim.pet_dead_t <= 0.0 else UI.BLOOD, -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 	elif sim.gourds.size() < 7:
 		var gl := sim.gourd_guarantee_left()
 		var gtxt := "灵藤 / BOSS / 秘境 / 游商" + (" • 保底 %s" % UI.fmt_time(gl) if gl >= 0.0 else "")
-		_text(Vector2(L, gy + 20), gtxt, _fs(15), Color(1.0, 0.85, 0.5, 0.88))
+		_text(Vector2(L, gy + 20), gtxt, _fs(15), Color(1.0, 0.85, 0.5, 0.88), -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 	var asets := sim.active_sets()
 	var sets_sig := str(asets.size()) + ":" + (String(asets[0]) if asets.size() > 0 else "")
 	if sets_sig != _c_sets_sig:
@@ -549,7 +605,7 @@ func _draw_hud_inner() -> void:
 		else:
 			_s_sets = ""
 	if _s_sets != "":
-		_text(Vector2(L, gy + (40 if sim.gourds.size() < 7 and not sim.pet_on else 22)), _s_sets, _fs(15), Color("9fe8ff"))
+		_text(Vector2(L, gy + (40 if sim.gourds.size() < 7 and not sim.pet_on else 22)), _s_sets, _fs(15), Color("9fe8ff"), -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
 	# 右上：击杀 / 魂火 / 铜钱（脏检查缓存字符串）
 	var rr := vw.x - inset.z - (110.0 if touch_mode else 24.0)
 	if sim.kills != _c_kills:
@@ -594,21 +650,21 @@ func _draw_hud_inner() -> void:
 			warn = false
 		elif sim.rift_kind != "sword":
 			rline = "限时 %s" % UI.fmt_time(rem)
-		_text(Vector2(cx - 320, yb + 18), rline, _fs(17), UI.BLOOD if warn else UI.PAPER, 640.0, HORIZONTAL_ALIGNMENT_CENTER)
+		_text(Vector2(cx - 320, yb + 18), rline, _fs(17), UI.BLOOD if warn else UI.PAPER, 640.0, HORIZONTAL_ALIGNMENT_CENTER, false)
 		if sim.rift_kind == "gourd" and sim.vine_boss != null and sim.vine_boss.alive:
 			_bar(Rect2(cx - 240, yb + 28, 480, 16), sim.vine_boss.hp / maxf(1.0, sim.vine_boss.maxhp), Color("6fdc7a"))
 		if sim.rift_warden != null:
 			var w := sim.rift_warden
 			_bar(Rect2(cx - 240, yb + 28, 480, 16), w.hp / maxf(1.0, w.maxhp), Color("b36bff"))
-			_text(Vector2(cx - 300, yb + 62), "剑冢守关者「剑灵」• 御剑环身 • 回鞘突刺 • 剑雨", _fs(17), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER)
+			_text(Vector2(cx - 300, yb + 62), "剑冢守关者「剑灵」• 御剑环身 • 回鞘突刺 • 剑雨", _fs(17), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER, false)
 		if sim.rift_kind == "sword":
-			_text(Vector2(cx - 340, yb + 84), "无补给 • 无三选一 • 骨灯全熄 • 冲刺冷却×1.25 • 受击硬直×1.2", _fs(15), Color("ff9a8a"), 680.0, HORIZONTAL_ALIGNMENT_CENTER)
+			_text(Vector2(cx - 340, yb + 84), "无补给 • 无三选一 • 骨灯全熄 • 冲刺冷却×1.25 • 受击硬直×1.2", _fs(15), Color("ff9a8a"), 680.0, HORIZONTAL_ALIGNMENT_CENTER, false)
 	elif sim.boss != null and sim.boss.alive:
 		var b := sim.boss
 		_bar(Rect2(cx - 280, yb + 12, 560, 18), b.hp / maxf(1.0, b.maxhp), Color("b36bff"))
 		_text(Vector2(cx - 300, yb + 50), "灯骸老祖  %s / %s%s" % [UI.fmt_int(int(ceil(maxf(0.0, b.hp)))), UI.fmt_int(int(b.maxhp)), "  • 回光返照" if sim.boss_enraged else ""], _fs(20), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER)
 	elif sim.phase == Sim.PH_BREAK:
-		_text(Vector2(cx - 420, yb + 22), "站定「启程」领三选一馈赠；站定「灯骸裂隙」则放弃它 • 游商用铜钱换遗物", _fs(17), UI.PAPER, 840.0, HORIZONTAL_ALIGNMENT_CENTER)
+		_text(Vector2(cx - 420, yb + 22), "站定「启程」领三选一馈赠；站定「灯骸裂隙」则放弃它 • 游商用铜钱换遗物", _fs(17), UI.PAPER, 840.0, HORIZONTAL_ALIGNMENT_CENTER, false)
 	# 段间：指向裂隙的箭头（离得远时）+ 状态牌
 	if sim.phase == Sim.PH_BREAK:
 		var rp := sim.break_pos("rift")
@@ -650,7 +706,7 @@ func _draw_hud_inner() -> void:
 			_arrow_pts[1] = ap2 - dn * 10.0 + perp2 * 14.0
 			_arrow_pts[2] = ap2 - dn * 10.0 - perp2 * 14.0
 			hb_front.poly(_arrow_pts, Color(0.85, 0.6, 1.0, 0.9))
-			_text(ap2 - Vector2(70, -34) if dn.y > 0 else ap2 - Vector2(70, 20), "剑冢裂隙 %dm" % int(bdist / 10.0), 15, Color(0.9, 0.75, 1.0), 140.0, HORIZONTAL_ALIGNMENT_CENTER)
+			_text(ap2 - Vector2(70, -34) if dn.y > 0 else ap2 - Vector2(70, 20), "剑冢裂隙 %dm" % int(bdist / 10.0), 16, Color(0.9, 0.75, 1.0), 140.0, HORIZONTAL_ALIGNMENT_CENTER, false)
 	# 底部提示（桌面）
 	if not touch_mode:
 		var tip2 := "WASD 移动 • 空格 冲刺 • Q/右键 挑灯爆焰 • Esc 暂停"
@@ -658,28 +714,39 @@ func _draw_hud_inner() -> void:
 			tip2 = "WASD 移动 • 空格 冲刺 • Q/右键 挑灯 • E/J 飞剑" + (" • R 小金刚合击" if sim.pet_on else "") + " • Esc 暂停"
 		elif sim.pet_on:
 			tip2 = "WASD 移动 • 空格 冲刺 • Q/右键 挑灯 • R 小金刚七彩神光斩 • Esc 暂停"
-		_text(Vector2(cx - 460, vw.y - 18.0 - inset.w), tip2, 16, Color(0.8, 0.82, 0.95, 0.75), 920.0, HORIZONTAL_ALIGNMENT_CENTER)
+		_text(Vector2(cx - 460, vw.y - 18.0 - inset.w), tip2, 16, Color(0.8, 0.82, 0.95, 0.75), 920.0, HORIZONTAL_ALIGNMENT_CENTER, false)
 
 
 func _refresh_rules_schools_cache() -> void:
+	var rser_v: Variant = sim.get("rules_serial")
 	var rv: Variant = sim.get("active_rules")
 	var ar: Array = rv if rv is Array else []
-	var rsig := str(ar)
-	if rsig != _c_rules_sig:
-		_c_rules_sig = rsig
+	var rser: int = int(rser_v) if rser_v != null else ar.size()
+	if rser != _c_rules_serial:
+		_c_rules_serial = rser
 		_rules_disp.clear()
 		for item in ar:
 			if item is Dictionary:
-				_rules_disp.append({"id": String(item.get("id", "")), "name": String(item.get("name", item.get("id", "")))})
+				var rid_d := String(item.get("id", ""))
+				var rdef_d: Dictionary = _rules_by_id.get(rid_d, {})
+				var ricon_d := String(item.get("icon_tag", item.get("icon", rdef_d.get("icon_tag", ""))))
+				_rules_disp.append({"id": rid_d, "name": String(item.get("name", rid_d)), "icon": ricon_d})
 			else:
 				var rid := String(item)
 				var rd: Dictionary = _rules_by_id.get(rid, {})
-				_rules_disp.append({"id": rid, "name": String(rd.get("name", rid))})
+				_rules_disp.append({"id": rid, "name": String(rd.get("name", rid)), "icon": String(rd.get("icon_tag", ""))})
+	var sser_v: Variant = sim.get("schools_serial")
 	var scv: Variant = sim.get("school_counts")
 	var scd: Dictionary = scv if scv is Dictionary else {}
-	var ssig := str(scd)
-	if ssig != _c_schools_sig:
-		_c_schools_sig = ssig
+	var sser: int
+	if sser_v != null:
+		sser = int(sser_v)
+	else:
+		sser = scd.size()
+		for sid in scd:
+			sser = sser * 31 + int(scd[sid])
+	if sser != _c_schools_serial:
+		_c_schools_serial = sser
 		_schools_disp.clear()
 		for sid in scd:
 			var cnt := int(scd[sid])
@@ -690,7 +757,7 @@ func _refresh_rules_schools_cache() -> void:
 				var scol: Color = UI.SCHOOL.get(key, UI.GOLD)
 				if _schools_by_id.has(key) and _schools_by_id[key].has("color"):
 					scol = Color(String(_schools_by_id[key].color))
-				_schools_disp.append({"id": key, "label": "%s %d" % [sname, tier], "cnt": cnt, "tier": tier, "col": scol})
+				_schools_disp.append({"id": key, "label": "%s %d" % [sname, tier], "cnt": cnt, "tier": tier, "col": scol, "icon": String(SCHOOL_ICONS.get(key, ""))})
 
 
 func _draw_minimap(vw: Vector2) -> void:
@@ -704,14 +771,18 @@ func _draw_minimap(vw: Vector2) -> void:
 	if sim.explored.size() == 864:
 		if mm_tex == null or mm_n != sim.explored_n:
 			mm_n = sim.explored_n
-			var img := Image.create(36, 24, false, Image.FORMAT_RGBA8)
+			if _mm_img == null:
+				_mm_img = Image.create(36, 24, false, Image.FORMAT_RGBA8)
+			var c_exp := Color(0.35, 0.45, 0.75, 0.35)
+			var c_unexp := Color(0, 0, 0, 0)
 			for gy in range(24):
+				var row_off := gy * 36
 				for gx in range(36):
-					img.set_pixel(gx, gy, Color(0.35, 0.45, 0.75, 0.35) if sim.explored[gy * 36 + gx] == 1 else Color(0, 0, 0, 0))
+					_mm_img.set_pixel(gx, gy, c_exp if sim.explored[row_off + gx] == 1 else c_unexp)
 			if mm_tex == null:
-				mm_tex = ImageTexture.create_from_image(img)
+				mm_tex = ImageTexture.create_from_image(_mm_img)
 			else:
-				mm_tex.update(img)
+				mm_tex.update(_mm_img)
 		_mm_rect = Rect2(x0, y0, mw, mh)
 		_mm_draw = true
 	_frame(Rect2(x0, y0, mw, mh), UI.ORANGE, 2.0)
@@ -721,15 +792,28 @@ func _draw_minimap(vw: Vector2) -> void:
 	for k in sim.pickups:
 		if k.kind == "chest":
 			_rect(Rect2(x0 + k.x / Sim.W * mw - 3, y0 + k.y / Sim.H * mh - 3, 6, 6), Color(1.0, 0.85, 0.3), true)
+	var objs_v: Variant = sim.get("objectives")
+	if objs_v is Array:
+		var opulse := 1.0 + sin(t * 6.0) * 0.22
+		for obj in (objs_v as Array):
+			if not (obj is Dictionary) or bool(obj.get("done", false)):
+				continue
+			var omx := x0 + float(obj.x) / Sim.W * mw
+			var omy := y0 + float(obj.y) / Sim.H * mh
+			var is_lamp := String(obj.get("kind", "")) == "shrine_lamp"
+			var ocol := Color(1.0, 0.84, 0.25) if is_lamp else Color(0.38, 0.94, 1.0)
+			hb_front.ring(Vector2(omx, omy), 7.5 * opulse, 2.0, Color(ocol.r, ocol.g, ocol.b, 0.85), 14)
+			hb_front.circle(Vector2(omx, omy), 4.5, ocol, 10)
 	hb_front.circle(Vector2(x0 + sim.px / Sim.W * mw, y0 + sim.py / Sim.H * mh), 4.0, Color(0.5, 1.0, 1.0), 10)
-	_text(Vector2(x0, y0 + mh + 16), "紫剑 绿藤 金商 青葫 赤宝 + 4 地标", 12, Color(0.85, 0.85, 0.95), mw, HORIZONTAL_ALIGNMENT_CENTER)
+	_text(Vector2(x0, y0 + mh + 16), "紫剑 绿藤 金龛 青碑 + 4 地标", 16, Color(0.85, 0.85, 0.95), mw, HORIZONTAL_ALIGNMENT_CENTER, false)
 	_frame(Rect2(x0 + sim.px / Sim.W * mw - 7, y0 + sim.py / Sim.H * mh - 4, 14, 8), Color(1, 1, 1, 0.5), 1.0)
 
 
 func _icon(id: String) -> Texture2D:
 	if icon_cache.has(id):
 		return icon_cache[id]
-	var t_: Texture2D = load("res://assets/icons/%s.png" % id)
+	var path := "res://assets/icons/%s.png" % id
+	var t_: Texture2D = load(path) if ResourceLoader.exists(path) else null
 	icon_cache[id] = t_
 	return t_
 
@@ -772,19 +856,19 @@ func _card(icon_id: String, name_: String, sub: String, desc: String, edge: Colo
 	var ic := UI.icon(icon_id, 52.0 if compact else 80.0)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(ic)
-	var n := UI.label(name_, 24 if compact else 30, UI.PAPER, 5)
+	var n := UI.label(name_, 20 if compact else 26, UI.PAPER, 5)
 	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(n)
-	var sl := UI.label(sub, 16 if compact else 18, edge, 4)
+	var sl := UI.label(sub, 16 if compact else 20, edge, 4)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(sl)
-	var d := UI.label(desc, 15 if compact else 17, Color("d8d2f5"), 3)
+	var d := UI.label(desc, 16, Color("d8d2f5"), 3)
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	d.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(d)
 	if cost != "":
-		var c := UI.label(cost, 20 if compact else 23, UI.GOLD, 5)
+		var c := UI.label(cost, 20 if compact else 26, UI.GOLD, 5)
 		c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		v.add_child(c)
 	return b
@@ -867,10 +951,10 @@ func _build_choice() -> void:
 		var rcnt := (rv as Array).size() if rv is Array else 0
 		title = "阴 律 降 世"
 		sub = "选择一条局内规则修改器 • 阴律槽 %d / 2" % rcnt
-	var tl := UI.label(title, 52 if not touch_mode else 46, UI.GOLD, 9)
+	var tl := UI.label(title, 26, UI.GOLD, 6)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(tl)
-	var sl := UI.label(sub, 21, Color("d6d0f0"), 4)
+	var sl := UI.label(sub, 20, Color("d6d0f0"), 4)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(sl)
 	var row := HBoxContainer.new()
@@ -898,22 +982,30 @@ func _build_choice() -> void:
 			var sc_ln := _school_bonus_line(tags)
 			if sc_ln != "" and not desc_s.contains("【"):
 				desc_s += "\n" + sc_ln
-		var icon_s := String(o.get("icon", "fu"))
+		var icon_s := String(o.get("icon", ""))
+		if icon_s == "":
+			icon_s = String(o.get("icon_tag", ""))
+		if (okind == "rule" or ch.kind == "rule" or _rules_by_id.has(oid)) and _rules_by_id.has(oid):
+			var r_tag := String(_rules_by_id[oid].get("icon_tag", ""))
+			if r_tag != "":
+				icon_s = r_tag
+		if icon_s == "":
+			icon_s = "fu"
 		var cardb := _card(icon_s, String(o.get("name", "")), String(o.get("lvText", "")), desc_s, edge, Vector2(320, card_h))
 		var idx := i
 		cardb.pressed.connect(func(): game.on_choose(idx))
-		var kl := UI.label(str(i + 1), 22, UI.GOLD, 4)
+		var kl := UI.label(str(i + 1), 20, UI.GOLD, 4)
 		kl.position = Vector2(12, 8)
 		cardb.add_child(kl)
 		row.add_child(cardb)
 		UI.pop_in(cardb, 0.06 * i)
 		i += 1
-	var rr := UI.button("换一批（剩 %d 次）" % sim.rerolls, Vector2(280, 50), false, 23)
+	var rr := UI.button("换一批（剩 %d 次）" % sim.rerolls, Vector2(280, 50), false, 20)
 	rr.disabled = sim.rerolls <= 0
 	rr.pressed.connect(func(): game.on_reroll())
 	rr.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(rr)
-	var hint := UI.label("" if touch_mode else "按 1 / 2 / 3 选择", 18, Color(0.8, 0.82, 0.95, 0.8), 3)
+	var hint := UI.label("" if touch_mode else "按 1 / 2 / 3 选择", 16, Color(0.8, 0.82, 0.95, 0.8), 3)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(hint)
 
@@ -927,7 +1019,7 @@ func _build_shop() -> void:
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_theme_constant_override("separation", 10)
 	shop_panel.add_child(col)
-	var tl := UI.label("游 商 • 铜钱换遗物", 44, UI.GOLD, 8)
+	var tl := UI.label("游 商 • 铜钱换遗物", 26, UI.GOLD, 6)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(tl)
 	var sl := UI.label("铜钱 %d  •  灯芯 %d（进裂隙/刷新商品要灯芯）" % [sim.coins, sim.wicks], 20, Color("d6d0f0"), 4)
@@ -984,7 +1076,7 @@ func _build_shop() -> void:
 			card_btn.disabled = sim.coins < sim.price_of(r.id)
 		var idx := i
 		card_btn.pressed.connect(func(): game.on_buy(idx))
-		var kl2 := UI.label(str(i + 1), 18, UI.GOLD, 4)
+		var kl2 := UI.label(str(i + 1), 20, UI.GOLD, 4)
 		kl2.position = Vector2(10, 6)
 		card_btn.add_child(kl2)
 		target_row.add_child(card_btn)
@@ -996,7 +1088,7 @@ func _build_shop() -> void:
 	act_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	act_row.add_theme_constant_override("separation", 18)
 	col.add_child(act_row)
-	var rr2 := UI.button("刷新（灯芯×%d）" % int(GameData.GD.rerollWicks), Vector2(230, 48), false, 22)
+	var rr2 := UI.button("刷新（灯芯×%d）" % int(GameData.GD.rerollWicks), Vector2(230, 48), false, 20)
 	rr2.disabled = sim.wicks < int(GameData.GD.rerollWicks)
 	rr2.pressed.connect(func(): game.on_reroll_shop())
 	act_row.add_child(rr2)
@@ -1015,10 +1107,10 @@ func _build_extract_modal() -> void:
 	col.add_theme_constant_override("separation", 18)
 	extract_panel.add_child(col)
 	var depth: int = int(sim.get("abyss_depth")) if sim.get("abyss_depth") != null else 1
-	var tl := UI.label("灯 骸 伏 诛 • 幽 冥 抉 择", 52 if not touch_mode else 44, UI.GOLD, 9)
+	var tl := UI.label("灯 骸 伏 诛 • 幽 冥 抉 择", 26, UI.GOLD, 6)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(tl)
-	var sl := UI.label("当前幽冥第 %d 层  •  已获魂火 %d  •  抉择去留" % [depth, sim.soul_payout()], 22, Color("d6d0f0"), 4)
+	var sl := UI.label("当前幽冥第 %d 层  •  已获魂火 %d  •  抉择去留" % [depth, sim.soul_payout()], 20, Color("d6d0f0"), 4)
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(sl)
 	var row := HBoxContainer.new()
@@ -1033,7 +1125,7 @@ func _build_extract_modal() -> void:
 	c2.pressed.connect(func(): game.on_push_deeper())
 	row.add_child(c2)
 	UI.pop_in(c2, 0.08)
-	var hint := UI.label("" if touch_mode else "按 E 归灯保骸  •  按 F 深入幽冥", 19, Color(0.88, 0.85, 0.98, 0.9), 4)
+	var hint := UI.label("" if touch_mode else "按 E 归灯保骸  •  按 F 深入幽冥", 20, Color(0.88, 0.85, 0.98, 0.9), 4)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(hint)
 
@@ -1064,12 +1156,12 @@ func show_pause(on: bool) -> void:
 	var depth: int = int(sim.get("abyss_depth")) if sim.get("abyss_depth") != null else 1
 	var bid: String = String(sim.get("beacon_id")) if sim.get("beacon_id") != null else "beacon_default"
 	var bname := String(_beacons_by_id.get(bid, {}).get("name", "安夜签"))
-	var tl := UI.label("暂 停 • 构 筑 检 视", 46, UI.GOLD, 8)
+	var tl := UI.label("暂 停 • 构 筑 检 视", 26, UI.GOLD, 6)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(tl)
 	var oil_v: Variant = sim.get("lantern_oil")
 	var oil_i := int(round(float(oil_v))) if oil_v != null else 80
-	var info := UI.label("灯签：%s • 幽冥第%d层 • 灯油 %d%% • 灯芯 ×%d • 裂隙 %d 次%s" % [bname, depth, oil_i, sim.wicks, sim.rift_entries, " • 飞剑术" if sim.artifact == "sword" else ""], 19, UI.GOLD, 4)
+	var info := UI.label("灯签：%s • 幽冥第%d层 • 灯油 %d%% • 灯芯 ×%d • 裂隙 %d 次%s" % [bname, depth, oil_i, sim.wicks, sim.rift_entries, " • 飞剑术" if sim.artifact == "sword" else ""], 20, UI.GOLD, 4)
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(info)
 	# 可滚动检视面板（构筑 + 实时武器 DPS + 阴律/五派羁绊 + 进化进度）
@@ -1118,7 +1210,7 @@ func show_pause(on: bool) -> void:
 		entries.append({"id": String(wid), "total": tot, "dps": recent})
 	entries.sort_custom(func(a, b): return float(a.total) > float(b.total))
 	if entries.is_empty():
-		dps_v.add_child(UI.label("暂无伤害记录", 17, Color("a6a8c8"), 3))
+		dps_v.add_child(UI.label("暂无伤害记录", 16, Color("a6a8c8"), 3))
 	else:
 		var elapsed := maxf(1.0, sim.real_t)
 		for en in entries:
@@ -1127,7 +1219,7 @@ func show_pause(on: bool) -> void:
 			var row_d := HBoxContainer.new()
 			row_d.add_theme_constant_override("separation", 10)
 			dps_v.add_child(row_d)
-			var nm_l := UI.label(_weapon_label(String(en.id)), 18, UI.PAPER, 3)
+			var nm_l := UI.label(_weapon_label(String(en.id)), 16, UI.PAPER, 3)
 			nm_l.custom_minimum_size = Vector2(130, 0)
 			row_d.add_child(nm_l)
 			var pb := ProgressBar.new()
@@ -1139,7 +1231,7 @@ func show_pause(on: bool) -> void:
 			pb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			pb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			row_d.add_child(pb)
-			var stat_l := UI.label("总伤 %s (%.0f%%)  •  DPS %.0f" % [UI.fmt_int(int(en.total)), share, dps_val], 17, UI.GHOST, 3)
+			var stat_l := UI.label("总伤 %s (%.0f%%)  •  DPS %.0f" % [UI.fmt_int(int(en.total)), share, dps_val], 16, UI.GHOST, 3)
 			stat_l.custom_minimum_size = Vector2(300, 0)
 			stat_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			row_d.add_child(stat_l)
@@ -1152,31 +1244,52 @@ func show_pause(on: bool) -> void:
 	syn_box.add_child(syn_v)
 	var rv2: Variant = sim.get("active_rules")
 	var ar2: Array = rv2 if rv2 is Array else []
-	syn_v.add_child(UI.label("双阴律（%d / 2）" % ar2.size(), 19, Color("d9b8ff"), 4))
+	syn_v.add_child(UI.label("双阴律（%d / 2）" % ar2.size(), 20, Color("d9b8ff"), 4))
 	if ar2.is_empty():
 		syn_v.add_child(UI.label("尚未铭刻阴律（升级或灯龛事件有几率获得）", 16, Color("a6a8c8"), 3))
 	else:
 		for item in ar2:
 			var rid := String(item.get("id", "")) if item is Dictionary else String(item)
 			var rd: Dictionary = item if (item is Dictionary and item.has("desc")) else _rules_by_id.get(rid, {})
-			syn_v.add_child(UI.label("• %s：%s" % [String(rd.get("name", rid)), String(rd.get("desc", ""))], 17, Color("e6ccff"), 3))
+			var r_ic := String(rd.get("icon_tag", _rules_by_id.get(rid, {}).get("icon_tag", "")))
+			var r_row := HBoxContainer.new()
+			r_row.add_theme_constant_override("separation", 6)
+			if r_ic != "" and ResourceLoader.exists("res://assets/icons/%s.png" % r_ic):
+				r_row.add_child(UI.icon(r_ic, 22.0))
+			r_row.add_child(UI.label("• %s：%s" % [String(rd.get("name", rid)), String(rd.get("desc", ""))], 16, Color("e6ccff"), 3))
+			syn_v.add_child(r_row)
 	var scv2: Variant = sim.get("school_counts")
 	var scd2: Dictionary = scv2 if scv2 is Dictionary else {}
-	syn_v.add_child(UI.label("灯派羁绊（2 / 4 / 6）", 19, UI.GOLD, 4))
-	var sc_lines: Array = []
+	syn_v.add_child(UI.label("灯派羁绊（2 / 4 / 6）", 20, UI.GOLD, 4))
+	var sc_flow := HFlowContainer.new()
+	sc_flow.add_theme_constant_override("h_separation", 14)
+	sc_flow.add_theme_constant_override("v_separation", 6)
+	var sc_any := false
 	for sid in scd2:
 		var cnt := int(scd2[sid])
 		if cnt <= 0:
 			continue
+		sc_any = true
 		var skey := String(sid)
 		var sc_def: Dictionary = _schools_by_id.get(skey, {})
 		var sname := String(sc_def.get("name", skey))
+		var scol: Color = Color(String(sc_def.get("color", "#ffe0a8"))) if sc_def.has("color") else UI.SCHOOL.get(skey, Color("ffe0a8"))
 		var tier_desc := "未激活"
 		for tr in sc_def.get("tiers", []):
 			if tr is Dictionary and cnt >= int(tr.get("count", 99)):
 				tier_desc = "%d件生效：%s" % [int(tr.get("count", 2)), String(tr.get("desc", ""))]
-		sc_lines.append("%s ×%d（%s）" % [sname, cnt, tier_desc])
-	syn_v.add_child(UI.label("  |  ".join(PackedStringArray(sc_lines)) if not sc_lines.is_empty() else "暂无灯派计数", 16, Color("ffe0a8"), 3))
+		var s_row := HBoxContainer.new()
+		s_row.add_theme_constant_override("separation", 5)
+		var sc_ic := String(SCHOOL_ICONS.get(skey, ""))
+		if sc_ic != "" and ResourceLoader.exists("res://assets/icons/%s.png" % sc_ic):
+			s_row.add_child(UI.icon(sc_ic, 22.0))
+		s_row.add_child(UI.label("%s ×%d（%s）" % [sname, cnt, tier_desc], 16, scol, 3))
+		sc_flow.add_child(s_row)
+	if sc_any:
+		syn_v.add_child(sc_flow)
+	else:
+		sc_flow.free()
+		syn_v.add_child(UI.label("暂无灯派计数", 16, Color("ffe0a8"), 3))
 	var sc_sets := sim.set_counts()
 	var sparts: Array = []
 	for sid in _sets_by_id:
@@ -1205,7 +1318,7 @@ func show_pause(on: bool) -> void:
 		var lg: Dictionary = sim.ail_log
 		guide.append("异常反应：雷火爆 %d • 焚符 %d • 镇雷 %d • 百邪崩 %d" % [int(lg.get("leihuo", 0)), int(lg.get("fenfu", 0)), int(lg.get("zhenlei", 0)), int(lg.get("collapse", 0))])
 	for gl in guide:
-		var gx := UI.label(gl, 18, Color("c9e8ff"), 3)
+		var gx := UI.label(gl, 16, Color("c9e8ff"), 3)
 		gx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		body.add_child(gx)
 	var bc := CenterContainer.new()
@@ -1213,24 +1326,24 @@ func show_pause(on: bool) -> void:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 16)
 	bc.add_child(hb)
-	var b1 := UI.button("继续", Vector2(200, 54), true)
+	var b1 := UI.button("继续", Vector2(200, 54), true, 26)
 	b1.pressed.connect(func(): game.toggle_pause())
 	hb.add_child(b1)
-	var b2 := UI.button("声音：%s" % ("关" if Audio.muted else "开"), Vector2(200, 54))
+	var b2 := UI.button("声音：%s" % ("关" if Audio.muted else "开"), Vector2(200, 54), false, 26)
 	b2.pressed.connect(func():
 		game.toggle_mute()
 		b2.text = "声音：%s" % ("关" if Audio.muted else "开"))
 	hb.add_child(b2)
-	var b2s := UI.button("手动存档", Vector2(200, 54))
+	var b2s := UI.button("手动存档", Vector2(200, 54), false, 26)
 	b2s.pressed.connect(func(): game.manual_save())
 	hb.add_child(b2s)
-	var b2g := UI.button("结算本局 (X)", Vector2(200, 54))
+	var b2g := UI.button("结算本局 (X)", Vector2(200, 54), false, 26)
 	b2g.pressed.connect(func(): game.give_up())
 	hb.add_child(b2g)
-	var b3 := UI.button("回标题", Vector2(200, 54))
+	var b3 := UI.button("回标题", Vector2(200, 54), false, 26)
 	b3.pressed.connect(func(): game.to_title())
 	hb.add_child(b3)
-	var hint := UI.label("" if touch_mode else "Esc 继续", 17, Color(0.8, 0.82, 0.95, 0.8), 3)
+	var hint := UI.label("" if touch_mode else "Esc 继续", 16, Color(0.8, 0.82, 0.95, 0.8), 3)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(hint)
 	UI.pop_in(col)
@@ -1249,7 +1362,7 @@ func _build_row(list: Array, title: String) -> Control:
 		var cell := VBoxContainer.new()
 		var ic := UI.icon(it.icon, 56.0)
 		cell.add_child(ic)
-		var l := UI.label("%s %s" % [it.name, it.lv] if it.lv != "" else it.name, 15, UI.PAPER, 3)
+		var l := UI.label("%s %s" % [it.name, it.lv] if it.lv != "" else it.name, 16, UI.PAPER, 3)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		cell.add_child(l)
 		h.add_child(cell)
@@ -1266,7 +1379,7 @@ func show_result(r: Dictionary) -> void:
 	col.add_theme_constant_override("separation", 12)
 	result_panel.add_child(col)
 	var win: bool = r.victory
-	var tl := UI.label("灯骸伏诛 • 天明" if win else "灯 灭 了", 64, UI.GOLD if win else UI.BLOOD, 10)
+	var tl := UI.label("灯骸伏诛 • 天明" if win else "灯 灭 了", 26, UI.GOLD if win else UI.BLOOD, 6)
 	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(tl)
 	var cause := ""
@@ -1284,11 +1397,11 @@ func show_result(r: Dictionary) -> void:
 	rifts = maxi(rifts, int(r.get("rift_entries", 0)))
 	clears = maxi(clears, int(r.get("rift_clears", 0)))
 	var pet_s := ("  •  小金刚输出 %s" % UI.fmt_int(int(r.get("pet_dmg", 0)))) if int(r.get("pet_dmg", 0)) > 0 else ""
-	var l2 := UI.label("输出最高：%s%s  •  入裂隙 %d 次（通关 %d）%s" % [r.top, pet_s, rifts, clears, "  •  法宝：飞剑术" if r.artifact == "sword" else ""], 22, Color("d6d0f0"), 4)
+	var l2 := UI.label("输出最高：%s%s  •  入裂隙 %d 次（通关 %d）%s" % [r.top, pet_s, rifts, clears, "  •  法宝：飞剑术" if r.artifact == "sword" else ""], 20, Color("d6d0f0"), 4)
 	l2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(l2)
 	col.add_child(_build_row(r.build, "本局构筑"))
-	var l3 := UI.label("获得魂火 +%d" % r.soul, 34, UI.GHOST, 6)
+	var l3 := UI.label("获得魂火 +%d" % r.soul, 26, UI.GHOST, 6)
 	l3.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(l3)
 	var bc := CenterContainer.new()
@@ -1296,13 +1409,13 @@ func show_result(r: Dictionary) -> void:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 22)
 	bc.add_child(hb)
-	var b1 := UI.button("再来一局", Vector2(250, 62), true)
+	var b1 := UI.button("再来一局", Vector2(250, 62), true, 26)
 	b1.pressed.connect(func(): game.restart())
 	hb.add_child(b1)
-	var b2 := UI.button("回标题", Vector2(220, 62))
+	var b2 := UI.button("回标题", Vector2(220, 62), false, 26)
 	b2.pressed.connect(func(): game.to_title())
 	hb.add_child(b2)
-	var hint := UI.label("种子 %d%s" % [r.seed, "" if touch_mode else "  •  Enter / R 再来一局"], 18, Color(0.8, 0.82, 0.95, 0.8), 3)
+	var hint := UI.label("种子 %d%s" % [r.seed, "" if touch_mode else "  •  Enter / R 再来一局"], 16, Color(0.8, 0.82, 0.95, 0.8), 3)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(hint)
 	UI.pop_in(col)

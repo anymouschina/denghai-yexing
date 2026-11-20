@@ -23,6 +23,7 @@ var flare_q := false
 var _was_running := true
 var _idle_redraws := 2
 var _ended_redraws := 0
+var _ember_t := 0.0
 
 
 var last_cp := 0
@@ -78,7 +79,7 @@ func start(p_touch: bool, resume: Dictionary = {}) -> void:
 	hud.name = "Hud"
 	add_child(hud)
 	hud.setup(self, sim, touch_mode)
-	toast = UI.label("", 22, UI.GOLD, 5)
+	toast = UI.label("", 20, UI.GOLD, 5)
 	toast.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast.offset_left = -320.0
@@ -87,6 +88,7 @@ func start(p_touch: bool, resume: Dictionary = {}) -> void:
 	toast.offset_bottom = -56.0
 	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast.modulate.a = 0.0
+	toast.visible = false
 	hud.root.add_child(toast)
 	view.banner_cb = hud.show_banner
 	touch = TouchControls.new()
@@ -137,6 +139,7 @@ func _toast(msg: String) -> void:
 		return
 	toast.text = msg
 	toast.modulate.a = 1.0
+	toast.visible = true
 	toast_t = 2.2
 
 
@@ -152,7 +155,12 @@ func _process(delta: float) -> void:
 	PerfStat.frame_done()
 	if toast != null and toast_t > 0.0:
 		toast_t -= delta
-		toast.modulate.a = clampf(toast_t / 0.5, 0.0, 1.0)
+		var ta := clampf(toast_t / 0.5, 0.0, 1.0)
+		toast.modulate.a = ta
+		if ta <= 0.001:
+			toast.visible = false
+	elif toast != null and toast.visible and toast.modulate.a <= 0.001:
+		toast.visible = false
 	if sim.cp_serial != last_cp:
 		last_cp = sim.cp_serial
 		save_run()
@@ -161,15 +169,19 @@ func _process(delta: float) -> void:
 	if run != _was_running:
 		_was_running = run
 		_idle_redraws = 2
-	# 余烬上飘（暂停或弹窗打开时停止 60Hz 重绘）
-	if run and ember_layer != null:
-		for e in embers:
-			e.y -= e.v * delta
-			if e.y < -0.05:
-				e.y = 1.05
-				e.x = randf()
-		ember_layer.queue_redraw()
 	var modal := hud.modal_open() or extract_open
+	# 余烬上飘（游玩时 30Hz 节流，暂停或弹窗打开时 0Hz 停止重绘）
+	if run and not modal and ember_layer != null:
+		_ember_t += delta
+		if _ember_t >= 0.0333:
+			var edt := _ember_t
+			_ember_t = 0.0
+			for e in embers:
+				e.y -= float(e.v) * edt
+				if e.y < -0.05:
+					e.y = 1.05
+					e.x = randf()
+			ember_layer.queue_redraw()
 	touch.active = touch_mode and not modal and not paused and not sim.over
 	if touch_mode:
 		if touch.consume_pause() and not sim.over and sim.choice.is_empty() and not sim.shop_open and not extract_open:
