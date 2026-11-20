@@ -80,8 +80,39 @@ func rot(c: Vector2, ang: float, w: float, h: float, col: Color) -> void:
 
 
 func flush(ci: RID, tex: Texture2D) -> void:
-	if pts.size() > 0:
-		RenderingServer.canvas_item_add_triangle_array(ci, idx, pts, cols, uvs, PackedInt32Array(), PackedFloat32Array(), tex.get_rid())
+	var npts := pts.size()
+	if npts > 0:
+		if npts <= 60000:
+			RenderingServer.canvas_item_add_triangle_array(ci, idx, pts, cols, uvs, PackedInt32Array(), PackedFloat32Array(), tex.get_rid())
+		else:
+			# WebGL 顶点安全分段提交：防止极端同屏特效撑破单次绘制缓冲区
+			var rid := tex.get_rid()
+			var i := 0
+			var nidx := idx.size()
+			var cpts := PackedVector2Array()
+			var cuvs := PackedVector2Array()
+			var ccols := PackedColorArray()
+			var cidx := PackedInt32Array()
+			var remap: Dictionary = {}
+			while i + 2 < nidx:
+				if cpts.size() >= 54000:
+					RenderingServer.canvas_item_add_triangle_array(ci, cidx, cpts, ccols, cuvs, PackedInt32Array(), PackedFloat32Array(), rid)
+					cpts.resize(0); cuvs.resize(0); ccols.resize(0); cidx.resize(0); remap.clear()
+				for k in range(3):
+					var oi := idx[i + k]
+					var ni: int
+					if remap.has(oi):
+						ni = int(remap[oi])
+					else:
+						ni = cpts.size()
+						remap[oi] = ni
+						cpts.append(pts[oi])
+						cuvs.append(uvs[oi])
+						ccols.append(cols[oi])
+					cidx.append(ni)
+				i += 3
+			if cpts.size() > 0:
+				RenderingServer.canvas_item_add_triangle_array(ci, cidx, cpts, ccols, cuvs, PackedInt32Array(), PackedFloat32Array(), rid)
 	clear()
 
 

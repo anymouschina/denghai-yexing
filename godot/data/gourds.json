@@ -44,18 +44,24 @@
   }
  ],
  "pet": {
-  "hp": 120,
-  "revive": 45.0,
+  "hp": 360,
+  "revive": 15.0,
   "marks": 3,
-  "markMax": 3,
-  "dmg": 34.0,
-  "atkGap": 1.2,
-  "absorb": 0.4,
-  "comboCd": 40.0,
-  "comboR": 380.0,
-  "comboDmg": 140.0,
-  "orbitR": 95.0,
-  "range": 520.0
+  "markMax": 5,
+  "dmg": 140.0,
+  "dpsRatio": 0.18,
+  "atkGap": 0.55,
+  "absorb": 0.3,
+  "regen": 0.04,
+  "comboCd": 20.0,
+  "comboR": 460.0,
+  "comboDmg": 900.0,
+  "comboDpsRatio": 1.4,
+  "comboWaves": 7,
+  "orbitR": 110.0,
+  "range": 600.0,
+  "huntSpeed": 540.0,
+  "pickupR": 180.0
  },
  "prices": {
   "white": 50,
@@ -65,13 +71,13 @@
  },
  "rerollWicks": 1,
  "minis": {
-  "_doc": "巡场妖王（每段中途精英）出场的战斗秒；段末守关 Boss 由每段结束触发，不在这里排时间",
+  "_doc": "巡场妖王（每段中途精英）出场的战斗秒；段末守关 Boss 由每段结束触发，不在这里排时间（完整模式 15 分钟：每段 150 秒）",
   "fullMid": [
-   150,
-   450,
-   750,
-   1050,
-   1350
+   75,
+   225,
+   375,
+   525,
+   675
   ],
   "quickMid": [
    60,
@@ -94,8 +100,8 @@
   180
  ],
  "guarantee": {
-  "_doc": "第 n 件葫芦最迟在 combat 秒 interval×n 发放（经典口径不发，平衡基线不变）：完整 7×170=1190 秒、疾速 7×80=560 秒，都在终局 Boss 前集齐",
-  "full": 170,
+  "_doc": "第 n 件葫芦最迟在 combat 秒 interval×n 发放（经典口径不发，平衡基线不变）：完整 7×95=665 秒（11分05秒，15分钟终局前）、疾速 7×80=560 秒",
+  "full": 95,
   "quick": 80
  }
 }

@@ -85,6 +85,13 @@
   "oil": 0.012,
   "oilHeal": 25,
   "maxGems": 280,
+  "modeCaps": {
+   "soul": 80,
+   "coin": 45,
+   "oil": 8,
+   "chest": 6,
+   "mergeR": 78
+  },
   "magnetPop": 240,
   "chestLevels": 2,
   "fillerHeal": 40,

@@ -107,5 +107,18 @@
   "hpPerMin": 1.36,
   "batchPerMin": 0.8,
   "intervalMulPerMin": 0.95
+ },
+ "modeScale": {
+  "_doc": "非经典模式（完整/疾速）中后期怪物数值补偿，匹配淬火/突破/葫芦/遗物成长曲线；经典口径不启用",
+  "lateStart": 0.3,
+  "hpQuad": 3.5,
+  "hpPow": 11.0,
+  "hpExp": 3.2,
+  "dmgLinear": 1.8,
+  "dmgQuad": 1.4,
+  "speedAdd": 0.22,
+  "eliteHpBase": 2.2,
+  "eliteHpQuad": 9.0,
+  "eliteDmgLinear": 1.5, "guardSec": 22.0, "guardLead": 25.0, "modeK": {"full": 1.0, "quick": 0.15}
  }
 }

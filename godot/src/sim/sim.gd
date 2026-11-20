@@ -133,7 +133,7 @@ var lei_queue: Array = []
 var wicks := 2
 var wick_spent_rift := 0
 var wick_spent_shop := 0
-var stretch := 1.0            # 模式拉伸：战斗节奏钟(t)每走 1 秒需要 stretch 个真实战斗秒；30 分钟=3.75，10 分钟=1.25，测试默认 1
+var stretch := 1.0            # 模式拉伸：战斗节奏钟(t)每走 1 秒需要 stretch 个真实战斗秒；完整 15 分钟=1.875，疾速 10 分钟=1.25，经典=1
 var mode := "classic"
 var clock := 0.0              # 玩家看到的战斗时钟（真实秒，不含段间/裂隙）
 var gourds: Array = []          # 已得彩虹葫芦散件（颜色 id，不重复）
@@ -141,13 +141,17 @@ var pet_on := false
 var pet_hp := 0.0
 var pet_dead_t := 0.0
 var pet_marks := 3
-var pet_atk_t := 1.0
+var pet_atk_t := 0.5
 var pet_idx := 0
 var pet_ang := 0.0
 var pet_pos := Vector2.ZERO
+var pet_flip := false
+var pet_shots: Array = []       # 小金刚火球弹道：{x,y,vx,vy,dmg,life,col,r}
 var combo_cd := 0.0
 var combo_fx := 0.0
-var pet_fx: Array = []          # 渲染用的攻击特效 [type,x,y,life]
+var combo_waves := 0
+var combo_wave_t := 0.0
+var pet_fx: Array = []          # 渲染用的攻击特效 [type,x,y,life,max,r]
 var in_combo := false
 var mini_idx := 0
 var vine_taken: Dictionary = {}
@@ -255,7 +259,7 @@ func _init(p_seed: int = 1, opts: Dictionary = {}) -> void:
 	emit = opts.get("emit", false)
 	touch = opts.get("touch", false)
 	mode = String(opts.get("mode", "classic"))
-	stretch = {"full": 3.75, "quick": 1.25}.get(mode, 1.0)
+	stretch = {"full": 1.5, "quick": 1.25}.get(mode, 1.0)
 	var m: Dictionary = opts.get("meta", {})
 	var saved: Dictionary = m
 	for mm in GameData.META:
@@ -383,8 +387,11 @@ func _on_kill_sets(e: SimEnemy) -> void:
 		_aoe(e.x, e.y - 30.0, 100.0, 25.0, "setsplash")
 		set_depth -= 1
 	if has_set("wealth") and rng.randf() < 0.12:
-		for i in range(3):
-			_spawn_pickup("coin", e.x + (rng.randf() - 0.5) * 80.0, e.y + (rng.randf() - 0.5) * 50.0, 2)
+		if mode != "classic":
+			_spawn_pickup("coin", e.x, e.y, 6)
+		else:
+			for i in range(3):
+				_spawn_pickup("coin", e.x + (rng.randf() - 0.5) * 80.0, e.y + (rng.randf() - 0.5) * 50.0, 2)
 	if has_set("soul"):
 		set_kills += 1
 		if set_kills % 12 == 0:
@@ -543,10 +550,11 @@ func step(dt: float) -> void:
 func _step_combat(dt: float) -> void:
 	if phase != PH_RIFT and real_t >= float(GameData.DG.fusion.atRealSec):
 		_trigger_fusion()
-	if phase != PH_RIFT or FARM_KINDS.has(rift_kind):
-		# 剑冢/秘境/宝库：大地图原样等你，妖物收起、时钟不走。
-		# 练级点例外：时钟照走，刷是拿一局的时间换资源。停钟时完整模式实测被刷到 100 分钟、56 级，
-		# 百万血 Boss 被碾压。出怪计时器只在 PH_SEG 走，出来不会补刷积压的妖潮，最多提前触发一条剧本事件。
+	if phase != PH_RIFT or mode != "classic" or FARM_KINDS.has(rift_kind):
+		# 非经典模式：进任何副本（剑冢/葫芦藤/宝库/练级点）时钟都照走——副本是拿这一夜的时间换资源，不是额外时间。
+		# 以前只有练级点走钟，剑冢/秘境/宝库停钟：探索型打法一局进 11 次副本，15 分钟的夜行实测拖到 38–60 分钟。
+		# 大地图妖物仍原样收起；出怪计时器只在 PH_SEG 走，出来不会补刷积压的妖潮，最多提前触发一条剧本事件。
+		# 经典口径保持停钟（平衡基线不变）。
 		t += dt / stretch
 		clock += dt
 		if guard_done.has(seg) and t > seg_to(seg):
@@ -569,17 +577,21 @@ func _step_combat(dt: float) -> void:
 	var gstep := gourd_guarantee_step()
 	if phase == PH_SEG and gstep > 0.0 and gourds.size() < 7 and clock >= gstep * float(gourds.size() + 1):
 		grant_gourd("保底")
-	if phase == PH_SEG and t >= seg_to(seg) - 20.0 / stretch and not announced.has(seg):
+	# 守关 BOSS 提前 guardLead 秒（真实秒）在段内刷出，守关战占用本段时间，而不是段末停住节奏钟另算——
+	# 以前段末才刷、刷出后节奏钟停住，6 场守关战在 15 分钟之外再加 2–4 分钟。
+	var guards_on := mode != "classic" and seg < seg_n() - 1
+	var lead := float(GameData.WV.get("modeScale", {}).get("guardLead", 0.0)) / stretch if guards_on else 0.0
+	if phase == PH_SEG and t >= seg_to(seg) - lead - 20.0 / stretch and not announced.has(seg):
 		announced[seg] = true
-		if stretch > 1.0 and seg < seg_n() - 1:
+		if guards_on:
 			_ev("banner", "20 秒后守关 BOSS 现身 • 击败后清场", "#d9b8ff")
 		else:
 			_ev("banner", "20 秒后清场 • 场地中央将裂开「灯骸裂隙」", "#d9b8ff")
+	if guards_on and phase == PH_SEG and t >= seg_to(seg) - lead and not guard_done.has(seg):
+		guard_done[seg] = true
+		_spawn_guard(seg)
 	if phase == PH_SEG and t >= seg_to(seg):
-		if stretch > 1.0 and seg < seg_n() - 1:
-			if not guard_done.has(seg):
-				guard_done[seg] = true
-				_spawn_guard(seg)
+		if guards_on:
 			if guard_ref != null and guard_ref.alive and clock - guard_clock < 120.0:
 				pass   # 守关 Boss 在场：先打 Boss，再清场
 			else:
@@ -868,12 +880,46 @@ func _spawn_point(angle: float, dist: float) -> Vector2:
 	return Vector2(px + dist, py)
 
 
+func _mode_enemy_scale() -> Vector3:
+	## 返回 [普通怪血量倍率, 伤害倍率, 移速倍率]；经典口径恒为 1（平衡基线不变）
+	if mode == "classic" or not GameData.WV.has("modeScale"):
+		return Vector3(1.0, 1.0, 1.0)
+	var lp := _mode_late_p()
+	var MS: Dictionary = GameData.WV.modeScale
+	var k := float(MS.modeK.get(mode, 1.0))
+	var hm := 1.0 + k * (float(MS.hpQuad) * lp * lp + float(MS.hpPow) * pow(lp, float(MS.hpExp)))
+	var dm := 1.0 + k * (float(MS.dmgLinear) * lp + float(MS.dmgQuad) * lp * lp)
+	var sm := 1.0 + k * float(MS.speedAdd) * lp
+	return Vector3(hm, dm, sm)
+
+
+## 后期进度 0..（>1 表示终局后）：lateStart 之前恒为 0——补强只针对“后期太弱”，前中期手感不动
+func _mode_late_p() -> float:
+	var MS: Dictionary = GameData.WV.modeScale
+	var p := clampf(t / 480.0, 0.0, 1.25)
+	var ls := float(MS.lateStart)
+	return maxf(0.0, (p - ls) / maxf(0.01, 1.0 - ls))
+
+
+func _mode_elite_scale() -> Vector2:
+	## 非经典模式精英/巡场妖王/守关 BOSS 的 [血量倍率, 伤害倍率]
+	if mode == "classic" or not GameData.WV.has("modeScale"):
+		return Vector2(1.0, 1.0)
+	var MS: Dictionary = GameData.WV.modeScale
+	var lp := _mode_late_p()
+	var k := float(MS.modeK.get(mode, 1.0))
+	var hm := 1.0 + k * (float(MS.eliteHpBase) * lp + float(MS.eliteHpQuad) * lp * lp)
+	var dm := 1.0 + k * float(MS.eliteDmgLinear) * lp
+	return Vector2(hm, dm)
+
+
 func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Dictionary = {}) -> SimEnemy:
 	var WV: Dictionary = GameData.WV
 	var EN: Dictionary = GameData.EN
 	if dist < 0.0:
 		dist = WV.spawnDist
 	var is_boss: bool = opts.get("boss", false)
+	var is_warden: bool = opts.get("warden", false)
 	var def: Dictionary = EN.boss if is_boss else (opts.def if opts.has("def") else EN[type])
 	var el: Dictionary = EN.elites[type] if opts.get("elite", false) else {}
 	if opts.has("el"):
@@ -883,6 +929,8 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 	if opts.has("pos"):
 		sp = opts.pos
 	var tier := _threat_tier()
+	var msc := _mode_enemy_scale()
+	var esc := _mode_elite_scale()
 	var hp_mul := pow(WV.hpMulPerMin, t / 60.0) * pow(WV.late.hpPerMin, maxf(0.0, (t - float(WV.late.from)) / 60.0)) * pow(GameData.DG.threat.hpMul, tier)
 	var scale_mul: float = el.scale if not el.is_empty() else 1.0
 	e.uid = uid_n
@@ -899,13 +947,18 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 		var hbm: Dictionary = def.get("hpByMode", {})
 		e.hp = float(hbm[mode]) if hbm.has(mode) else def.hp * pow(GameData.DG.threat.bossHpMul, tier)
 		e.armor = def.get("armor", 0.0)
+		e.dmg_mul = 1.0
 	elif e.elite:
-		e.hp = el.hp
+		var use_esc: bool = mode != "classic" and not is_warden and not opts.get("noScale", false)
+		e.hp = float(el.hp) * (esc.x if use_esc else 1.0)
 		e.armor = el.get("armor", 0.0)
+		e.dmg_mul = esc.y if use_esc else 1.0
 	else:
-		e.hp = def.hp * hp_mul
-	e.speed = (el.speed if e.elite else def.speed) * (0.9 + rng.randf() * 0.2)
-	e.dmg = el.dmg if e.elite else def.dmg
+		e.hp = float(def.hp) * hp_mul * msc.x
+		e.dmg_mul = msc.y
+	var base_spd := float(el.speed if e.elite else def.speed)
+	e.speed = base_spd * (0.9 + rng.randf() * 0.2) * (1.0 if (is_boss or is_warden) else msc.z)
+	e.dmg = float(el.dmg if e.elite else def.dmg) * e.dmg_mul
 	e.xpv = int(el.xp if e.elite else def.xp)
 	e.r = def.r * scale_mul
 	e.h = def.h * scale_mul
@@ -1021,8 +1074,9 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 		farm_gain.xp += e.xpv
 	if e.xpv > 0:
 		if e.elite:
-			for i in range(8):
-				_spawn_pickup("soul", e.x + (rng.randf() - 0.5) * 80.0, e.y + (rng.randf() - 0.5) * 60.0, int(ceil(e.xpv / 8.0)))
+			var orbs := 3 if mode != "classic" else 8
+			for i in range(orbs):
+				_spawn_pickup("soul", e.x + (rng.randf() - 0.5) * 80.0, e.y + (rng.randf() - 0.5) * 60.0, int(ceil(float(e.xpv) / float(orbs))))
 		else:
 			_spawn_pickup("soul", e.x, e.y, e.xpv)
 	var r := rng.randf()
@@ -1097,7 +1151,7 @@ func _update_weapons(dt: float) -> void:
 				damage(e, st2.dmg, "huanhuo", {"kx": e.x - px, "ky": e.y - py, "kb": BAL.huanhuo.knock})
 				if e.alive and lv("zhuohun") > 0:
 					_ignite(e)
-			if evo_h and w_trail <= 0.0:
+			if evo_h and w_trail <= 0.0 and trails.size() < 80:
 				trails.append({"x": ox, "y": oy + 20.0, "life": GameData.EVOS.huanhuo.stats.trailLife, "tick": 0.0})
 		if evo_h and w_trail <= 0.0:
 			w_trail = GameData.EVOS.huanhuo.stats.trailEvery
@@ -1167,6 +1221,8 @@ func _fire_talisman(angle: float, st: Dictionary) -> void:
 	b.dmg = st.dmg
 	b.pierce = int(st.pierce) + (int(GameData.EVOS.fu.stats.pierceBonus) if evo.has("fu") else 0)
 	b.mark = evo.has("fu")
+	if bullets.size() >= 180:
+		bullets.pop_front()
 	bullets.append(b)
 
 
@@ -1250,6 +1306,8 @@ func _thunder(tgt: SimEnemy, dmg: float, chain: int, hit_set: Dictionary, evl: b
 		hit_set[nxt.uid] = true
 		d *= L.chainRatio
 		if emit:
+			if bolts.size() >= 48:
+				bolts.pop_front()
 			bolts.append({"x1": from.x, "y1": from.y - 40.0, "x2": nxt.x, "y2": nxt.y - 40.0, "life": 0.18, "seed": rng.randf()})
 		var o2 := {}
 		if evl:
@@ -1653,7 +1711,7 @@ func _elite_slam(e: SimEnemy, dt: float, dist: float) -> void:
 		var x := e.x
 		var y := e.y
 		var rad: float = e.el.slamR * rm
-		var dmg: float = e.el.slamDmg
+		var dmg: float = float(e.el.slamDmg) * e.dmg_mul
 		var src := ("warden" if e.warden else "elite_" + e.type) + ":slam"
 		var cb := func() -> void:
 			if not e.alive:
@@ -1697,7 +1755,7 @@ func _elite_ring(e: SimEnemy, dt: float) -> void:
 		var n := int(e.el.ringCount)
 		for i in range(n):
 			var a := float(i) / n * TAU + real_t
-			_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * e.el.bulletSpeed * 0.8, sin(a) * e.el.bulletSpeed * 0.8, e.el.bulletDmg, "elite_lantern:bullet")
+			_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * e.el.bulletSpeed * 0.8, sin(a) * e.el.bulletSpeed * 0.8, float(e.el.bulletDmg) * e.dmg_mul, "elite_lantern:bullet")
 	_add_tele(e.x, e.y, e.el.ringTeleR, e.el.ringWarn, cb, e)
 
 
@@ -1825,14 +1883,14 @@ func _enemy_shoot(e: SimEnemy, ux: float, uy: float) -> void:
 	_ev("sfx", "eshot")
 	for i in range(n):
 		var a: float = base + (i - (n - 1) / 2.0) * (float(e.el.fanSpread) if e.elite else 0.0)
-		_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * s.bulletSpeed, sin(a) * s.bulletSpeed, s.bulletDmg, ("elite_" if e.elite else "") + e.type + ":bullet")
+		_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * s.bulletSpeed, sin(a) * s.bulletSpeed, float(s.bulletDmg) * e.dmg_mul, ("elite_" if e.elite else "") + e.type + ":bullet")
 
 
 func _explode_bomber(e: SimEnemy) -> void:
 	var d: Dictionary = e.def
 	_ev("boom", e.x, e.y - 20.0)
 	if Vector2(px - e.x, py - e.y).length() < d.blastR + 10.0:
-		hurt_player(d.blastDmg, e.x, e.y, "firecracker:blast")
+		hurt_player(float(d.blastDmg) * e.dmg_mul, e.x, e.y, "firecracker:blast")
 	var x := e.x
 	var y := e.y
 	_kill(e, "blast")
@@ -1842,6 +1900,8 @@ func _explode_bomber(e: SimEnemy) -> void:
 
 
 func _spawn_ebullet(x: float, y: float, vx: float, vy: float, dmg: float, src: String) -> void:
+	if ebullets.size() >= 240:
+		ebullets.pop_front()
 	var b := SimBullet.new()
 	b.x = x
 	b.y = y
@@ -1911,7 +1971,57 @@ func _update_teles(dt: float) -> void:
 # ======================================================================
 func _spawn_pickup(kind: String, x: float, y: float, val: int) -> void:
 	var D: Dictionary = GameData.BAL.drops
-	if kind == "soul" and gem_count >= int(D.maxGems):
+	if mode != "classic" and D.has("modeCaps"):
+		var MC: Dictionary = D.modeCaps
+		var cap := int(MC.get(kind, 80))
+		var mr := float(MC.get("mergeR", 78.0))
+		var mr2 := mr * mr
+		var cnt := 0
+		var near_p: SimPickup = null
+		var near_d := 1e18
+		var far_p: SimPickup = null
+		var far_d := -1.0
+		var any_p: SimPickup = null
+		var any_d := 1e18
+		for k: SimPickup in pickups:
+			if k.kind != kind:
+				continue
+			cnt += 1
+			if k.mag:
+				continue
+			var d := (k.x - x) * (k.x - x) + (k.y - y) * (k.y - y)
+			if d < any_d:
+				any_d = d
+				any_p = k
+			if d <= mr2 and d < near_d:
+				near_d = d
+				near_p = k
+			var dp := (k.x - px) * (k.x - px) + (k.y - py) * (k.y - py)
+			if dp > far_d:
+				far_d = dp
+				far_p = k
+		if kind == "soul" or kind == "coin":
+			if near_p != null:
+				near_p.val += val
+				return
+			if cnt >= cap:
+				if any_p != null:
+					any_p.val += val
+				elif kind == "soul":
+					_gain_xp(val)
+				else:
+					coins += val
+				return
+		elif kind == "oil" and cnt >= cap:
+			if far_p != null:
+				far_p.x = x
+				far_p.y = y - 18.0
+				far_p.born = real_t
+			return
+		elif kind == "chest" and cnt >= cap:
+			pending_chest += 1
+			return
+	elif kind == "soul" and gem_count >= int(D.maxGems):
 		var best: SimPickup = null
 		var bd := 1e18
 		for k: SimPickup in pickups:
@@ -2775,6 +2885,8 @@ func _leave_world() -> void:
 	teles = []
 	trails = []
 	lei_queue = []
+	pet_shots = []
+	combo_waves = 0
 	_stash_pickups()
 	_rebuild_grid()
 
@@ -2791,6 +2903,8 @@ func _return_world() -> void:
 	teles = []
 	trails = []
 	lei_queue = []
+	pet_shots = []
+	combo_waves = 0
 	_unstash_pickups()
 	_rebuild_grid()
 
@@ -2799,7 +2913,11 @@ func _return_world() -> void:
 func _stash_pickups() -> void:
 	if mode == "classic":
 		return
-	arena_stash.append_array(pickups)
+	for k: SimPickup in pickups:
+		if arena_stash.size() >= 140 and (k.kind == "coin" or k.kind == "soul"):
+			_collect(k)
+		else:
+			arena_stash.append(k)
 	pickups.clear()
 	gem_count = 0
 
@@ -2815,11 +2933,10 @@ func _unstash_pickups() -> void:
 	gem_count = 0
 	if arena_stash.is_empty():
 		return
-	pickups.append_array(arena_stash)
-	arena_stash.clear()
-	for k: SimPickup in pickups:
-		if k.kind == "soul":
-			gem_count += 1
+	var stashed := arena_stash
+	arena_stash = []
+	for k: SimPickup in stashed:
+		_spawn_pickup(k.kind, k.x, k.y + 18.0, k.val)
 
 
 func _enter_farm(kind: String) -> void:
@@ -3093,12 +3210,16 @@ func _finish() -> void:
 	for k in dmg_by:
 		if GameData.UPS.has(k) and float(dmg_by[k]) > float(dmg_by.get(top, 0.0)):
 			top = k
+	var top_val := float(dmg_by.get(top, 0.0))
 	var top_name: String = GameData.EVOS[top].name if evo.has(top) else (GameData.UPS[top].name if GameData.UPS.has(top) else "驱邪符")
-	if sw_drops >= 0 and float(dmg_by.get("sword", 0.0)) > float(dmg_by.get(top, 0.0)):
+	if sw_drops >= 0 and float(dmg_by.get("sword", 0.0)) > top_val:
+		top_val = float(dmg_by.get("sword", 0.0))
 		top_name = "飞剑术"
+	if float(dmg_by.get("pet", 0.0)) > top_val:
+		top_name = "葫芦小金刚"
 	_ev("result")
 	result = {"victory": victory, "time": clock, "level": level, "kills": kills, "top": top_name, "soul": soul_payout(), "build": owned(), "seed": seed_v,
-		"cause": death_cause, "rift": rift_log, "relics": relics.duplicate(), "artifact": artifact, "boss_time": boss_time, "rift_entries": rift_entries, "rift_clears": rift_clears}
+		"cause": death_cause, "rift": rift_log, "relics": relics.duplicate(), "artifact": artifact, "boss_time": boss_time, "rift_entries": rift_entries, "rift_clears": rift_clears, "pet_dmg": int(float(dmg_by.get("pet", 0.0)))}
 
 
 var result: Dictionary = {}
@@ -3228,7 +3349,9 @@ func from_save(d: Dictionary) -> void:
 	rng.seed = seed_v + int(real_t * 10.0)
 	_recalc()
 	hp = minf(float(d.get("hp", maxhp)), maxhp)
-	enemies.clear(); ebullets.clear(); bullets.clear(); pickups.clear(); teles.clear(); trails.clear(); lei_queue.clear()
+	enemies.clear(); ebullets.clear(); bullets.clear(); pickups.clear(); teles.clear(); trails.clear(); lei_queue.clear(); pet_shots.clear(); pet_fx.clear()
+	combo_waves = 0
+	pet_pos = Vector2(px + 90.0, py - 40.0)
 	boss = null
 	var events: Array = GameData.WV.events
 	event_idx = 0
@@ -3265,15 +3388,24 @@ func grant_gourd(src: String = "") -> bool:
 	_ev("banner", "彩虹葫芦 • %s（%d/7）" % [GameData.GP_BY_ID[gid].name, gourds.size()], "#ffcf5a")
 	if gourds.size() >= 7 and not pet_on:
 		pet_on = true
-		pet_hp = float(GameData.GD.pet.hp) * (1.0 + 0.1 * pet_marks)
+		pet_pos = Vector2(px + 90.0, py - 40.0)
+		pet_hp = pet_maxhp()
 		_ev("pet_born")
-		_ev("banner", "七色合一 • 葫芦小金刚现身", "#ffcf5a")
+		_ev("banner", "七色合一 • 葫芦小金刚现身助战", "#ffcf5a")
 	_recalc()
 	return true
 
 
 func pet_maxhp() -> float:
-	return float(GameData.GD.pet.hp) * (1.0 + 0.1 * pet_marks)
+	var G: Dictionary = GameData.GD.pet
+	return maxf(float(G.hp), maxhp * 1.4) * (1.0 + 0.1 * float(pet_marks))
+
+
+func pet_base_dmg() -> float:
+	## 小金刚基础伤害随玩家构筑 DPS 同步成长（剔除 s_dmg_add 避免与 damage() 二次乘算）
+	var G: Dictionary = GameData.GD.pet
+	var from_dps := build_dps() * float(G.get("dpsRatio", 0.28)) / maxf(1.0, 1.0 + s_dmg_add)
+	return maxf(float(G.dmg), from_dps) * (1.0 + 0.12 * float(pet_marks))
 
 
 func abandon() -> void:
@@ -3297,10 +3429,170 @@ func _pet_hurt(dmg: float) -> float:
 	if pet_hp <= 0.0:
 		pet_hp = 0.0
 		pet_dead_t = float(GameData.GD.pet.revive)
-		pet_marks = maxi(0, pet_marks - 1)    # 死亡惩罚：掉 1 层强化印记 + 45s 复活冷却
+		pet_marks = maxi(0, pet_marks - 1)    # 死亡惩罚：掉 1 层强化印记 + 复活冷却
 		_ev("pet_dead")
 		_recalc()
 	return dmg - ab
+
+
+func _pet_add_fx(kind: int, x: float, y: float, dur: float, rad: float) -> void:
+	if pet_fx.size() >= 36:
+		pet_fx.pop_front()
+	pet_fx.append([kind, x, y, dur, dur, rad])
+
+
+func _pet_pick_target(rng_: float) -> SimEnemy:
+	## 优先锁定 Boss / 精英 / 守关者，其次选离小金刚最近的怪
+	## 只在主角周围“屏幕形”的椭圆里找（横 rng_、纵 rng_×0.5）：屏幕 16:9，圆形半径会让它追到画面外，玩家看不见它在打
+	var best: SimEnemy = null
+	var best_sc := -1e18
+	var ry := rng_ * 0.5
+	for e: SimEnemy in enemies:
+		if not e.alive:
+			continue
+		var ex := (e.x - px) / rng_
+		var ey := (e.y - py) / ry
+		if ex * ex + ey * ey > 1.0:
+			continue
+		var dpet := sqrt((e.x - pet_pos.x) * (e.x - pet_pos.x) + (e.y - pet_pos.y) * (e.y - pet_pos.y))
+		var pri := 1000.0 if (e.boss or e.warden) else (450.0 if e.elite else 0.0)
+		var sc := pri - dpet
+		if sc > best_sc:
+			best_sc = sc
+			best = e
+	return best
+
+
+func _pet_fire_volley(tgt: SimEnemy, dmg: float) -> void:
+	## 技能 1：赤炎连珠 —— 朝目标及附近怪连发 3 枚追踪火球，命中范围爆裂并引燃
+	var base_a := atan2(tgt.y - tgt.h * 0.4 - pet_pos.y, tgt.x - pet_pos.x)
+	var cols := [0, 1, 2]
+	for i in range(3):
+		if pet_shots.size() >= 36:
+			pet_shots.pop_front()
+		var a := base_a + float(i - 1) * 0.24
+		var spd := 660.0
+		pet_shots.append({
+			"x": pet_pos.x,
+			"y": pet_pos.y,
+			"vx": cos(a) * spd,
+			"vy": sin(a) * spd,
+			"dmg": dmg * 0.85,
+			"life": 1.15,
+			"col": cols[i],
+			"r": 88.0,
+		})
+	_pet_add_fx(0, pet_pos.x, pet_pos.y, 0.28, 72.0)
+	_ev("sfx", "shoot")
+
+
+func _pet_chain_thunder(tgt: SimEnemy, dmg: float) -> void:
+	## 技能 2：紫金天雷 —— 由小金刚直劈目标并连锁 5 只妖物，附带可见闪电链
+	var hit_set := {}
+	var from_p := pet_pos
+	var cur := tgt
+	var d := dmg * 1.45
+	for step_i in range(5):
+		if cur == null or not cur.alive:
+			break
+		hit_set[cur.uid] = true
+		if emit:
+			if bolts.size() >= 48:
+				bolts.pop_front()
+			bolts.append({"x1": from_p.x, "y1": from_p.y, "x2": cur.x, "y2": cur.y - cur.h * 0.45, "life": 0.24, "seed": rng.randf()})
+		_ev("thunder", cur.x, cur.y)
+		_pet_add_fx(1, cur.x, cur.y - cur.h * 0.4, 0.34, 85.0)
+		damage(cur, d, "pet", {"kx": cur.x - pet_pos.x, "ky": cur.y - pet_pos.y, "kb": 80.0})
+		from_p = Vector2(cur.x, cur.y - cur.h * 0.45)
+		d *= 0.82
+		var nxt: SimEnemy = null
+		var bd := 240.0 * 240.0
+		for e: SimEnemy in _near(cur.x, cur.y, 240.0):
+			if hit_set.has(e.uid):
+				continue
+			var dd := (e.x - cur.x) * (e.x - cur.x) + (e.y - cur.y) * (e.y - cur.y)
+			if dd < bd:
+				bd = dd
+				nxt = e
+		cur = nxt
+
+
+func _pet_shockwave(tgt: SimEnemy, dmg: float) -> void:
+	## 技能 3：七彩镇魔印 —— 突进到目标群中心释放七彩震荡波，大范围清怪 + 击退 + 清弹
+	var center := Vector2(tgt.x, tgt.y - tgt.h * 0.35)
+	var jump := center - pet_pos
+	if jump.length() > 140.0:
+		pet_pos += jump.normalized() * 140.0
+	else:
+		pet_pos = center
+	var rad := 195.0
+	_pet_add_fx(2, pet_pos.x, pet_pos.y, 0.45, rad)
+	_ev("ring", pet_pos.x, pet_pos.y, rad)
+	for e: SimEnemy in _near(pet_pos.x, pet_pos.y, rad + 40.0):
+		if Vector2(e.x - pet_pos.x, e.y - e.h * 0.4 - pet_pos.y).length() < rad + e.r:
+			damage(e, dmg * 1.25, "pet", {"kx": e.x - pet_pos.x, "ky": e.y - pet_pos.y, "kb": 160.0})
+	# 顺带震碎身边敌弹护主
+	var kept: Array = []
+	for b: SimBullet in ebullets:
+		if Vector2(b.x - pet_pos.x, b.y - pet_pos.y).length() > 150.0:
+			kept.append(b)
+	ebullets = kept
+
+
+func _pet_trigger_combo(G: Dictionary) -> void:
+	## Q 七彩神光斩：大范围清弹 + 回血 + 连续 7 道七彩天雷轰炸高血量妖物
+	combo_cd = float(G.comboCd)
+	combo_fx = 0.85
+	combo_waves = int(G.get("comboWaves", 7))
+	combo_wave_t = 0.05
+	var cdmg := maxf(float(G.comboDmg), build_dps() * float(G.get("comboDpsRatio", 2.2)) / maxf(1.0, 1.0 + s_dmg_add)) * (1.0 + 0.12 * float(pet_marks))
+	var cr := float(G.comboR)
+	for e: SimEnemy in _near(px, py - 30.0, cr + 50.0):
+		if Vector2(e.x - px, e.y - e.h * 0.4 - (py - 30.0)).length() < cr + e.r:
+			damage(e, cdmg, "pet", {"forceCrit": true, "kx": e.x - px, "ky": e.y - py, "kb": 220.0})
+	var kept: Array = []
+	for b: SimBullet in ebullets:
+		if Vector2(b.x - px, b.y - py).length() > cr:
+			kept.append(b)
+	ebullets = kept
+	var heal_amt := maxhp * 0.15
+	hp = minf(maxhp, hp + heal_amt)
+	pet_hp = minf(pet_maxhp(), pet_hp + pet_maxhp() * 0.35)
+	_ev("heal", heal_amt)
+	_ev("pet_combo")
+
+
+func _update_pet_shots(dt: float) -> void:
+	for i in range(pet_shots.size() - 1, -1, -1):
+		var sh: Dictionary = pet_shots[i]
+		sh.life -= dt
+		if sh.life <= 0.0:
+			pet_shots.remove_at(i)
+			continue
+		# 轻微追踪最近敌人
+		var nt := nearest_enemy(float(sh.x), float(sh.y), 320.0)
+		if nt != null:
+			var desired := Vector2(nt.x - float(sh.x), nt.y - nt.h * 0.4 - float(sh.y)).normalized() * 680.0
+			var cur_v := Vector2(float(sh.vx), float(sh.vy))
+			var nv := cur_v.lerp(desired, clampf(dt * 8.0, 0.0, 1.0))
+			sh.vx = nv.x
+			sh.vy = nv.y
+		sh.x = float(sh.x) + float(sh.vx) * dt
+		sh.y = float(sh.y) + float(sh.vy) * dt
+		var hit_e: SimEnemy = null
+		for e: SimEnemy in _near(float(sh.x), float(sh.y), 60.0):
+			if Vector2(e.x - float(sh.x), e.y - e.h * 0.45 - float(sh.y)).length() < e.r + 22.0:
+				hit_e = e
+				break
+		if hit_e != null:
+			var sr := float(sh.r)
+			_pet_add_fx(0, float(sh.x), float(sh.y), 0.32, sr)
+			for o: SimEnemy in _near(float(sh.x), float(sh.y), sr + 30.0):
+				if Vector2(o.x - float(sh.x), o.y - o.h * 0.4 - float(sh.y)).length() < sr + o.r:
+					damage(o, float(sh.dmg), "pet", {"kx": o.x - float(sh.x), "ky": o.y - float(sh.y), "kb": 80.0})
+					if o.alive and s_burn_dps > 0.0:
+						_ignite(o)
+			pet_shots.remove_at(i)
 
 
 func _update_pet(dt: float) -> void:
@@ -3311,59 +3603,104 @@ func _update_pet(dt: float) -> void:
 		pet_fx[i][3] -= dt
 		if pet_fx[i][3] <= 0.0:
 			pet_fx.remove_at(i)
+	_update_pet_shots(dt)
 	if not pet_on:
 		return
 	var G: Dictionary = GameData.GD.pet
-	pet_ang += 2.2 * dt
-	pet_pos = Vector2(px + cos(pet_ang) * float(G.orbitR), py - 40.0 + sin(pet_ang) * float(G.orbitR) * 0.6)
+	pet_ang += 2.6 * dt
+	if pet_pos == Vector2.ZERO:
+		pet_pos = Vector2(px + float(G.orbitR), py - 40.0)
 	if pet_dead_t > 0.0:
+		pet_pos = Vector2(px + cos(pet_ang) * float(G.orbitR), py - 40.0 + sin(pet_ang) * float(G.orbitR) * 0.6)
 		pet_dead_t -= dt
 		if pet_dead_t <= 0.0:
 			pet_dead_t = 0.0
 			pet_hp = pet_maxhp()
 			_ev("pet_revive")
 		return
+	# 自然回血（脱险缓回）
+	var mhp_p := pet_maxhp()
+	if pet_hp < mhp_p:
+		pet_hp = minf(mhp_p, pet_hp + mhp_p * float(G.get("regen", 0.04)) * dt)
+	# 自主寻敌游走：有怪就冲上去贴身缠斗，离主角太远则回防
+	var hunt_tgt := _pet_pick_target(float(G.range))
+	var goal_p := Vector2(px + cos(pet_ang) * float(G.orbitR), py - 40.0 + sin(pet_ang) * float(G.orbitR) * 0.65)
+	if hunt_tgt != null and phase != PH_BREAK:
+		var orbit_t := Vector2(cos(pet_ang * 1.4), sin(pet_ang * 1.4) * 0.7) * 105.0
+		goal_p = Vector2(hunt_tgt.x, hunt_tgt.y - hunt_tgt.h * 0.35) + orbit_t
+		# 拴绳也是屏幕形椭圆（横 520、纵 250）：始终留在画面里
+		var from_p := goal_p - Vector2(px, py - 40.0)
+		var lk := sqrt(pow(from_p.x / 520.0, 2.0) + pow(from_p.y / 250.0, 2.0))
+		if lk > 1.0:
+			goal_p = Vector2(px, py - 40.0) + from_p / lk
+	var mv := goal_p - pet_pos
+	var spd_p := float(G.get("huntSpeed", 540.0))
+	if mv.length() > 4.0:
+		pet_pos += mv.normalized() * minf(mv.length(), spd_p * dt)
+		if absf(mv.x) > 6.0:
+			pet_flip = mv.x < 0.0
+	# 吸魂护主：飞到哪顺手把周围 180px 的魂火/铜钱拉向主角
+	var pr := float(G.get("pickupR", 180.0))
+	var pr2 := pr * pr
+	for k: SimPickup in pickups:
+		if not k.mag and (k.kind == "soul" or k.kind == "coin"):
+			var dkx := k.x - pet_pos.x
+			var dky := k.y - pet_pos.y
+			if dkx * dkx + dky * dky < pr2:
+				k.mag = true
+				k.spd = 120.0
+	# Q 七彩合击触发
 	if in_combo and combo_cd <= 0.0 and phase != PH_BREAK:
-		combo_cd = float(G.comboCd)
-		combo_fx = 0.7
-		var cdmg := float(G.comboDmg) * (1.0 + s_dmg_add) * (1.0 + 0.1 * pet_marks)
-		_aoe(px, py - 30.0, float(G.comboR), cdmg, "pet")
-		var kept: Array = []
-		for b in ebullets:
-			if Vector2(b.x - px, b.y - py).length() > float(G.comboR):
-				kept.append(b)
-		ebullets = kept
-		_ev("pet_combo")
+		_pet_trigger_combo(G)
+	# 七彩神光斩后续 7 道天雷轰炸
+	if combo_waves > 0:
+		combo_wave_t -= dt
+		if combo_wave_t <= 0.0:
+			combo_waves -= 1
+			combo_wave_t = 0.16
+			var wt := _pet_pick_target(720.0)
+			if wt != null:
+				var wd := pet_base_dmg() * 2.4
+				if emit:
+					if bolts.size() >= 48:
+						bolts.pop_front()
+					bolts.append({"x1": wt.x, "y1": wt.y - 420.0, "x2": wt.x, "y2": wt.y - wt.h * 0.4, "life": 0.28, "seed": rng.randf()})
+				_ev("thunder", wt.x, wt.y)
+				_pet_add_fx(combo_waves % 3, wt.x, wt.y - wt.h * 0.35, 0.42, 150.0)
+				for o: SimEnemy in _near(wt.x, wt.y, 170.0):
+					if Vector2(o.x - wt.x, o.y - wt.y).length() < 150.0 + o.r:
+						damage(o, wd, "pet", {"forceCrit": true, "kx": o.x - wt.x, "ky": o.y - wt.y, "kb": 140.0})
+	# 高频主动技能循环（0.55s 一轮）
 	pet_atk_t -= dt
-	if pet_atk_t <= 0.0:
-		var tgt := nearest_enemy(pet_pos.x, pet_pos.y, float(G.range))
+	if pet_atk_t <= 0.0 and phase != PH_BREAK:
+		var tgt := hunt_tgt if hunt_tgt != null else _pet_pick_target(float(G.range))
 		if tgt == null:
-			pet_atk_t = 0.3
+			pet_atk_t = 0.2
 			return
 		pet_atk_t = float(G.atkGap)
-		var d := float(G.dmg) * (1.0 + s_dmg_add) * (1.0 + 0.1 * pet_marks)
+		var d := pet_base_dmg()
 		match pet_idx % 3:
-			0:   # 喷火：朝目标锥形
-				pet_fx.append([0, tgt.x, tgt.y, 0.4])
-				_aoe(tgt.x, tgt.y, 90.0, d, "pet")
-			1:   # 落雷
-				pet_fx.append([1, tgt.x, tgt.y, 0.3])
-				damage(tgt, d * 1.6, "pet", {"noCrit": true})
-			2:   # 冲击波
-				pet_fx.append([2, pet_pos.x, pet_pos.y, 0.4])
-				_aoe(pet_pos.x, pet_pos.y, 150.0, d * 0.8, "pet")
+			0:
+				_pet_fire_volley(tgt, d)
+			1:
+				_pet_chain_thunder(tgt, d)
+			2:
+				_pet_shockwave(tgt, d)
 		pet_idx += 1
 
 
 func _mini_drop(e: SimEnemy) -> void:
 	var G: Dictionary = GameData.GD
 	var k := clampi(int(e.el.mini), 0, 4)
-	for i in range(4):
-		_spawn_pickup("coin", e.x + (rng.randf() - 0.5) * 120.0, e.y + (rng.randf() - 0.5) * 80.0, int(int(G.miniCoins[k]) / 4))
+	if mode != "classic":
+		_spawn_pickup("coin", e.x, e.y, int(G.miniCoins[k]))
+	else:
+		for i in range(4):
+			_spawn_pickup("coin", e.x + (rng.randf() - 0.5) * 120.0, e.y + (rng.randf() - 0.5) * 80.0, int(int(G.miniCoins[k]) / 4))
 	_spawn_pickup("chest", e.x, e.y, 1)
 	wicks += 1
 	grant_gourd("小BOSS掉落")
-	if pet_on and pet_marks < int(G.pet.marks):
+	if pet_on and pet_marks < int(G.pet.markMax):
 		pet_marks += 1
 		_recalc()
 	_ev("banner", "击败 %s • 铜钱 + 灯芯 + 葫芦散件" % e.el.name, "#ffcf5a")
@@ -3513,6 +3850,7 @@ func _spawn_guard(k: int) -> void:
 	guard_clock = clock
 	if mode == "full" and k >= 2:
 		guard_ref = _spawn_mini_special(k)
+		_cap_guard_hp(guard_ref)
 		return
 	var base: Dictionary = GameData.EN.elites["jiangshi" if k % 2 == 0 else "lantern"].duplicate()
 	base.name = String(GameData.GD.miniNames[mini(k, 4)])
@@ -3521,6 +3859,20 @@ func _spawn_guard(k: int) -> void:
 	base.xp = 20
 	guard_ref = spawn_enemy("jiangshi" if k % 2 == 0 else "lantern", -1.0, -1.0, {"elite": true, "el": base})
 	_ev("banner", "清场守关 BOSS • %s 现身（击败后才能清场）" % base.name, "#ff7a6a")
+	_cap_guard_hp(guard_ref)
+
+
+## 段末守关 BOSS 是“检查点”，战斗时长要稳定：后期精英倍率会把它的血量抬到 ×11，
+## 守关战普遍拖到 120 秒超时，6 场就能把 15 分钟的夜行拖长 5–10 分钟。
+## 非经典模式下血量封顶为「当前构筑 DPS × guardSec」（与剑冢守关者按 DPS 定血同一思路），伤害倍率保留。
+func _cap_guard_hp(e: SimEnemy) -> void:
+	if e == null or mode == "classic":
+		return
+	var MS: Dictionary = GameData.WV.get("modeScale", {})
+	var cap := build_dps() * float(MS.get("guardSec", 22.0))
+	if cap > 0.0 and e.hp > cap:
+		e.hp = maxf(cap, e.hp / maxf(1.0, _mode_elite_scale().x))
+		e.maxhp = e.hp
 
 
 func sw_rm() -> float:
@@ -3577,7 +3929,7 @@ func _trigger_fusion() -> void:
 
 func _sw_thr(i: int) -> int:
 	# 完整/疾速模式战斗更久：剑意门槛打 55 折（经典口径保持原值，平衡基线不变）
-	return int(float(GameData.DG.sword.stages.kills[i]) * (0.55 if stretch > 1.0 else 1.0))
+	return int(float(GameData.DG.sword.stages.kills[i]) * (0.55 if mode != "classic" else 1.0))
 
 
 func _sw_check() -> void:

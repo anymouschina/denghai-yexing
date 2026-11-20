@@ -66,6 +66,16 @@ func start(p_touch: bool, resume: Dictionary = {}) -> void:
 	hud.name = "Hud"
 	add_child(hud)
 	hud.setup(self, sim, touch_mode)
+	toast = UI.label("", 22, UI.GOLD, 5)
+	toast.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast.offset_left = -320.0
+	toast.offset_right = 320.0
+	toast.offset_top = -96.0
+	toast.offset_bottom = -56.0
+	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast.modulate.a = 0.0
+	hud.root.add_child(toast)
 	view.banner_cb = hud.show_banner
 	touch = TouchControls.new()
 	touch.name = "Touch"
@@ -107,7 +117,10 @@ func save_run(manual: bool = false) -> bool:
 
 
 func _toast(msg: String) -> void:
+	if toast == null:
+		return
 	toast.text = msg
+	toast.modulate.a = 1.0
 	toast_t = 2.2
 
 
@@ -198,6 +211,7 @@ func _bench_keepalive() -> void:
 	sim.invuln = 1e9
 	sim.pending_lv = 0
 	sim.pending_chest = 0
+	sim.xp = 0   # 压测不升级：小金刚吸魂会让三选一频繁弹出，挡住采样
 	sim.hp = sim.maxhp
 	if sim.t > 140.0:
 		sim.t = 60.0
@@ -207,6 +221,9 @@ func _bench_keepalive() -> void:
 		sim.artifact = "sword"
 		sim.sw_state = Sim.SW_STOW
 		sim._recalc()
+	if not sim.pet_on:
+		for i in range(7):
+			sim.grant_gourd("压测")   # 压测同时覆盖葫芦小金刚的弹体/特效渲染
 	if sim.t > 20.0 or sim.real_t > 20.0:
 		sim.in_move = Vector2(cos(sim.real_t * 0.5), sin(sim.real_t * 0.7))
 	var types := ["paperman", "foxfire", "paperman", "lantern", "jiangshi", "firecracker", "paperman", "foxfire"]
@@ -274,6 +291,10 @@ func _publish() -> void:
 	snap["coins"] = sim.coins
 	snap["gourds"] = sim.gourds.size()
 	snap["pet"] = sim.pet_on
+	if sim.pet_on:
+		snap["pet_rel"] = [int(sim.pet_pos.x - sim.px), int(sim.pet_pos.y - sim.py)]
+		snap["pet_shots"] = sim.pet_shots.size()
+		snap["pet_dmg"] = int(sim.dmg_by.get("pet", 0.0))
 	snap["sets"] = sim.active_sets().size()
 	snap["clock"] = int(sim.clock)
 	snap["poi0"] = sim.poi_state(0)

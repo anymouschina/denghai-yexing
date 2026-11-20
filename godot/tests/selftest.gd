@@ -339,13 +339,13 @@ func _init() -> void:
 	ok(mp.phase == Sim.PH_SEG and absf(mp.px - float(mp.pois[0].x)) < 1.0 and mp.artifact == "sword", "击败后回到主图原位并得飞剑术")
 	mp.hp = maxf(1.0, mp.maxhp * 0.1)
 	ok(mp.poi_state(1) == "weak", "灯弱时入口不可入")
-	print("== 30/10 分钟模式 ==")
+	print("== 15/10 分钟模式 ==")
 	var mf := Sim.new(3, {"mode": "full"})
 	var mq := Sim.new(3, {"mode": "quick"})
 	for i in range(300):
 		mf.choice = {}; mq.choice = {}
 		mf.step(0.1); mq.step(0.1)
-	ok(near(mf.clock, 30.0) and near(mf.t, 30.0 / 3.75), "完整模式：战斗节奏钟拉伸 3.75×（整局 480×3.75=30 分钟）")
+	ok(near(mf.clock, 30.0) and near(mf.t, 30.0 / 1.5), "完整模式：战斗节奏钟拉伸 1.5×（段内 480×1.5=12 分钟，含守关/BOSS/段间全程约 18 分钟）")
 	ok(near(mq.t, 30.0 / 1.25), "疾速模式：拉伸 1.25×（整局 10 分钟）")
 	var mm := fresh(22)
 	mm.px = float(mm.pois[2].x); mm.py = float(mm.pois[2].y)
@@ -388,12 +388,12 @@ func _init() -> void:
 	ok(float(cg.dmg_by.get("pet", 0.0)) > 0.0, "小金刚自动攻击造成伤害")
 	cg.in_combo = true
 	cg.step(0.05)
-	ok(cg.combo_cd > 30.0, "Q 合击进入冷却")
+	ok(cg.combo_cd > float(GameData.GD.pet.comboCd) - 1.0 and cg.combo_waves > 0, "Q 七彩神光斩进入冷却并排出后续天雷波次")
 	cg.invuln = 0.0; cg.dash_inv = 0.0
 	var m0 := cg.pet_marks
 	cg.pet_hp = 1.0
 	cg.hurt_player(100.0, cg.px, cg.py, "x")
-	ok(cg.pet_dead_t > 40.0 and cg.pet_marks == m0 - 1, "小金刚阵亡：45s 复活冷却 + 掉 1 层印记")
+	ok(cg.pet_dead_t > float(GameData.GD.pet.revive) - 1.0 and cg.pet_marks == m0 - 1, "小金刚阵亡：%ds 复活冷却 + 掉 1 层印记" % int(GameData.GD.pet.revive))
 	var cm := Sim.new(34, {"mode": "quick"})
 	cm.t = float(GameData.SEG.segments[0].to)
 	cm.step(0.05)
@@ -518,7 +518,7 @@ func _init() -> void:
 	var gg := Sim.new(46, {"mode": "full"})
 	gg.clock = 175.0
 	gg.step(0.05)
-	ok(gg.gourds.size() == 1 and gg.gourd_log[0].src == "保底", "完整模式保底：约每 170 秒必出一件葫芦散件")
+	ok(gg.gourds.size() == 1 and gg.gourd_log[0].src == "保底", "完整模式保底：约每 %d 秒必出一件葫芦散件" % int(GameData.GD.guarantee.full))
 	var gq := Sim.new(46, {"mode": "quick"})
 	gq.clock = 7.0 * gq.gourd_guarantee_step() + 1.0
 	for j in range(8):
@@ -550,11 +550,11 @@ func _init() -> void:
 	ok(oc.clock > 300.0, "旧存档缺 clock 由 t×stretch 回推")
 	print("== C3：6 段 / 专属小 BOSS ==")
 	var f6 := Sim.new(51, {"mode": "full"})
-	ok(f6.seg_n() == 6 and absf(f6.seg_to(0) - 80.0) < 0.01 and absf(f6.seg_to(5) - 480.0) < 0.01, "完整模式 6 段，每段 5 分钟（节奏钟 80 × 3.75）")
+	ok(f6.seg_n() == 6 and absf(f6.seg_to(0) - 80.0) < 0.01 and absf(f6.seg_to(5) - 480.0) < 0.01, "完整模式 6 段，每段 2 分钟（节奏钟 80 × 1.5）")
 	ok(f6.seg_theme(3).name == "灯冢废墟" and f6.seg_theme(5).name == "灯骸古殿", "6 段主题名")
 	f6.t = 79.9
 	f6.step(0.5)
-	ok(f6.phase == Sim.PH_SEG and f6.guard_ref != null, "第 1 段 5:00：先刷出清场守关 BOSS")
+	ok(f6.phase == Sim.PH_SEG and f6.guard_ref != null, "第 1 段末：守关 BOSS 已提前刷出（占用段内时间）")
 	f6.damage(f6.guard_ref, 1e9, "fu", {"noCrit": true, "pierce": true})
 	f6.step(0.1)
 	f6.step(0.1)
@@ -630,6 +630,7 @@ func _init() -> void:
 	ok(sv2.relics == ["mirror"] and sv2.wicks == 1 and sv2.artifact == "sword", "遗物/灯芯/法宝一致")
 	ok(sv2.rift_entries == 1 and sv2.rift_sealed.has(0) and sv2.rift_state() != "none", "副本已用次数/封闭状态一致")
 	_test_d1()
+	_test_v22()
 	_test_assets()
 	print("== 小结 ==")
 	print("通过 %d 项，失败 %d 项" % [passes, fails])
@@ -822,3 +823,111 @@ func _run_fixed(seed_v: int) -> String:
 		s.step(0.05)
 		n += 1
 	return "%d/%d/%.1f/%d" % [s.kills, s.level, s.hp, s.enemies.size()]
+
+
+## v2.2：后期怪物补强 / 掉落合并上限 / 弹幕上限 / 小金刚主动助战 / 存档不带运行时数组
+func _test_v22() -> void:
+	print("== v2.2：后期强度 / 掉落 / 上限 / 小金刚 ==")
+	# 后期怪物补强（非经典），经典不变
+	var cl := Sim.new(71)
+	var fu := Sim.new(71, {"mode": "full"})
+	cl.t = 420.0; fu.t = 420.0
+	var ec := cl.spawn_enemy("paperman")
+	var ef := fu.spawn_enemy("paperman")
+	ok(ef.hp > ec.hp * 4.0 and ef.dmg > ec.dmg * 2.0, "完整模式后期普通怪血量/伤害显著高于经典（hp×%.1f dmg×%.1f）" % [ef.hp / ec.hp, ef.dmg / ec.dmg])
+	var f0 := Sim.new(71, {"mode": "full"})
+	f0.t = 30.0
+	var e0 := f0.spawn_enemy("paperman")
+	ok(e0.hp < ec.hp * 1.0 or near(e0.dmg_mul, 1.0 + float(GameData.WV.modeScale.dmgLinear) * 30.0 / 480.0, 0.01), "前期不额外加血（只在 lateStart 之后起量）")
+	ok(near(cl._mode_enemy_scale().x, 1.0) and near(cl._mode_elite_scale().x, 1.0), "经典口径倍率恒为 1（平衡基线不变）")
+	# 掉落：同类合并 + 总数上限，价值不丢
+	var pk := Sim.new(72, {"mode": "full"})
+	pk.pickups.clear()
+	for i in range(600):
+		pk._spawn_pickup("soul", pk.px + 400.0 + float(i % 40) * 90.0, pk.py + 300.0 + float(i / 40) * 90.0, 2)
+	var ns := 0
+	var vs := 0
+	for k in pk.pickups:
+		if k.kind == "soul":
+			ns += 1
+			vs += k.val
+	var cap := int(GameData.BAL.drops.modeCaps.soul)
+	ok(ns <= cap, "魂火地面数量封顶 %d（实际 %d，生成 600 次）" % [cap, ns])
+	ok(vs + pk.xp + 0 >= 1, "合并后价值保留（地面 %d）" % vs)
+	var cpk := Sim.new(72)
+	cpk.pickups.clear()
+	for i in range(200):
+		cpk._spawn_pickup("soul", cpk.px + 400.0 + float(i % 20) * 90.0, cpk.py + 300.0 + float(i / 20) * 90.0, 2)
+	ok(cpk.pickups.size() == 200, "经典口径掉落逻辑不变")
+	# 弹幕上限
+	var bl := Sim.new(73, {"mode": "full"})
+	for i in range(400):
+		bl._spawn_ebullet(bl.px + 2000.0, bl.py, 0.0, 0.0, 1.0, "x")
+	ok(bl.ebullets.size() <= 240, "敌弹上限 240（实际 %d）" % bl.ebullets.size())
+	# 小金刚：主动寻敌、跟随构筑成长、可见弹体、占输出可观
+	var pt := Sim.new(74, {"mode": "full"})
+	pt.levels = {"fu": 5, "huanhuo": 5, "lei": 5}
+	pt._recalc()
+	var base_dmg := pt.pet_base_dmg()
+	for i in range(7):
+		pt.grant_gourd()
+	ok(pt.pet_on and pt.pet_base_dmg() >= base_dmg * 0.99 and pt.pet_base_dmg() > float(GameData.GD.pet.dmg) * 0.99, "小金刚伤害随玩家 DPS 成长（%.0f）" % pt.pet_base_dmg())
+	pt.invuln = 1e9
+	pt.pickups.clear()
+	var far := pt.spawn_enemy("jiangshi", -1.0, -1.0, {"pos": Vector2(pt.px + 480.0, pt.py)})
+	far.hp = 1e9; far.maxhp = 1e9; far.speed = 0.0
+	var d0 := Vector2(pt.pet_pos.x - far.x, pt.pet_pos.y - far.y).length()
+	var saw_shot := false
+	for i in range(200):
+		pt.choice = {}
+		pt.pending_lv = 0
+		pt.step(0.05)
+		saw_shot = saw_shot or pt.pet_shots.size() > 0
+	var d1 := Vector2(pt.pet_pos.x - far.x, pt.pet_pos.y - far.y).length()
+	ok(d1 < d0 - 150.0, "小金刚主动飞向远处妖物（距离 %.0f → %.0f）" % [d0, d1])
+	ok(saw_shot, "小金刚发射可见火球弹体")
+	var pdmg := float(pt.dmg_by.get("pet", 0.0))
+	var tot := 0.0
+	for k in pt.dmg_by:
+		tot += float(pt.dmg_by[k])
+	ok(pdmg > 0.0 and pdmg / maxf(1.0, tot) > 0.15, "满构筑下小金刚输出占比 %.0f%%（>15%%）" % (100.0 * pdmg / maxf(1.0, tot)))
+	pt.in_combo = true
+	var before_c := float(pt.dmg_by.get("pet", 0.0))
+	for i in range(30):
+		pt.step(0.05)
+	ok(float(pt.dmg_by.get("pet", 0.0)) - before_c > pt.pet_base_dmg() * 5.0, "Q 七彩神光斩 + 7 道天雷造成大额伤害")
+	ok(pt.combo_waves == 0, "天雷波次打完归零")
+	# 存档：运行时数组不进存档，读档后清空
+	var blob := pt.to_save()
+	ok(not blob.has("pet_shots") and not blob.has("pet_fx") and blob.has("pet_on"), "存档不含小金刚弹体/特效（只存状态）")
+	var rd := Sim.new(74, {"mode": "full"})
+	rd.from_save(JSON.parse_string(JSON.stringify(blob)))
+	ok(rd.pet_on and rd.pet_shots.is_empty() and rd.combo_waves == 0, "读档后小金刚在场且无残留弹体")
+	# 副本走钟（非经典）/ 停钟（经典）
+	var rk := Sim.new(75, {"mode": "full"})
+	to_break(rk, 0)
+	rk.enter_rift()
+	var c0 := rk.clock
+	rk.invuln = 1e9
+	for i in range(20):
+		rk.step(0.05)
+	ok(rk.clock > c0 + 0.9, "非经典：进剑冢时夜行时钟照走（副本是拿这一夜的时间换资源）")
+	var rc := Sim.new(75)
+	to_break(rc, 0)
+	rc.enter_rift()
+	var t0 := rc.t
+	rc.invuln = 1e9
+	for i in range(20):
+		rc.step(0.05)
+	ok(near(rc.t, t0), "经典口径：进剑冢停钟（平衡基线不变）")
+	# 守关 BOSS 提前刷出、血量按构筑 DPS 封顶
+	var gd := Sim.new(76, {"mode": "full"})
+	gd.levels = {"fu": 5, "huanhuo": 5, "lei": 5}
+	gd._recalc()
+	gd.seg = 1
+	gd.t = gd.seg_to(gd.seg) - float(GameData.WV.modeScale.guardLead) / gd.stretch + 0.01
+	gd.step(0.05)
+	ok(gd.guard_ref != null and gd.t < gd.seg_to(gd.seg), "守关 BOSS 在段末前 %ds 就刷出" % int(GameData.WV.modeScale.guardLead))
+	var raw_hp := float(GameData.EN.elites.lantern.hp) * 1.5
+	var gcap := maxf(gd.build_dps() * float(GameData.WV.modeScale.guardSec), raw_hp)
+	ok(gd.guard_ref != null and gd.guard_ref.maxhp <= gcap * 1.01 and gd.guard_ref.maxhp >= raw_hp * 0.99, "守关 BOSS 血量封顶 max(构筑 DPS × %ds, 原始血量)，不低于旧版（%.0f ≤ %.0f）" % [int(GameData.WV.modeScale.guardSec), gd.guard_ref.maxhp if gd.guard_ref != null else -1.0, gcap])

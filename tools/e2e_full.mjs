@@ -136,7 +136,7 @@ while (Date.now() < deadline) {
     await sleep(400); if (phone) await tapRel(0.42, 0.7); else await keyTap('Enter'); // 再来一局
     s = await waitScene('play', 10000); await sleep(1200); await shot('restart-new-run'); restarted = s.scene === 'play'; res.seen.restart = restarted; break;
   }
-  if (s.scene === 'paused') { await shot('paused-manual-save-button'); await pause(); await sleep(400); continue; }
+  if (s.scene === 'paused') { await shot('paused-manual-save-button'); await keyTap('Escape'); await sleep(400); continue; }   // 暂停时触屏按钮层隐藏，手机上点暂停键无法恢复（玩家点面板「继续」）；脚本统一用 Esc 恢复
   if (s.scene === 'dying') { await move(null, null); await sleep(400); continue; }
   if (s.scene === 'break' || s.scene === 'shop') {
     res.seen.break = true;
@@ -178,7 +178,7 @@ while (Date.now() < deadline) {
   // 战斗段
   if (riftEntered && !res.seen.afterRift) { res.seen.afterRift = true; await rec(false); await shot('after-rift-threat-up'); res.seen.sword = s.artifact === 'sword'; if (s.artifact === 'sword') await shot('got-feijianshu'); }
   if (s.phase === 3 && !bossShot) { bossShot = true; await shot('boss'); res.seen.boss = true; }
-  if (!pausedOnce && s.t > 25 && !riftEntered) { pausedOnce = true; await move(null, null); await pause(); await sleep(700); await shot('paused-manual-save-button'); await pause(); await sleep(300); continue; }
+  if (!pausedOnce && s.t > 25 && !riftEntered) { pausedOnce = true; await move(null, null); await pause(); await sleep(700); await shot('paused-manual-save-button'); await keyTap('Escape'); await sleep(300); continue; }
   if (s.artifact === 'sword' && Date.now() - (lastS.swT ||= 0) > 2600) { lastS.swT = Date.now(); await skill(); }
   const [ux, uy] = evade(s, 430); tick++; if (tick % 200 === 0) kiteDir *= -1;
   await move(ux, uy);

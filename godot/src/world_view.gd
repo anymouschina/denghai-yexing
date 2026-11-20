@@ -155,6 +155,8 @@ func tick(delta: float) -> void:
 		ghost_t -= delta
 		if ghost_t <= 0.0:
 			ghost_t = 0.03
+			if ghosts.size() >= 32:
+				ghosts.pop_front()
 			ghosts.append({"x": sim.px, "y": sim.py, "fr": _player_frame(), "flip": sim.face_x < 0, "life": 0.32})
 	if fade > 0.0:
 		fade = maxf(0.0, fade - delta * 1.6)
@@ -191,7 +193,15 @@ func burst(x: float, y: float, n: int, col: Color, speed: float = 220.0, size: f
 
 
 func ring(x: float, y: float, r: float, col: Color) -> void:
+	if rings.size() >= 64:
+		rings.pop_front()
 	rings.append({"x": x, "y": y, "r": r, "life": 0.38, "max": 0.38, "col": col})
+
+
+func _push_fx_sprite(d: Dictionary) -> void:
+	if fx_sprites.size() >= 80:
+		fx_sprites.pop_front()
+	fx_sprites.append(d)
 
 
 func _float(x: float, y: float, text: String, col: Color, size: int = 22) -> void:
@@ -225,7 +235,7 @@ func _consume_events() -> void:
 					hit_stop = maxf(hit_stop, 0.08)
 					_shake(400, 0.006)
 					burst(e2.x, e2.y - 60.0, 50, Color("ffd36a"), 420.0, 0.6, 0.9)
-					fx_sprites.append({"tex": "fx_boom", "x": e2.x, "y": e2.y - 40.0, "life": 0.5, "max": 0.5, "scale": 1.6})
+					_push_fx_sprite({"tex": "fx_boom", "x": e2.x, "y": e2.y - 40.0, "life": 0.5, "max": 0.5, "scale": 1.6})
 					Audio.play("boom")
 			"hurt":
 				_shake(160, 0.003)
@@ -237,7 +247,7 @@ func _consume_events() -> void:
 				ring(sim.px, sim.py - 6.0, 46.0, Color("7fe3ff"))
 			"shock":
 				ring(ev[1], ev[2], ev[3], Color("ff7a6a"))
-				fx_sprites.append({"tex": "fx_boom", "x": ev[1], "y": ev[2] - 10.0, "life": 0.45, "max": 0.45, "scale": ev[3] / 140.0})
+				_push_fx_sprite({"tex": "fx_boom", "x": ev[1], "y": ev[2] - 10.0, "life": 0.45, "max": 0.45, "scale": ev[3] / 140.0})
 				Audio.play("boom", 0.8)
 				_shake(200, 0.005)
 			"sweep":
@@ -248,18 +258,18 @@ func _consume_events() -> void:
 				var sh2: float = ev[4]
 				for gx in range(4):
 					for gy in range(4):
-						fx_sprites.append({"tex": "fx_boom", "x": sx - sw2 * 0.5 + sw2 * (gx + 0.5) / 4.0, "y": sy - sh2 * 0.5 + sh2 * (gy + 0.5) / 4.0, "life": 0.5, "max": 0.5, "scale": 1.3})
+						_push_fx_sprite({"tex": "fx_boom", "x": sx - sw2 * 0.5 + sw2 * (gx + 0.5) / 4.0, "y": sy - sh2 * 0.5 + sh2 * (gy + 0.5) / 4.0, "life": 0.5, "max": 0.5, "scale": 1.3})
 				Audio.play("boom")
 				_shake(320, 0.007)
 			"boom":
-				fx_sprites.append({"tex": "fx_boom", "x": ev[1], "y": ev[2], "life": 0.45, "max": 0.45, "scale": 0.85})
+				_push_fx_sprite({"tex": "fx_boom", "x": ev[1], "y": ev[2], "life": 0.45, "max": 0.45, "scale": 0.85})
 				Audio.play("boom")
 				_shake(180, 0.005)
 			"ring":
 				ring(ev[1], ev[2], ev[3], Color("ffd36a"))
 				Audio.play("shoot", 0.8)
 			"thunder":
-				fx_sprites.append({"tex": "fx_thunder", "x": ev[1], "y": ev[2] + 6.0, "life": 0.26, "max": 0.26, "scale": 0.95, "thunder": true})
+				_push_fx_sprite({"tex": "fx_thunder", "x": ev[1], "y": ev[2] + 6.0, "life": 0.26, "max": 0.26, "scale": 0.95, "thunder": true})
 				burst(ev[1], ev[2], 6, Color("7fe3ff"), 200.0, 0.35, 0.4)
 				Audio.play("thunder", 0.7)
 				_shake(70, 0.0015)
@@ -996,9 +1006,25 @@ func _draw_projectiles() -> void:
 	if sim.pet_on and sim.pet_dead_t <= 0.0:
 		var pp := sim.pet_pos
 		var pt: Texture2D = _tex("pet_huluwa")
-		var ph := 84.0
+		var ph := 94.0
 		var pw := pt.get_width() * ph / pt.get_height()
-		draw_texture_rect(pt, Anchors.rect(pp.x, pp.y - ph * 0.7, pw, ph, "pet_huluwa", sim.face_x < 0), false, Color.WHITE)
+		var bob := sin(t_anim * 6.5) * 6.0
+		# 脚下投影 + 实体朝向 + 迷你生命条
+		draw_texture_rect(T.glow, Rect2(pp.x - 28.0, pp.y + 8.0, 56.0, 14.0), false, Color(0, 0, 0, 0.42))
+		draw_texture_rect(pt, Anchors.rect(pp.x, pp.y - ph * 0.72 + bob, pw, ph, "pet_huluwa", sim.pet_flip), false, Color.WHITE)
+		var bw := 54.0
+		var bx := pp.x - bw * 0.5
+		var by := pp.y - ph * 0.78 + bob - 10.0
+		draw_rect(Rect2(bx - 1.5, by - 1.5, bw + 3.0, 8.0), UI.INK)
+		draw_rect(Rect2(bx, by, bw, 5.0), Color(0.12, 0.12, 0.2))
+		draw_rect(Rect2(bx, by, bw * clampf(sim.pet_hp / maxf(1.0, sim.pet_maxhp()), 0.0, 1.0), 5.0), Color("ffcf5a"))
+	# 葫芦小金刚赤炎连珠弹体
+	var pscols := [Color(1.0, 0.45, 0.2), Color(1.0, 0.85, 0.35), Color(0.55, 0.95, 1.0)]
+	for sh in sim.pet_shots:
+		var fl2: Texture2D = T.proj_flame
+		var col_s: Color = pscols[int(sh.get("col", 0)) % pscols.size()]
+		var ang_s := atan2(float(sh.vy), float(sh.vx))
+		b_flame.rot(Vector2(float(sh.x), float(sh.y)), ang_s, fl2.get_width() * 0.52, fl2.get_height() * 0.52, col_s)
 	# 剑轮 / 剑气（阶段3-5）
 	var swt: Texture2D = T.proj_sword
 	for wp: Vector2 in sim.sw_wheel_pos:
@@ -1074,17 +1100,30 @@ func defer__draw_fx_add(c: Node2D) -> void:
 	if sim.pet_on and sim.pet_dead_t <= 0.0:
 		var rb := [Color("ff4a3a"), Color("ff9a3c"), Color("ffe04a"), Color("5ade6a"), Color("4adfe0"), Color("4a7aff"), Color("b05aff")]
 		for ri in range(7):
-			var ra := t_anim * 3.0 + ri * TAU / 7.0
-			b_white_fx.circle(sim.pet_pos + Vector2(cos(ra) * 30.0, sin(ra) * 22.0 - 10.0), 5.0, rb[ri], 8)
-		b_glow_fx.full(sim.pet_pos.x - 50, sim.pet_pos.y - 50, 100, 100, Color(1.0, 0.8, 0.4, 0.5))
+			var ra := t_anim * 3.8 + ri * TAU / 7.0
+			b_white_fx.circle(sim.pet_pos + Vector2(cos(ra) * 38.0, sin(ra) * 26.0 - 16.0), 5.5, rb[ri], 8)
+		b_glow_fx.full(sim.pet_pos.x - 64, sim.pet_pos.y - 64, 128, 128, Color(1.0, 0.85, 0.42, 0.58))
+	for sh in sim.pet_shots:
+		b_glow_fx.full(float(sh.x) - 34, float(sh.y) - 34, 68, 68, Color(1.0, 0.65, 0.25, 0.75))
 	for fx in sim.pet_fx:
-		var fk: float = float(fx[3]) / 0.4
+		var fmax: float = maxf(0.01, float(fx[4]) if fx.size() > 4 else 0.4)
+		var fk: float = clampf(float(fx[3]) / fmax, 0.0, 1.0)
+		var frad: float = float(fx[5]) if fx.size() > 5 else 140.0
 		var fp := Vector2(fx[1], fx[2])
-		var fc: Color = [Color(1.0, 0.45, 0.15), Color(0.6, 0.9, 1.0), Color(1.0, 0.85, 0.4)][int(fx[0])]
-		b_white_fx.arc(fp, 40.0 + 120.0 * (1.0 - fk), 6.0, 0, TAU, Color(fc, fk), 24)
+		var ftype := int(fx[0])
+		var fc: Color = [Color(1.0, 0.45, 0.15), Color(0.7, 0.85, 1.0), Color(1.0, 0.88, 0.35)][ftype % 3]
+		var rcur := frad * (0.28 + 0.72 * (1.0 - fk))
+		b_white_fx.arc(fp, rcur, 8.0 * fk + 2.0, 0, TAU, Color(fc, fk), 28)
+		b_glow_fx.full(fp.x - rcur * 0.7, fp.y - rcur * 0.7, rcur * 1.4, rcur * 1.4, Color(fc, fk * 0.42))
+		if ftype == 2:
+			b_white_fx.arc(fp, rcur * 0.68, 5.0 * fk + 1.0, 0, TAU, Color(0.55, 0.95, 1.0, fk * 0.85), 24)
 	if sim.combo_fx > 0.0:
-		var ck := sim.combo_fx / 0.7
-		b_white_fx.arc(Vector2(sim.px, sim.py - 30.0), float(GameData.GD.pet.comboR) * (1.1 - ck), 12.0 * ck + 2.0, 0, TAU, Color(1.0, 0.9, 0.5, ck), 40)
+		var ck := clampf(sim.combo_fx / 0.85, 0.0, 1.0)
+		var rb2 := [Color("ff4a3a"), Color("ff9a3c"), Color("ffe04a"), Color("5ade6a"), Color("4adfe0"), Color("4a7aff"), Color("b05aff")]
+		var cpos := Vector2(sim.px, sim.py - 30.0)
+		for ci2 in range(7):
+			var cr2 := float(GameData.GD.pet.comboR) * (1.12 - ck * 0.85) * (0.52 + 0.08 * float(ci2))
+			b_white_fx.arc(cpos, cr2, 8.0 * ck + 2.0, 0, TAU, Color(rb2[ci2], ck * 0.9), 36)
 	# 剑轮/剑气光 + 剑阵环
 	for wp2: Vector2 in sim.sw_wheel_pos:
 		b_glow_fx.full(wp2.x - 40, wp2.y - 40, 80, 80, Color(0.4, 0.9, 1.0, 0.55))

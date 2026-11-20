@@ -92,7 +92,7 @@
   }
  ],
  "break": {
-  "max": 70,
+  "max": 30,
   "clearGemMagnet": 300,
   "rift": [
    0,

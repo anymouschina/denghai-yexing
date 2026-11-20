@@ -22,7 +22,7 @@ func _init() -> void:
 	var tot := 0.0
 	for k in s.dmg_by:
 		tot += float(s.dmg_by[k])
-	for k in ["sword", "sw_thrust2", "sw_wheel", "sw_qi", "sw_array"]:
+	for k in ["sword", "sw_thrust2", "sw_wheel", "sw_qi", "sw_array", "pet"]:
 		by[k] = snappedf(float(s.dmg_by.get(k, 0.0)) / maxf(1.0, tot) * 100.0, 0.1)
 	var rifts: Array = []
 	for r in s.rift_log:

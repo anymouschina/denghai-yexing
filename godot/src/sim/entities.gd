@@ -16,6 +16,7 @@ var hp := 1.0
 var maxhp := 1.0
 var speed := 60.0
 var dmg := 5.0
+var dmg_mul := 1.0
 var xpv := 1
 var r := 18.0
 var h := 66.0

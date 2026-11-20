@@ -120,7 +120,7 @@ func _build_left() -> void:
 	else:
 		col.add_child(UI.label("WASD / 方向键 移动 • 空格 冲刺 • Esc 暂停 • M 静音", 18, Color("c9cdf0"), 4))
 		col.add_child(UI.label("攻击全自动 • 升级时按 1 / 2 / 3 或点击卡片 • 飞剑术用 E / J", 18, Color("c9cdf0"), 4))
-	col.add_child(UI.label("v1.5 • 新增《灯骸裂隙》副本、灯芯、游商、法宝飞剑术", 16, Color("8d93c4"), 3))
+	col.add_child(UI.label("v2.2 • 完整夜行约 18 分钟 • 葫芦小金刚助战 • 百万血终局 BOSS", 16, Color("8d93c4"), 3))
 
 
 func _logo(text: String, size: int, color: Color) -> Label:
@@ -163,7 +163,7 @@ func _refresh_record() -> void:
 
 
 func _mode_label() -> String:
-	return "模式：完整夜行 • 30分钟" if String(save.get("mode", "full")) == "full" else "模式：疾速试炼 • 10分钟"
+	return "模式：完整夜行 • 约18分钟" if String(save.get("mode", "full")) == "full" else "模式：疾速试炼 • 约15分钟"
 
 
 func _snd_label() -> String:

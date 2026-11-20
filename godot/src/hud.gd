@@ -303,7 +303,8 @@ func _draw_hud_inner() -> void:
 			hb_front.circle(Vector2(bx2 + 11, by2), 7.0, Color(0.12, 0.12, 0.2))
 		bx2 += 28.0
 	if sim.pet_on:
-		var ptxt := "小金刚 复活 %ds" % int(ceil(sim.pet_dead_t)) if sim.pet_dead_t > 0.0 else "小金刚 %d/%d  印记%d  Q合击 %s" % [int(sim.pet_hp), int(sim.pet_maxhp()), sim.pet_marks, "就绪" if sim.combo_cd <= 0.0 else "%ds" % int(ceil(sim.combo_cd))]
+		var pdmg := int(sim.dmg_by.get("pet", 0.0))
+		var ptxt := "小金刚 复活 %ds" % int(ceil(sim.pet_dead_t)) if sim.pet_dead_t > 0.0 else "小金刚 %d/%d  印记%d  输出%s  Q合击:%s" % [int(sim.pet_hp), int(sim.pet_maxhp()), sim.pet_marks, UI.fmt_int(pdmg), "就绪" if sim.combo_cd <= 0.0 else "%ds" % int(ceil(sim.combo_cd))]
 		_text(Vector2(bx2 + 8, by2 + 6), ptxt, _fs(15), Color("ffcf5a") if sim.pet_dead_t <= 0.0 else UI.BLOOD)
 	var asets := sim.active_sets()
 	if asets.size() > 0:
@@ -396,7 +397,9 @@ func _draw_hud_inner() -> void:
 	if not touch_mode:
 		var tip2 := "WASD / 方向键 移动 • 空格 冲刺 • Esc 暂停"
 		if sim.has_sword():
-			tip2 = "WASD 移动 • 空格 冲刺 • E / J 飞剑（出鞘 〉 再按召回刺出）• Esc 暂停"
+			tip2 = "WASD 移动 • 空格 冲刺 • E / J 飞剑（出鞘 〉 再按召回刺出）" + (" • Q 小金刚合击" if sim.pet_on else "") + " • Esc 暂停"
+		elif sim.pet_on:
+			tip2 = "WASD 移动 • 空格 冲刺 • Q 小金刚七彩神光斩 • Esc 暂停"
 		_text(Vector2(cx - 450, vw.y * 0.0 + get_viewport().get_visible_rect().size.y - 18.0 - inset.w), tip2, 16, Color(0.8, 0.82, 0.95, 0.75), 900.0, HORIZONTAL_ALIGNMENT_CENTER)
 	# 飞剑状态
 	if sim.has_sword():
@@ -697,13 +700,14 @@ func show_pause(on: bool) -> void:
 		var nms: Array = GameData.DG.sword.stages.names
 		var nxt := ("已圆满 • 精通 %d/5（每 800 击杀或再破守关者/藤妖 +1）" % sim.sw_master) if sim.sw_stage >= 5 else "下一阶「%s」：剑意 %d/%d 或击败守关者/藤妖" % [nms[sim.sw_stage], sim.sw_kills, sim._sw_thr(sim.sw_stage - 1)]
 		guide.append("飞剑 第 %d/5 阶 • %s" % [sim.sw_stage, nxt])
-	guide.append("彩虹葫芦 %d/7%s" % [sim.gourds.size(), "  • 小金刚已合成" if sim.pet_on else ""])
+	guide.append("彩虹葫芦 %d/7%s" % [sim.gourds.size(), "  • 小金刚助战中（寻敌连珠/天雷/镇魔印 + Q七彩神光斩 + 护主吸魂 • 累计输出 %s）" % UI.fmt_int(int(sim.dmg_by.get("pet", 0.0))) if sim.pet_on else ""])
 	if sim.gourds.size() < 7:
 		var gl := sim.gourd_guarantee_left()
 		guide.append("葫芦获取：葫芦灵藤 • 小BOSS/守关BOSS必掉 • 葫芦藤秘境第 %d 劫（门票 %d 铜钱）• 游商直购（%d 铜钱）• 牌坊许愿%s" % [sim.vine_runs + 1, sim.vine_ticket(), sim.gourd_price(), (" • 保底 %s 后" % UI.fmt_time(gl)) if gl >= 0.0 else ""])
 	guide.append("地标：古井祭坛（献祭换遗物）• 破败牌坊（许愿）• 灯冢废墟（掘冢得宝箱）• 荒庙香炉（上香回血）")
 	if sim.mode != "classic":
-		guide.append("练级点（冷却 60 秒可反复刷）：聚宝鬼市（刷铜钱 已通关 %d）• 炼魂坑（刷等级 已通关 %d）• 铜钱去游商「灯油淬火」已淬 %d 次 • 满级后升级出「突破」卡 已突破 %d 层" % [int(sim.farm_runs.get("coinfarm", 0)), int(sim.farm_runs.get("soulfarm", 0)), sim.forge_n, sim.asc_dmg_n + sim.asc_hp_n])
+		var fcd := int(GameData.DG.farms.coinfarm.cd)
+		guide.append("练级点（冷却 %d 秒可反复刷）：聚宝鬼市（刷铜钱 已通关 %d）• 炼魂坑（刷等级 已通关 %d）• 铜钱去游商「灯油淬火」已淬 %d 次 • 满级后升级出「突破」卡 已突破 %d 层" % [fcd, int(sim.farm_runs.get("coinfarm", 0)), int(sim.farm_runs.get("soulfarm", 0)), sim.forge_n, sim.asc_dmg_n + sim.asc_hp_n])
 	var sc := sim.set_counts()
 	var sparts: Array = []
 	for st in GameData.SETS:
@@ -795,7 +799,8 @@ func show_result(r: Dictionary) -> void:
 			clears += 1
 	rifts = maxi(rifts, int(r.get("rift_entries", 0)))
 	clears = maxi(clears, int(r.get("rift_clears", 0)))
-	var l2 := UI.label("输出最高：%s  •  入裂隙 %d 次（通关 %d）%s" % [r.top, rifts, clears, "  •  法宝：飞剑术" if r.artifact == "sword" else ""], 22, Color("d6d0f0"), 4)
+	var pet_s := ("  •  小金刚输出 %s" % UI.fmt_int(int(r.get("pet_dmg", 0)))) if int(r.get("pet_dmg", 0)) > 0 else ""
+	var l2 := UI.label("输出最高：%s%s  •  入裂隙 %d 次（通关 %d）%s" % [r.top, pet_s, rifts, clears, "  •  法宝：飞剑术" if r.artifact == "sword" else ""], 22, Color("d6d0f0"), 4)
 	l2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(l2)
 	col.add_child(_build_row(r.build, "本局构筑"))
