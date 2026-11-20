@@ -44,6 +44,7 @@ func setup(p_game: Node, p_sim: Sim, p_touch: bool) -> void:
 	canvas.draw.connect(_draw_hud)
 	root.add_child(canvas)
 	wick_tex = load("res://assets/icons/wick.png")
+	_build_hud_batch()
 	banner = UI.label("", 30, UI.GOLD, 6)
 	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -123,10 +124,10 @@ func _fs(base: int) -> int:
 
 
 func _bar(rect: Rect2, k: float, fill: Color, back: Color = Color(0.05, 0.06, 0.14, 0.9)) -> void:
-	canvas.draw_rect(Rect2(rect.position - Vector2(3, 3), rect.size + Vector2(6, 6)), UI.INK)
-	canvas.draw_rect(rect, back)
-	canvas.draw_rect(Rect2(rect.position, Vector2(rect.size.x * clampf(k, 0.0, 1.0), rect.size.y)), fill)
-	canvas.draw_rect(Rect2(rect.position, Vector2(rect.size.x * clampf(k, 0.0, 1.0), rect.size.y * 0.4)), Color(1, 1, 1, 0.16))
+	_rect(Rect2(rect.position - Vector2(3, 3), rect.size + Vector2(6, 6)), UI.INK)
+	_rect(rect, back)
+	_rect(Rect2(rect.position, Vector2(rect.size.x * clampf(k, 0.0, 1.0), rect.size.y)), fill)
+	_rect(Rect2(rect.position, Vector2(rect.size.x * clampf(k, 0.0, 1.0), rect.size.y * 0.4)), Color(1, 1, 1, 0.16))
 
 
 var _q_texts: Array = []
@@ -138,23 +139,82 @@ func _text(pos: Vector2, s: String, size: int, col: Color, w: float = -1.0, alig
 
 
 func _snap(size: int) -> int:
-	# 字号收敛为 4 档（16/20/26/44），减少动态字体的字形图集页数
-	if size <= 17:
-		return 16
-	if size <= 22:
-		return 20
-	if size <= 32:
-		return 26
-	return 44
+	return UI.snap_size(size)
 
 
 func _flush_texts() -> void:
+	var cci := canvas.get_canvas_item()
+	hb_back.flush(cci, white_tex)
+	hb_icon.flush(cci, icon_atlas)
+	hb_front.flush(cci, white_tex)
+	if Playtest.hide.contains("htext"):
+		_q_texts.clear()
+		return
 	_q_texts.sort_custom(func(a, b): return a[2] < b[2])
 	for q in _q_texts:
-		canvas.draw_string_outline(font, q[0], q[1], q[5], q[4], q[2], 6, UI.INK)
+		canvas.draw_string(font, q[0] + Vector2(1.5, 1.5), q[1], q[5], q[4], q[2], UI.INK)
 	for q in _q_texts:
 		canvas.draw_string(font, q[0], q[1], q[5], q[4], q[2], q[3])
 	_q_texts.clear()
+
+
+var hb_back := TriBatch.new()
+var hb_icon := TriBatch.new()
+var hb_front := TriBatch.new()
+var white_tex: Texture2D
+var icon_atlas: Texture2D
+var icon_uv: Dictionary = {}
+
+
+## 把 HUD 用到的图标合成一张 64×64 格的图集（一次提交），白色 1×1 贴图承载所有纯色图形
+func _build_hud_batch() -> void:
+	var wi := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	wi.fill(Color.WHITE)
+	white_tex = ImageTexture.create_from_image(wi)
+	var ids: Array = ["wick", "sword", "portrait"]
+	for u in GameData.UPS.values():
+		ids.append(String(u.icon))
+	for e in GameData.EVOS.values():
+		ids.append(String(e.icon))
+	for r in GameData.RELIC_BY_ID.values():
+		ids.append(String(r.icon))
+	var uniq: Array = []
+	for i in ids:
+		if not uniq.has(i):
+			uniq.append(i)
+	var cols := 8
+	var rows := int(ceil(float(uniq.size()) / float(cols)))
+	var img := Image.create(cols * 64, rows * 64, false, Image.FORMAT_RGBA8)
+	for n in range(uniq.size()):
+		var id: String = uniq[n]
+		var src: Image
+		if id == "portrait":
+			src = (load("res://assets/hero.png") as Texture2D).get_image().get_region(Rect2i(60, 8, 232, 232))
+		else:
+			src = (load("res://assets/icons/%s.png" % id) as Texture2D).get_image()
+		src.convert(Image.FORMAT_RGBA8)
+		src.resize(64, 64, Image.INTERPOLATE_LANCZOS)
+		img.blit_rect(src, Rect2i(0, 0, 64, 64), Vector2i((n % cols) * 64, (n / cols) * 64))
+		icon_uv[id] = Rect2(float(n % cols) / cols, float(n / cols) / rows, 1.0 / cols, 1.0 / rows)
+	icon_atlas = ImageTexture.create_from_image(img)
+
+
+func _rect(r: Rect2, col: Color, front: bool = false) -> void:
+	(hb_front if front else hb_back).full(r.position.x, r.position.y, r.size.x, r.size.y, col)
+
+
+func _frame(r: Rect2, col: Color, w: float, front: bool = true) -> void:
+	var b := hb_front if front else hb_back
+	b.full(r.position.x, r.position.y, r.size.x, w, col)
+	b.full(r.position.x, r.end.y - w, r.size.x, w, col)
+	b.full(r.position.x, r.position.y + w, w, r.size.y - 2.0 * w, col)
+	b.full(r.end.x - w, r.position.y + w, w, r.size.y - 2.0 * w, col)
+
+
+func _icon_q(id: String, r: Rect2) -> void:
+	var uv: Rect2 = icon_uv.get(id, Rect2())
+	if uv.size.x > 0.0:
+		hb_icon.rect(r.position.x, r.position.y, r.size.x, r.size.y, uv.position.x, uv.position.y, uv.end.x, uv.end.y, Color.WHITE)
 
 
 var mm_tex: ImageTexture = null
@@ -187,16 +247,11 @@ func _draw_hud_inner() -> void:
 	_bar(Rect2(inset.x, inset.y, vw.x - inset.x - inset.z, 8), float(sim.xp) / maxf(1.0, sim.need), Color("7fe3ff"))
 	T += 12.0
 	# 头像 + 生命
-	if portrait == null:
-		var at := AtlasTexture.new()
-		at.atlas = load("res://assets/hero.png")
-		at.region = Rect2(60, 8, 232, 232)
-		portrait = at
 	var ps := 78.0 * k
-	canvas.draw_rect(Rect2(L - 3, T - 3, ps + 6, ps + 6), UI.INK)
-	canvas.draw_rect(Rect2(L, T, ps, ps), Color(0.1, 0.12, 0.3))
-	canvas.draw_texture_rect(portrait, Rect2(L, T, ps, ps), false)
-	canvas.draw_rect(Rect2(L - 1, T - 1, ps + 2, ps + 2), UI.ORANGE, false, 3.0)
+	_rect(Rect2(L - 3, T - 3, ps + 6, ps + 6), UI.INK)
+	_rect(Rect2(L, T, ps, ps), Color(0.1, 0.12, 0.3))
+	_icon_q("portrait", Rect2(L, T, ps, ps))
+	_frame(Rect2(L - 1, T - 1, ps + 2, ps + 2), UI.ORANGE, 3.0)
 	var bx := L + ps + 14.0
 	var barw := 300.0 * k
 	_text(Vector2(bx, T + 20 * k), "Lv %d • 阿烛" % sim.level, _fs(22), UI.GHOST)
@@ -210,38 +265,38 @@ func _draw_hud_inner() -> void:
 	var ox := bx
 	var oy := T + 60.0 * k
 	var isz := 38.0 * k
-	for o in owned_cache:
-		canvas.draw_rect(Rect2(ox - 2, oy - 2, isz + 4, isz + 4), UI.INK)
-		canvas.draw_texture_rect(_icon(o.icon), Rect2(ox, oy, isz, isz), false)
+	for o in ([] if Playtest.hide.contains("hbuild") else owned_cache):
+		_rect(Rect2(ox - 2, oy - 2, isz + 4, isz + 4), UI.INK)
+		_icon_q(o.icon, Rect2(ox, oy, isz, isz))
 		_text(Vector2(ox + isz - 14, oy + isz + 1), str(o.lv), _fs(16), UI.GOLD)
 		ox += isz + 8.0
 	# 灯芯 / 遗物 / 法宝
 	var rx := bx
 	var ry := oy + isz + 16.0
-	canvas.draw_texture_rect(wick_tex, Rect2(rx, ry, 30 * k, 30 * k), false)
+	_icon_q("wick", Rect2(rx, ry, 30 * k, 30 * k))
 	_text(Vector2(rx + 34 * k, ry + 24 * k), "×%d" % sim.wicks, _fs(24), UI.GOLD)
 	rx += 96.0 * k
 	for rid in sim.relics:
 		var r: Dictionary = GameData.RELIC_BY_ID[rid]
-		canvas.draw_texture_rect(_icon(r.icon), Rect2(rx, ry, 30 * k, 30 * k), false)
+		_icon_q(r.icon, Rect2(rx, ry, 30 * k, 30 * k))
 		rx += 34.0 * k
 	if sim.artifact == "sword":
-		canvas.draw_texture_rect(_icon("sword"), Rect2(rx + 6, ry - 2, 34 * k, 34 * k), false)
+		_icon_q("sword", Rect2(rx + 6, ry - 2, 34 * k, 34 * k))
 		rx += 46.0 * k
 	# 铜钱 / 葫芦进度珠 / 小金刚 / 套装
 	var gcols := {"red": Color("ff4a3a"), "orange": Color("ff9a3c"), "yellow": Color("ffe04a"), "green": Color("5ade6a"), "cyan": Color("4adfe0"), "blue": Color("4a7aff"), "purple": Color("b05aff")}
 	_text(Vector2(L, ry + 138 * k), "彩虹葫芦 %d/7" % sim.gourds.size(), _fs(20), Color("ffcf5a"))
 	var bx2 := L + 160.0
 	var by2 := ry + 132 * k
-	for gp in GameData.GD.pieces:
+	for gp in ([] if Playtest.hide.contains("hbuild") else GameData.GD.pieces):
 		var got: bool = sim.gourds.has(gp.id)
-		canvas.draw_circle(Vector2(bx2 + 11, by2), 12.0, UI.INK)
+		hb_front.circle(Vector2(bx2 + 11, by2), 12.0, UI.INK)
 		if got:
-			canvas.draw_circle(Vector2(bx2 + 11, by2), 16.0, Color(gcols[gp.id], 0.35))
-			canvas.draw_circle(Vector2(bx2 + 11, by2), 9.0, gcols[gp.id])
+			hb_front.circle(Vector2(bx2 + 11, by2), 16.0, Color(gcols[gp.id], 0.35))
+			hb_front.circle(Vector2(bx2 + 11, by2), 9.0, gcols[gp.id])
 		else:
-			canvas.draw_circle(Vector2(bx2 + 11, by2), 9.0, Color(0.12, 0.12, 0.2))
-			canvas.draw_arc(Vector2(bx2 + 11, by2), 9.0, 0, TAU, 20, Color(gcols[gp.id], 0.55), 2.0, true)
+			hb_front.circle(Vector2(bx2 + 11, by2), 9.0, Color(gcols[gp.id], 0.55))
+			hb_front.circle(Vector2(bx2 + 11, by2), 7.0, Color(0.12, 0.12, 0.2))
 		bx2 += 28.0
 	if sim.pet_on:
 		var ptxt := "小金刚 复活 %ds" % int(ceil(sim.pet_dead_t)) if sim.pet_dead_t > 0.0 else "小金刚 %d/%d  印记%d  Q合击 %s" % [int(sim.pet_hp), int(sim.pet_maxhp()), sim.pet_marks, "就绪" if sim.combo_cd <= 0.0 else "%ds" % int(ceil(sim.combo_cd))]
@@ -300,7 +355,7 @@ func _draw_hud_inner() -> void:
 			var ap := ctr + dn * minf(vw.y * 0.34, 230.0)
 			var pul := 1.0 + sin(t * 6.0) * 0.12
 			var perp := Vector2(-dn.y, dn.x)
-			canvas.draw_colored_polygon(PackedVector2Array([ap + dn * 26.0 * pul, ap - dn * 12.0 + perp * 20.0, ap - dn * 12.0 - perp * 20.0]), Color(0.85, 0.6, 1.0, 0.95))
+			hb_front.poly(PackedVector2Array([ap + dn * 26.0 * pul, ap - dn * 12.0 + perp * 20.0, ap - dn * 12.0 - perp * 20.0]), Color(0.85, 0.6, 1.0, 0.95))
 			_text(ap - dn * 34.0 - Vector2(60, -8), "%s %dm" % [lab, int(dv.length() / 10.0)], _fs(18), Color(0.9, 0.75, 1.0), 120.0, HORIZONTAL_ALIGNMENT_CENTER)
 	_draw_minimap(vw)
 	# 大地图：指向最近剑冢裂隙的边缘箭头（离得远时）
@@ -318,10 +373,11 @@ func _draw_hud_inner() -> void:
 			var dn := Vector2(float(sim.pois[best].x) - sim.px, float(sim.pois[best].y) - sim.py).normalized()
 			var ctr2 := Vector2(vw.x / 2.0, vw.y / 2.0)
 			var ap2 := ctr2 + Vector2(dn.x * (vw.x * 0.5 - 70.0), dn.y * (vw.y * 0.5 - 60.0))
-			if ap2.x > vw.x - inset.z - 230.0 and ap2.y < inset.y + 230.0:
-				ap2.y = inset.y + 295.0   # 避开右上角小地图
+			if ap2.x > vw.x - inset.z - 260.0:
+				var mm_h := (170.0 if touch_mode else 190.0) * Sim.H / Sim.W
+				ap2.y = maxf(ap2.y, inset.y + (100.0 if touch_mode else 112.0) + mm_h + 56.0)   # 避开右上小地图及其图例
 			var perp2 := Vector2(-dn.y, dn.x)
-			canvas.draw_colored_polygon(PackedVector2Array([ap2 + dn * 20.0, ap2 - dn * 10.0 + perp2 * 14.0, ap2 - dn * 10.0 - perp2 * 14.0]), Color(0.85, 0.6, 1.0, 0.9))
+			hb_front.poly(PackedVector2Array([ap2 + dn * 20.0, ap2 - dn * 10.0 + perp2 * 14.0, ap2 - dn * 10.0 - perp2 * 14.0]), Color(0.85, 0.6, 1.0, 0.9))
 			_text(ap2 - Vector2(70, -34) if dn.y > 0 else ap2 - Vector2(70, 20), "剑冢裂隙 %dm" % int(bdist / 10.0), 15, Color(0.9, 0.75, 1.0), 140.0, HORIZONTAL_ALIGNMENT_CENTER)
 	# 底部提示（桌面）
 	if not touch_mode:
@@ -356,6 +412,8 @@ func _draw_hud_inner() -> void:
 
 
 func _draw_minimap(vw: Vector2) -> void:
+	if Playtest.hide.contains("hmini"):
+		return
 	# 右上小地图：全图缩略 + 探索足迹 + 玩家 + 剑冢裂隙入口 + 宝箱；触屏时下移避开暂停键
 	var mw := 190.0 if not touch_mode else 170.0
 	var mh := mw * Sim.H / Sim.W
@@ -374,16 +432,16 @@ func _draw_minimap(vw: Vector2) -> void:
 			else:
 				mm_tex.update(img)
 		canvas.draw_texture_rect(mm_tex, Rect2(x0, y0, mw, mh), false)
-	canvas.draw_rect(Rect2(x0, y0, mw, mh), UI.ORANGE, false, 2.0)
+	_frame(Rect2(x0, y0, mw, mh), UI.ORANGE, 2.0)
 	for pp in sim.pois:
 		var st_: Color = {"sword": Color(0.8, 0.45, 1.0), "merchant": Color(1.0, 0.8, 0.3), "vine": Color(0.4, 1.0, 0.5), "gourd": Color(0.5, 1.0, 0.8), "vault": Color(1.0, 0.4, 0.3)}[pp.kind]
-		canvas.draw_circle(Vector2(x0 + float(pp.x) / Sim.W * mw, y0 + float(pp.y) / Sim.H * mh), 5.0, st_)
+		hb_front.circle(Vector2(x0 + float(pp.x) / Sim.W * mw, y0 + float(pp.y) / Sim.H * mh), 5.0, st_, 10)
 	for k in sim.pickups:
 		if k.kind == "chest":
-			canvas.draw_rect(Rect2(x0 + k.x / Sim.W * mw - 3, y0 + k.y / Sim.H * mh - 3, 6, 6), Color(1.0, 0.85, 0.3))
-	canvas.draw_circle(Vector2(x0 + sim.px / Sim.W * mw, y0 + sim.py / Sim.H * mh), 4.0, Color(0.5, 1.0, 1.0))
+			_rect(Rect2(x0 + k.x / Sim.W * mw - 3, y0 + k.y / Sim.H * mh - 3, 6, 6), Color(1.0, 0.85, 0.3), true)
+	hb_front.circle(Vector2(x0 + sim.px / Sim.W * mw, y0 + sim.py / Sim.H * mh), 4.0, Color(0.5, 1.0, 1.0), 10)
 	_text(Vector2(x0, y0 + mh + 16), "紫剑 绿藤 金商 青葫 赤宝", 12, Color(0.85, 0.85, 0.95), mw, HORIZONTAL_ALIGNMENT_CENTER)
-	canvas.draw_rect(Rect2(x0 + sim.px / Sim.W * mw - 7, y0 + sim.py / Sim.H * mh - 4, 14, 8), Color(1, 1, 1, 0.5), false, 1.0)
+	_frame(Rect2(x0 + sim.px / Sim.W * mw - 7, y0 + sim.py / Sim.H * mh - 4, 14, 8), Color(1, 1, 1, 0.5), 1.0)
 
 
 func _icon(id: String) -> Texture2D:

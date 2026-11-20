@@ -18,6 +18,9 @@ var snd_btn: Button
 var run_exists := false
 
 
+var art: TextureRect
+
+
 func _ready() -> void:
 	layer = 1
 	save = SaveData.load_save()
@@ -26,7 +29,7 @@ func _ready() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.theme = UI.theme()
 	add_child(root)
-	var art := TextureRect.new()
+	art = TextureRect.new()
 	art.texture = load("res://assets/title_keyart.jpg")
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -183,6 +186,7 @@ func _continue() -> void:
 	if started:
 		return
 	started = true
+	art.texture = null   # 进局内立即释放主视觉贴图显存
 	Audio.play("click")
 	continue_pressed.emit()
 

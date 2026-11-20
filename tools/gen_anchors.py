@@ -18,7 +18,7 @@ def sheet(path, fw, fh, cols, n):
         v.append(axis(im.crop(((i % cols) * fw, (i // cols) * fh, (i % cols) * fw + fw, (i // cols) * fh + fh))))
     return round(float(np.mean(v)), 4)
 out["hero_run"] = sheet("hero_run.png", 152, 192, 6, 12)
-out["boss_idle"] = sheet("anim/boss_idle.png", 236, 384, 8, 8)
+out["boss_idle"] = sheet("anim/boss_idle.png", 118, 192, 8, 8)
 out["jiangshi_hop"] = sheet("anim/jiangshi_hop.png", 119, 200, 8, 8)
 json.dump(out, open(f"{A}/../data/anchors.json", "w"), indent=1)
 print(out)

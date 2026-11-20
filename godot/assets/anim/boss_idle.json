@@ -1,7 +1,7 @@
 {
   "image": "boss_idle.png",
-  "frameWidth": 236,
-  "frameHeight": 384,
+  "frameWidth": 118,
+  "frameHeight": 192,
   "frames": 8,
   "columns": 8,
   "rows": 1

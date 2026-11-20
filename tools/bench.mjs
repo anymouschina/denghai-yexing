@@ -23,7 +23,7 @@ for (const N of NS.split(',').map(Number)) {
   await call('Page.enable'); if (THROTTLE > 1) await call('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
   await call('Page.addScriptToEvaluateOnNewDocument', { source: `window.__fr=[];window.__lt=0;window.__rec=false;(function loop(t){ if(window.__rec) window.__fr.push(t); requestAnimationFrame(loop);})(0);try{new PerformanceObserver(l=>{if(window.__rec)window.__lt+=l.getEntries().length}).observe({entryTypes:['longtask']})}catch(e){}` });
   await call('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
-  await call('Page.navigate', { url: `http://127.0.0.1:${server.address().port}/index.html?tapcanvasPlaytest=1&seed=5&bench=${N}` });
+  await call('Page.navigate', { url: `http://127.0.0.1:${server.address().port}/index.html?tapcanvasPlaytest=1&seed=5&bench=${N}${process.env.HIDE ? '&hide=' + process.env.HIDE : ''}` });
   const snap = async () => { try { return JSON.parse(await ev('JSON.stringify(globalThis.__TAPCANVAS_PLAYTEST__?globalThis.__TAPCANVAS_PLAYTEST__.snapshot():{})')); } catch { return {}; } };
   for (let i = 0; i < 120 && (await snap()).scene !== 'title'; i++) await sleep(500);
   await sleep(800);

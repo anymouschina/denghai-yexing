@@ -539,7 +539,7 @@ func _step_combat(dt: float) -> void:
 	_update_minis()
 	if phase == PH_SEG and t >= seg_to(seg) - 20.0 / stretch and not announced.has(seg):
 		announced[seg] = true
-		_ev("banner", "20 秒后清场 · 场地中央将裂开「灯骸裂隙」", "#d9b8ff")
+		_ev("banner", "20 秒后清场 • 场地中央将裂开「灯骸裂隙」", "#d9b8ff")
 	if phase == PH_SEG and t >= seg_to(seg):
 		_start_break(seg)
 
@@ -1885,9 +1885,9 @@ func _open_choice(kind: String) -> void:
 func _card_hint(u: Dictionary) -> String:
 	for ev in GameData.UP.evolutions:
 		if ev.weapon == u.id:
-			return "\n满级 + %s → 进化「%s」" % [GameData.UPS[ev.needs].name, ev.name]
+			return "\n满级 + %s 〉 进化「%s」" % [GameData.UPS[ev.needs].name, ev.name]
 		if ev.needs == u.id:
-			return "\n配合满级%s → 进化「%s」" % [GameData.UPS[ev.weapon].name, ev.name]
+			return "\n配合满级%s 〉 进化「%s」" % [GameData.UPS[ev.weapon].name, ev.name]
 	for r in GameData.RELICS:
 		if r.has("part") and r.part == u.id:
 			return "\n满级可购金件：%s" % r.name
@@ -2080,7 +2080,7 @@ func _start_break(k: int) -> void:
 	if k >= int(GameData.DG.fusion.atBreak):
 		_trigger_fusion()
 	_roll_shop()
-	_ev("banner", "灯骸裂隙已开启 · 走到场地中央的紫色光柱站定进入" if rift_state() == "ok" else ("灯弱，不可入裂隙（生命需不低于 60%）" if rift_state() == "weak" else "裂隙不可进入"), "#d9b8ff")
+	_ev("banner", "灯骸裂隙已开启 • 走到场地中央的紫色光柱站定进入" if rift_state() == "ok" else ("灯弱，不可入裂隙（生命需不低于 60%）" if rift_state() == "weak" else "裂隙不可进入"), "#d9b8ff")
 	checkpoint()
 	if sw_state == SW_ORBIT or sw_state == SW_RECALL:
 		sw_state = SW_CD

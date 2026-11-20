@@ -16,6 +16,15 @@ static var _font: Font = null
 static var _theme: Theme = null
 
 
+## 画布文字字号收敛为 3 档（16/20/26），字形图集页数最少
+static func snap_size(size: int) -> int:
+	if size <= 17:
+		return 16
+	if size <= 22:
+		return 20
+	return 26
+
+
 static func font() -> Font:
 	if _font == null:
 		_font = load("res://fonts/MaShanZheng-subset.ttf")

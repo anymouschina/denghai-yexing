@@ -197,8 +197,8 @@ func _draw_ctl() -> void:
 	ctl.draw_arc(dp, rr - 2.0, -PI / 2.0, -PI / 2.0 + dash_k * TAU, 48, UI.GHOST, 8.0, true)
 	if dash_k >= 1.0:
 		ctl.draw_arc(dp, rr + 4.0, 0, TAU, 48, Color(0.5, 0.9, 1.0, 0.55), 4.0, true)
-	ctl.draw_string_outline(font, dp + Vector2(-40, 18), "闪", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 54, 7, UI.INK)
-	ctl.draw_string(font, dp + Vector2(-40, 18), "闪", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 54, UI.PAPER)
+	ctl.draw_string(font, dp + Vector2(-38.5, 19.5), "闪", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, UI.INK)
+	ctl.draw_string(font, dp + Vector2(-40, 18), "闪", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, UI.PAPER)
 	# 剑
 	if has_sword:
 		var sp := btn_pos("skill")
@@ -211,13 +211,13 @@ func _draw_ctl() -> void:
 			col = UI.BLOOD
 		ctl.draw_arc(sp, r2, 0, TAU, 40, col, 6.0 if sword_state == Sim.SW_ORBIT else 4.0, true)
 		var label := "剑" if sword_state != Sim.SW_ORBIT else "收"
-		ctl.draw_string_outline(font, sp + Vector2(-40, 16), label, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, 6, UI.INK)
+		ctl.draw_string(font, sp + Vector2(-38.5, 17.5), label, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, UI.INK)
 		ctl.draw_string(font, sp + Vector2(-40, 16), label, HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, UI.PAPER)
 	if has_pet:
 		var gp := btn_pos("gourd")
 		ctl.draw_circle(gp, 56.0, Color(0.25, 0.12, 0.3, 0.85))
 		ctl.draw_arc(gp, 54.0, -PI / 2.0, -PI / 2.0 + combo_k * TAU, 40, Color(1.0, 0.8, 0.3), 7.0, true)
-		ctl.draw_string_outline(font, gp + Vector2(-40, 16), "葫", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, 6, UI.INK)
+		ctl.draw_string(font, gp + Vector2(-38.5, 17.5), "葫", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, UI.INK)
 		ctl.draw_string(font, gp + Vector2(-40, 16), "葫", HORIZONTAL_ALIGNMENT_CENTER, 80.0, 46, UI.PAPER)
 	# 暂停
 	var pp := btn_pos("pause")

@@ -494,6 +494,16 @@ func _init() -> void:
 	var r2 := _run_fixed(777)
 	ok(r1 == r2, "同种子两次模拟结果一致 (%s)" % r1)
 
+	print("== 渲染脚本可加载 ==")
+	for sp in ["tri_batch", "touch_controls"]:
+		var sc: Script = load("res://src/%s.gd" % sp)
+		ok(sc != null and sc.can_instantiate(), "%s.gd 能解析" % sp)
+	var tb := TriBatch.new()
+	tb.full(0, 0, 4, 4, Color.WHITE)
+	tb.circle(Vector2(5, 5), 3.0, Color.WHITE)
+	tb.line(Vector2.ZERO, Vector2(5, 0), 2.0, Color.WHITE)
+	ok(tb.pts.size() == 4 + 14 + 4 and tb.idx.size() == 6 + 36 + 6, "TriBatch 顶点/索引数量正确")
+
 	print("== 存档往返 ==")
 	var sv1 := fresh(5)
 	to_break(sv1, 1)

@@ -71,6 +71,15 @@ func start(p_touch: bool, resume: Dictionary = {}) -> void:
 	touch.name = "Touch"
 	add_child(touch)
 	touch.setup(sim, touch_mode)
+	if Playtest.hide != "":
+		var hs := Playtest.hide.split(",")
+		if "hud" in hs: hud.visible = false
+		if "night" in hs: night.visible = false
+		if "world" in hs: view.visible = false
+		if "bg" in hs: view.bg_layer.visible = false
+		if "ground" in hs: view.ground_add.visible = false
+		if "fx" in hs: view.fx_add.visible = false
+		if "touch" in hs: touch.visible = false
 	Audio.music("battle")
 	hud.show_banner("提灯夜行 • 守住这一夜", "#ffc977")
 
