@@ -39,6 +39,7 @@ var burn_dps := 0.0
 var mark_t := 0.0
 var mark_dmg := 0.0
 var orb_hit := -10.0
+var orb_hits := PackedFloat32Array([-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0])
 var contact_cd := 0.0
 var phase := 0.0
 var flash := 0.0
@@ -79,5 +80,8 @@ func copy() -> SimEnemy:
 	var c := SimEnemy.new()
 	for pr in get_property_list():
 		if pr.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
-			c.set(pr.name, get(pr.name))
+			var v: Variant = get(pr.name)
+			if v is PackedFloat32Array or v is Array:
+				v = v.duplicate()
+			c.set(pr.name, v)
 	return c

@@ -93,7 +93,11 @@
           "穿透",
           ""
         ]
-      }
+      },
+      "school_tag": "符",
+      "school_tags": [
+        "符"
+      ]
     },
     {
       "id": "huanhuo",
@@ -104,29 +108,29 @@
       "max": 5,
       "stats": [
         {
-          "dmg": 9,
+          "dmg": 7,
           "orbs": 2,
           "radius": 85
         },
         {
+          "dmg": 8,
+          "orbs": 3,
+          "radius": 90
+        },
+        {
           "dmg": 9,
           "orbs": 3,
-          "radius": 85
+          "radius": 100
         },
         {
-          "dmg": 13,
-          "orbs": 3,
-          "radius": 95
-        },
-        {
-          "dmg": 13,
+          "dmg": 11,
           "orbs": 4,
-          "radius": 95
+          "radius": 105
         },
         {
-          "dmg": 17,
+          "dmg": 12,
           "orbs": 5,
-          "radius": 105
+          "radius": 115
         }
       ],
       "intro": "灯火绕身旋转，触碰灼伤并击退妖物",
@@ -143,7 +147,11 @@
           "半径",
           ""
         ]
-      }
+      },
+      "school_tag": "阵",
+      "school_tags": [
+        "阵"
+      ]
     },
     {
       "id": "lei",
@@ -202,7 +210,11 @@
           "连锁",
           ""
         ]
-      }
+      },
+      "school_tag": "煞",
+      "school_tags": [
+        "煞"
+      ]
     },
     {
       "id": "jishu",
@@ -212,7 +224,7 @@
       "icon": "jishu",
       "max": 5,
       "per": {
-        "fuCd": 0.1,
+        "fuCd": 0.07,
         "fuSpeed": 0.15
       },
       "lines": [
@@ -226,6 +238,10 @@
           "符咒飞速 +{v}",
           "pct"
         ]
+      ],
+      "school_tag": "符",
+      "school_tags": [
+        "符"
       ]
     },
     {
@@ -244,6 +260,10 @@
           "驱邪符每次多掷 {v} 张",
           "int"
         ]
+      ],
+      "school_tag": "符",
+      "school_tags": [
+        "符"
       ]
     },
     {
@@ -254,8 +274,8 @@
       "icon": "zhuohun",
       "max": 5,
       "per": {
-        "burnDps": 4,
-        "igniteChance": 0.08
+        "burnDps": 5,
+        "igniteChance": 0.1
       },
       "lines": [
         [
@@ -269,7 +289,12 @@
           "pct"
         ]
       ],
-      "note": "灼烧持续 {burn.time} 秒"
+      "note": "灼烧持续 {burn.time} 秒，并受 50% 伤害加成",
+      "school_tag": "蛊",
+      "school_tags": [
+        "蛊",
+        "阵"
+      ]
     },
     {
       "id": "tianyou",
@@ -279,8 +304,8 @@
       "icon": "tianyou",
       "max": 5,
       "per": {
-        "orbRadius": 0.12,
-        "orbSpin": 0.12
+        "orbRadius": 0.06,
+        "orbSpin": 0.14
       },
       "lines": [
         [
@@ -293,7 +318,12 @@
           "旋转速度 +{v}",
           "pct"
         ]
-      ]
+      ],
+      "school_tag": "阵",
+      "school_tags": [
+        "阵"
+      ],
+      "note": "灯火环半径上限 140，超出部分转化为旋转加速"
     },
     {
       "id": "leiyin",
@@ -312,7 +342,12 @@
           "int"
         ]
       ],
-      "note": "被灼烧的妖物受雷伤 +{lei.burnBonus%}"
+      "note": "被灼烧的妖物受雷伤 +{lei.burnBonus%}",
+      "school_tag": "蛊",
+      "school_tags": [
+        "蛊",
+        "煞"
+      ]
     },
     {
       "id": "tiangang",
@@ -336,6 +371,10 @@
           "暴击伤害 +{v}",
           "pct"
         ]
+      ],
+      "school_tag": "煞",
+      "school_tags": [
+        "煞"
       ]
     },
     {
@@ -354,6 +393,10 @@
           "移动速度 +{v}",
           "pct"
         ]
+      ],
+      "school_tag": "煞",
+      "school_tags": [
+        "煞"
       ]
     },
     {
@@ -373,7 +416,12 @@
           "int"
         ]
       ],
-      "note": "选取时立即回复同等生命"
+      "note": "选取时立即回复同等生命",
+      "school_tag": "阵",
+      "school_tags": [
+        "阵",
+        "魂"
+      ]
     },
     {
       "id": "hundai",
@@ -391,6 +439,10 @@
           "拾取范围 +{v}",
           "pct"
         ]
+      ],
+      "school_tag": "魂",
+      "school_tags": [
+        "魂"
       ]
     },
     {
@@ -401,7 +453,7 @@
       "icon": "taomu",
       "max": 5,
       "per": {
-        "dmg": 0.1
+        "dmg": 0.12
       },
       "lines": [
         [
@@ -410,7 +462,11 @@
           "pct"
         ]
       ],
-      "note": "灼烧与符印爆炸不受加成"
+      "note": "全武器、灼烧与符印爆炸均受加成",
+      "school_tag": "符",
+      "school_tags": [
+        "符"
+      ]
     },
     {
       "id": "baixie",
@@ -436,7 +492,11 @@
           "pct"
         ]
       ],
-      "note": "同一只妖物身上 2/3/4 种异常：承伤 +15%/+32%/+55%；3 种以上且层数攒满引爆「百邪崩」"
+      "note": "同一只妖物身上 2/3/4 种异常：承伤 +10%/+20%/+32%；3 种以上且层数攒满引爆「百邪崩」",
+      "school_tag": "蛊",
+      "school_tags": [
+        "蛊"
+      ]
     },
     {
       "id": "jingxin",
@@ -454,6 +514,10 @@
           "冲刺冷却 -{v}",
           "pct"
         ]
+      ],
+      "school_tag": "阵",
+      "school_tags": [
+        "阵"
       ]
     },
     {
@@ -478,6 +542,10 @@
           "铜钱掉落率 +{v}",
           "pct"
         ]
+      ],
+      "school_tag": "魂",
+      "school_tags": [
+        "魂"
       ]
     }
   ],
@@ -508,11 +576,11 @@
       "icon": "evo_changming",
       "stats": {
         "orbs": 6,
-        "dmg": 22,
+        "dmg": 16,
         "radius": 120,
         "trailEvery": 0.22,
         "trailLife": 1.4,
-        "trailDmg": 7
+        "trailDmg": 8
       },
       "desc": "灯火固定 {orbs} 团，伤害 {dmg}\n半径 {radius}\n灯火走过之处留下火路\n火路每 0.5 秒灼伤 {trailDmg}"
     },

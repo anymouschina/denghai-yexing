@@ -1,13 +1,14 @@
 {
- "_doc": "异常体系（完整/疾速模式；经典口径不启用，平衡基线不变）。四种异常各自叠层，同一只妖物身上异常种类越多受到的伤害越高（共鸣），特定组合触发反应，层数攒满引爆百邪崩。借鉴：Mindustry StatusEffect 的反应表（incoming×existing→处理器、乘区每帧缓存一次）、Shattered Pixel Dungeon Corrosion/ParalysisResist 的越叠越痛与阈值破、Path of Exile 感电=承伤提高（公开 wiki）。",
+ "_doc": "异常体系（完整/疾速模式；经典口径不启用，平衡基线不变）。四种异常各自叠层，同一只妖物身上异常种类越多受到的伤害越高（共鸣），特定组合触发反应，层数攒满引爆百邪崩。",
  "modes": ["full", "quick"],
- "burn": {"name": "灼烧", "max": 5, "time": 3.0, "tick": 0.5, "baseDps": 3, "color": "#ff9a3c", "src": "灯火环/火路命中、灼魂点燃"},
+ "maxMul": 1.65,
+ "burn": {"name": "灼烧", "max": 5, "time": 3.0, "tick": 0.5, "baseDps": 3, "dmgScale": 0.5, "color": "#ff9a3c", "src": "灯火环/火路命中、灼魂点燃"},
  "shock": {"name": "感电", "max": 5, "time": 3.0, "per": 0.06, "color": "#7fd6ff", "src": "掌心雷/小金刚雷击命中（五雷正法每次 2 层）"},
  "seal": {"name": "符缚", "max": 5, "time": 3.0, "slowPer": 0.07, "bindTime": 1.0, "bindTaken": 0.2, "color": "#f2c14b", "src": "驱邪符命中、符印爆炸；叠满定身并在定身中承伤提高"},
  "marks": {"name": "剑痕", "color": "#9fe8ff", "src": "飞剑命中（层数/时长见 dungeon.json sword.markMax/markLife）"},
  "resonance": [0, 0, 0.15, 0.32, 0.55],
  "reactions": {
-  "leihuo": {"name": "雷火爆", "minBurn": 2, "mul": 1.0, "radius": 110, "splash": 2, "splashMul": 0.5, "color": "#ffd36a", "desc": "感电落到灼烧≥2层的妖物：引爆它身上剩余的全部灼烧伤害，溅射最近 2 只（50%）"},
+  "leihuo": {"name": "雷火爆", "minBurn": 2, "mul": 1.0, "radius": 110, "color": "#ffd36a", "desc": "感电落到灼烧≥2层的妖物：引爆它身上剩余的全部灼烧伤害，波及周围"},
   "fenfu": {"name": "焚符", "minSeal": 2, "addBurn": 2, "color": "#ff7a3c", "desc": "点燃符缚≥2层的妖物：符纸着火，灼烧直接 +2 层"},
   "zhenlei": {"name": "镇雷", "minShock": 2, "bindMul": 2.0, "color": "#bfeaff", "desc": "符缚叠满定身时若已感电≥2层：定身时间翻倍"}
  },

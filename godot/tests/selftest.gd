@@ -608,7 +608,7 @@ func _init() -> void:
 	tb.full(0, 0, 4, 4, Color.WHITE)
 	tb.circle(Vector2(5, 5), 3.0, Color.WHITE)
 	tb.line(Vector2.ZERO, Vector2(5, 0), 2.0, Color.WHITE)
-	ok(tb.pts.size() == 4 + 14 + 4 and tb.idx.size() == 6 + 36 + 6, "TriBatch 顶点/索引数量正确")
+	ok(tb._vc == 4 + 14 + 4 and tb._ic == 6 + 36 + 6, "TriBatch 顶点/索引数量正确")
 
 	print("== 存档往返 ==")
 	var sv1 := fresh(5)
@@ -767,7 +767,7 @@ func _test_d1() -> void:
 	ok(fr.poi_cd.has(ci) and float(fr.poi_cd[ci]) > 1.0, "冷却到期时刻随存档恢复为时间（不是 true）")
 	var bf := Sim.new(62, {"mode": "full"})
 	var bb := bf.spawn_enemy("boss", 0.0, 0.0, {"boss": true})
-	ok(int(bb.maxhp) == 1000000, "完整模式终局 Boss 血量 1,000,000")
+	ok(int(bb.maxhp) == int(GameData.EN.boss.hpByMode.full), "完整模式终局 Boss 按模式定血量")
 	ok(int(Sim.new(62, {"mode": "quick"}).spawn_enemy("boss", 0.0, 0.0, {"boss": true}).maxhp) == int(GameData.EN.boss.hpByMode.quick), "疾速模式 Boss 按模式定血量")
 	ok(int(Sim.new(62).spawn_enemy("boss", 0.0, 0.0, {"boss": true}).maxhp) < 200000, "经典口径 Boss 血量不变")
 	ok(UI.fmt_int(1000000) == "1,000,000", "血条数字千分位")

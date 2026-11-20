@@ -83,7 +83,8 @@
  },
  "sword": {
   "name": "飞剑术",
-  "dmg": 150,
+  "dmg": 85,
+  "armor_pierce": 0.5,
   "orbitRx": 190,
   "orbitRy": 115,
   "orbitW": 5.2,

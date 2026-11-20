@@ -1,50 +1,173 @@
-[
- {
-  "id": "flame",
-  "name": "烈焰焚魂",
-  "stat": "dmg",
-  "per": 0.08
- },
- {
-  "id": "thunder",
-  "name": "雷火超载",
-  "stat": "crit",
-  "per": 0.06
- },
- {
-  "id": "swift",
-  "name": "疾行剑影",
-  "stat": "speed",
-  "per": 0.08
- },
- {
-  "id": "wealth",
-  "name": "聚财招魂",
-  "stat": "pickup",
-  "per": 0.2
- },
- {
-  "id": "ward",
-  "name": "镇邪护心",
-  "stat": "dmgTaken",
-  "per": -0.06
- },
- {
-  "id": "burst",
-  "name": "爆裂金光",
-  "stat": "dmg",
-  "per": 0.1
- },
- {
-  "id": "soul",
-  "name": "汲魂回春",
-  "stat": "maxHp",
-  "per": 25
- },
- {
-  "id": "army",
-  "name": "百兵齐鸣",
-  "stat": "crit",
-  "per": 0.08
- }
-]
+{
+  "_doc": "遗物 2 件套（sets）与 SNKRX 风格 2/4/6 灯派羁绊（schools：符/阵/蛊/煞/魂）",
+  "sets": [
+    {
+      "id": "flame",
+      "name": "烈焰焚魂",
+      "stat": "dmg",
+      "per": 0.08,
+      "desc": "全伤害 +8%；灼烧妖物死亡时向周围 130 像素传染灼烧并造成 25 范围伤害"
+    },
+    {
+      "id": "thunder",
+      "name": "雷火超载",
+      "stat": "crit",
+      "per": 0.06,
+      "desc": "暴击率 +6%；雷击命中灼烧目标时触发额外超载电弧"
+    },
+    {
+      "id": "swift",
+      "name": "疾行剑影",
+      "stat": "speed",
+      "per": 0.08,
+      "desc": "移动速度 +8%；每移动 400 像素自动斩出一道穿透剑气"
+    },
+    {
+      "id": "wealth",
+      "name": "聚财招魂",
+      "stat": "pickup",
+      "per": 0.20,
+      "desc": "拾取范围 +20%；击杀有 12% 概率额外掉落铜钱"
+    },
+    {
+      "id": "ward",
+      "name": "镇邪护心",
+      "stat": "dmgTaken",
+      "per": -0.06,
+      "desc": "受到伤害 -6%；受击时清除全场敌弹并震退 200 像素内妖物（冷却 6 秒）"
+    },
+    {
+      "id": "burst",
+      "name": "爆裂金光",
+      "stat": "dmg",
+      "per": 0.10,
+      "desc": "全伤害 +10%；暴击时向周围 90 像素溅射 30% 基础伤害"
+    },
+    {
+      "id": "soul",
+      "name": "汲魂回春",
+      "stat": "maxHp",
+      "per": 25,
+      "desc": "最大生命 +25；每击杀 12 只妖物回复 6 生命并缩短葫芦合击冷却 3 秒"
+    },
+    {
+      "id": "army",
+      "name": "百兵齐鸣",
+      "stat": "crit",
+      "per": 0.08,
+      "desc": "暴击率 +8%；飞剑每命中 8 次释放 140 像素剑环冲击波"
+    }
+  ],
+  "schools": [
+    {
+      "id": "符",
+      "name": "符箓派",
+      "color": "#f2c14b",
+      "tiers": [
+        {
+          "count": 2,
+          "desc": "符咒冷却 -8%，全伤害 +6%",
+          "stats": { "fuCd": 0.08, "dmg": 0.06 }
+        },
+        {
+          "count": 4,
+          "desc": "驱邪符 +1 张、符咒冷却 -14%，全伤害 +14%",
+          "stats": { "fuCount": 1, "fuCd": 0.14, "dmg": 0.14 }
+        },
+        {
+          "count": 6,
+          "desc": "驱邪符 +2 张、符咒冷却 -20%，全伤害 +26%、暴击率 +10%",
+          "stats": { "fuCount": 2, "fuCd": 0.20, "dmg": 0.26, "crit": 0.10 }
+        }
+      ]
+    },
+    {
+      "id": "阵",
+      "name": "灯阵派",
+      "color": "#ff9a3c",
+      "tiers": [
+        {
+          "count": 2,
+          "desc": "灯火环转速 +15%，灼烧伤害 +20%",
+          "stats": { "orbSpin": 0.15, "burnMul": 0.20 }
+        },
+        {
+          "count": 4,
+          "desc": "受到伤害 -8%，灯油获取 +20%，灼烧伤害 +40%",
+          "stats": { "dmgTaken": -0.08, "oilGainMul": 0.20, "burnMul": 0.40 }
+        },
+        {
+          "count": 6,
+          "desc": "受到伤害 -14%，灯油获取 +35%，挑灯爆焰伤害 +60%，全伤害 +20%",
+          "stats": { "dmgTaken": -0.14, "oilGainMul": 0.35, "flareDmgMul": 0.60, "dmg": 0.20 }
+        }
+      ]
+    },
+    {
+      "id": "蛊",
+      "name": "百邪蛊派",
+      "color": "#b39cff",
+      "tiers": [
+        {
+          "count": 2,
+          "desc": "异常持续 +20%，异常共鸣每类 +4%",
+          "stats": { "ailDur": 0.20, "ailRes": 0.04 }
+        },
+        {
+          "count": 4,
+          "desc": "异常持续 +35%，异常共鸣每类 +8%，暴击率 +8%",
+          "stats": { "ailDur": 0.35, "ailRes": 0.08, "crit": 0.08 }
+        },
+        {
+          "count": 6,
+          "desc": "异常持续 +50%，异常共鸣每类 +12%，全伤害 +22%，暴击率 +14%",
+          "stats": { "ailDur": 0.50, "ailRes": 0.12, "dmg": 0.22, "crit": 0.14 }
+        }
+      ]
+    },
+    {
+      "id": "煞",
+      "name": "煞雷剑派",
+      "color": "#7fd6ff",
+      "tiers": [
+        {
+          "count": 2,
+          "desc": "暴击率 +8%，暴击伤害 +20%",
+          "stats": { "crit": 0.08, "critMul": 0.20 }
+        },
+        {
+          "count": 4,
+          "desc": "暴击率 +15%，暴击伤害 +40%，移速 +8%",
+          "stats": { "crit": 0.15, "critMul": 0.40, "speed": 0.08 }
+        },
+        {
+          "count": 6,
+          "desc": "暴击率 +24%，暴击伤害 +65%，掌心雷连锁 +1，全伤害 +22%",
+          "stats": { "crit": 0.24, "critMul": 0.65, "chain": 1, "dmg": 0.22 }
+        }
+      ]
+    },
+    {
+      "id": "魂",
+      "name": "聚魂派",
+      "color": "#7dff9a",
+      "tiers": [
+        {
+          "count": 2,
+          "desc": "拾取范围 +25%，最大生命 +25",
+          "stats": { "pickup": 0.25, "maxHp": 25 }
+        },
+        {
+          "count": 4,
+          "desc": "拾取范围 +45%，最大生命 +55，生命回复 +1.5/秒",
+          "stats": { "pickup": 0.45, "maxHp": 55, "regen": 1.5 }
+        },
+        {
+          "count": 6,
+          "desc": "拾取范围 +70%，最大生命 +95，生命回复 +3.0/秒，结算魂火 +35%",
+          "stats": { "pickup": 0.70, "maxHp": 95, "regen": 3.0, "soulGain": 0.35 }
+        }
+      ]
+    }
+  ]
+}

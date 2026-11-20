@@ -53,6 +53,9 @@ func gauss() -> float:
 func act(s: Sim, dt: float) -> void:
 	if s.ended or s.over:
 		return
+	if s.extract_choice_open:
+		s.choose_extract()
+		return
 	if not s.choice.is_empty():
 		_pick(s)
 		return
@@ -83,6 +86,8 @@ func _pick(s: Sim) -> void:
 		var sc := 0.0
 		if o.kind == "evo":
 			sc = 100.0
+		elif o.kind == "rule":
+			sc = 88.0
 		elif o.kind == "up":
 			sc = PRIORITY.get(o.id, 20.0)
 			var u: Dictionary = GameData.UPS[o.id]
@@ -200,6 +205,16 @@ func _combat(s: Sim, dt: float) -> void:
 	_sword(s, dt)
 	if explore and s.pet_on and s.combo_cd <= 0.0 and s.enemies.size() >= 8:
 		s.in_combo = true
+	if kind != Kind.RANDOM and s.flare_cd <= 0.0 and s.lantern_oil >= 30.0 and s.ebullets.size() >= 6:
+		var close_b := 0
+		for b: SimBullet in s.ebullets:
+			var dx := b.x - s.px
+			var dy := b.y - (s.py - 30.0)
+			if dx * dx + dy * dy < 220.0 * 220.0:
+				close_b += 1
+				if close_b >= 4:
+					s.trigger_flare()
+					break
 
 
 func _think(s: Sim) -> void:
@@ -237,7 +252,7 @@ func _think(s: Sim) -> void:
 		var w := dd
 		if k.kind == "chest":
 			w *= 0.5
-		elif k.kind == "oil" and s.hp > s.maxhp * 0.75:
+		elif k.kind == "oil" and s.hp > s.maxhp * 0.75 and s.lantern_oil > 65.0:
 			continue
 		if w < gd:
 			gd = w

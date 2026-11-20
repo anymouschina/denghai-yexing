@@ -1,0 +1,125 @@
+{
+ "when": "2026-11-20T13:11:42.629Z",
+ "row": {
+  "touch": false,
+  "at": 700,
+  "seed": 3,
+  "throttle": 4,
+  "frames": 1163,
+  "fps": 57.9,
+  "mean_ms": 17.27,
+  "p50_ms": 16.7,
+  "p95_ms": 16.8,
+  "p99_ms": 33.3,
+  "worst_ms": 50,
+  "over33_pct": 0.4,
+  "longtasks": 1,
+  "longtask_max_ms": 58,
+  "parts_ms_per_frame": {
+   "d_enemy": 1.56,
+   "d_float": 0.32,
+   "d_pickup": 0.43,
+   "d_proj": 0.57,
+   "d_shadow": 0.04,
+   "fx_add_draw": 2.03,
+   "ground_add_draw": 0.29,
+   "hud_draw": 0.35,
+   "hud_tick": 0.05,
+   "sim_step": 2.56,
+   "view_tick": 0.81,
+   "world_draw": 4.27
+  },
+  "samples": [
+   {
+    "clock": 817,
+    "en": 237,
+    "bul": 47,
+    "eb": 21,
+    "pk": 132,
+    "dc": 167,
+    "scene": "play"
+   },
+   {
+    "clock": 818,
+    "en": 235,
+    "bul": 46,
+    "eb": 25,
+    "pk": 132,
+    "dc": 166,
+    "scene": "play"
+   },
+   {
+    "clock": 818,
+    "en": 237,
+    "bul": 44,
+    "eb": 36,
+    "pk": 133,
+    "dc": 164,
+    "scene": "play"
+   },
+   {
+    "clock": 819,
+    "en": 241,
+    "bul": 48,
+    "eb": 35,
+    "pk": 132,
+    "dc": 167,
+    "scene": "play"
+   },
+   {
+    "clock": 820,
+    "en": 215,
+    "bul": 46,
+    "eb": 48,
+    "pk": 133,
+    "dc": 167,
+    "scene": "play"
+   },
+   {
+    "clock": 820,
+    "en": 219,
+    "bul": 50,
+    "eb": 42,
+    "pk": 132,
+    "dc": 167,
+    "scene": "play"
+   },
+   {
+    "clock": 821,
+    "en": 206,
+    "bul": 54,
+    "eb": 36,
+    "pk": 133,
+    "dc": 168,
+    "scene": "play"
+   },
+   {
+    "clock": 822,
+    "en": 206,
+    "bul": 53,
+    "eb": 34,
+    "pk": 133,
+    "dc": 167,
+    "scene": "play"
+   },
+   {
+    "clock": 822,
+    "en": 182,
+    "bul": 47,
+    "eb": 36,
+    "pk": 131,
+    "dc": 169,
+    "scene": "play"
+   },
+   {
+    "clock": 823,
+    "en": 181,
+    "bul": 52,
+    "eb": 38,
+    "pk": 131,
+    "dc": 168,
+    "scene": "play"
+   }
+  ]
+ }
+}

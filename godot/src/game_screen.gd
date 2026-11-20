@@ -15,8 +15,14 @@ var saved_result := false
 var night: CanvasLayer
 var embers: Array = []
 var ember_layer: Node2D
+var ember_batch := TriBatch.new()
+var ember_tex: Texture2D
 var hit_stop := 0.0
 var bot: Bot = null
+var flare_q := false
+var _was_running := true
+var _idle_redraws := 2
+var _ended_redraws := 0
 
 
 var last_cp := 0
@@ -30,9 +36,13 @@ func start(p_touch: bool, resume: Dictionary = {}) -> void:
 	var seed_v: int = Playtest.seed_value if Playtest.seed_value != 0 else int(Time.get_ticks_usec() & 0x7fffffff)
 	if not resume.is_empty():
 		seed_v = int(resume.get("seed_v", seed_v))
-	sim = Sim.new(seed_v, {"emit": true, "touch": touch_mode, "meta": sv.meta, "mode": String(resume.get("mode", sv.get("mode", "full")))})
+	var mode_id := String(resume.get("mode", sv.get("mode", "full")))
+	var beacon_id := String(resume.get("beacon_id", resume.get("beacon", sv.get("beacon", "beacon_default"))))
+	sim = Sim.new(seed_v, {"emit": true, "touch": touch_mode, "meta": sv.meta, "mode": mode_id, "beacon_id": beacon_id})
 	if not resume.is_empty():
 		sim.from_save(resume)
+	elif sim.has_method("start_run"):
+		sim.call("start_run", mode_id, beacon_id)
 	if Playtest.enabled and Playtest.bench == 0 and resume.is_empty():
 		sim.coins = 120   # 试玩桥：起始 120 铜钱（仅用于让剧本能在 3 分钟内演示商店购买；正常游玩为 0）
 	view = WorldView.new()
@@ -54,6 +64,7 @@ func start(p_touch: bool, resume: Dictionary = {}) -> void:
 	nt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	night.add_child(nt)
 	if not view.low_perf:
+		ember_tex = Fx.glow()
 		ember_layer = Node2D.new()
 		ember_layer.set_script(preload("res://src/layer.gd"))
 		ember_layer.cb = _draw_embers
@@ -96,13 +107,17 @@ func start(p_touch: bool, resume: Dictionary = {}) -> void:
 
 
 func _draw_embers(c: Node2D) -> void:
+	if ember_tex == null or embers.is_empty():
+		return
 	var v := get_viewport().get_visible_rect().size
-	var g: Texture2D = Fx.glow()
+	var t_sec := float(Time.get_ticks_msec()) / 1500.0
+	var col := Color(1.0, 0.7, 0.3, 0.55)
 	for e in embers:
 		var s: float = 64.0 * float(e.s)
-		var px: float = fmod(float(e.x) + sin(float(e.p) + Time.get_ticks_msec() / 1500.0) * 0.01, 1.0) * v.x
+		var px: float = fmod(float(e.x) + sin(float(e.p) + t_sec) * 0.01, 1.0) * v.x
 		var py: float = float(e.y) * v.y
-		c.draw_texture_rect(g, Rect2(px - s / 2.0, py - s / 2.0, s, s), false, Color(1.0, 0.7, 0.3, 0.55))
+		ember_batch.full(px - s * 0.5, py - s * 0.5, s, s, col)
+	ember_batch.flush(c.get_canvas_item(), ember_tex)
 
 
 func save_run(manual: bool = false) -> bool:
@@ -141,31 +156,38 @@ func _process(delta: float) -> void:
 	if sim.cp_serial != last_cp:
 		last_cp = sim.cp_serial
 		save_run()
-	# 余烬上飘
-	for e in embers:
-		e.y -= e.v * delta
-		if e.y < -0.05:
-			e.y = 1.05
-			e.x = randf()
-	if ember_layer != null:
+	var extract_open := bool(sim.get("extract_choice_open"))
+	var run := not paused and sim.choice.is_empty() and not sim.shop_open and not extract_open
+	if run != _was_running:
+		_was_running = run
+		_idle_redraws = 2
+	# 余烬上飘（暂停或弹窗打开时停止 60Hz 重绘）
+	if run and ember_layer != null:
+		for e in embers:
+			e.y -= e.v * delta
+			if e.y < -0.05:
+				e.y = 1.05
+				e.x = randf()
 		ember_layer.queue_redraw()
-	var modal := hud.modal_open()
+	var modal := hud.modal_open() or extract_open
 	touch.active = touch_mode and not modal and not paused and not sim.over
 	if touch_mode:
-		if touch.consume_pause() and not sim.over and sim.choice.is_empty() and not sim.shop_open:
+		if touch.consume_pause() and not sim.over and sim.choice.is_empty() and not sim.shop_open and not extract_open:
 			toggle_pause()
 	# 结算
 	if sim.ended:
 		if not saved_result:
 			saved_result = true
+			_ended_redraws = 2
 			_save_result()
 			hud.show_result(sim.result)
 			Audio.music("title")
-		view.tick(delta)
+		if _ended_redraws > 0:
+			_ended_redraws -= 1
+			view.tick(delta)
 		hud.tick(delta)
 		_publish()
 		return
-	var run := not paused and sim.choice.is_empty() and not sim.shop_open
 	if run:
 		var mv := Vector2.ZERO
 		if touch_mode and touch.mag > 0.0:
@@ -176,10 +198,13 @@ func _process(delta: float) -> void:
 			sim.in_move = mv
 		if Input.is_action_just_pressed("dash") or (touch_mode and touch.consume_dash()):
 			sim.in_dash = true
-		if Input.is_action_just_pressed("skill") or (touch_mode and touch.consume_skill()):
+		if (Input.is_action_just_pressed("skill") and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)) or (touch_mode and touch.consume_skill()):
 			sim.in_skill = true
-		if Input.is_action_just_pressed("combo") or (touch_mode and touch.consume_combo()):
+		if (Input.is_action_just_pressed("combo") and not Input.is_key_pressed(KEY_Q)) or (touch_mode and touch.consume_combo()):
 			sim.in_combo = true
+		if flare_q or (touch_mode and touch.consume_flare()):
+			flare_q = false
+			_trigger_flare()
 		var dt := minf(delta, 0.05)
 		if view.hit_stop > 0.0:
 			view.hit_stop -= delta
@@ -205,9 +230,14 @@ func _process(delta: float) -> void:
 	else:
 		sim.in_dash = false
 		sim.in_skill = false
-	var t_v := Time.get_ticks_usec()
-	view.tick(delta if run else 0.0)
-	PerfStat.add("view_tick", t_v)
+		flare_q = false
+	var need_view := run or _idle_redraws > 0 or view.fade > 0.01 or (sim.over and not sim.ended)
+	if need_view:
+		if not run and _idle_redraws > 0:
+			_idle_redraws -= 1
+		var t_v := Time.get_ticks_usec()
+		view.tick(delta if run else 0.0)
+		PerfStat.add("view_tick", t_v)
 	var t_h := Time.get_ticks_usec()
 	hud.tick(delta)
 	PerfStat.add("hud_tick", t_h)
@@ -274,6 +304,8 @@ func _publish() -> void:
 		scene = "dying"
 	elif paused:
 		scene = "paused"
+	elif bool(sim.get("extract_choice_open")):
+		scene = "extract"
 	elif not sim.choice.is_empty():
 		scene = "gift" if sim.choice.kind == "gift" else "levelup"
 	elif sim.shop_open:
@@ -286,6 +318,12 @@ func _publish() -> void:
 	snap["scene"] = scene
 	snap["touch"] = touch_mode
 	snap["stick"] = snappedf(touch.mag, 0.01)
+	if sim.get("lantern_oil") != null:
+		snap["oil"] = snappedf(float(sim.get("lantern_oil")), 0.1)
+	if sim.get("abyss_depth") != null:
+		snap["abyss_depth"] = int(sim.get("abyss_depth"))
+	if sim.get("beacon_id") != null:
+		snap["beacon_id"] = String(sim.get("beacon_id"))
 	snap["rift_state"] = sim.rift_state()
 	snap["sword"] = sim.sw_state
 	snap["wardenHp"] = int(sim.rift_warden.hp) if sim.rift_warden != null else 0
@@ -352,8 +390,21 @@ func _publish() -> void:
 func _unhandled_input(ev: InputEvent) -> void:
 	if sim == null:
 		return
+	var extract_open := bool(sim.get("extract_choice_open"))
+	if ev is InputEventMouseButton and ev.pressed:
+		var mb := ev as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_RIGHT:
+			if not paused and sim.choice.is_empty() and not sim.shop_open and not extract_open and not sim.over and not sim.ended:
+				flare_q = true
+			return
 	if ev is InputEventKey and ev.pressed and not ev.echo:
 		var k := (ev as InputEventKey).keycode
+		if extract_open:
+			if k == KEY_E:
+				on_extract()
+			elif k == KEY_F:
+				on_push_deeper()
+			return
 		if not sim.choice.is_empty():
 			if k == KEY_1 or k == KEY_KP_1:
 				on_choose(0)
@@ -373,6 +424,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 				on_buy(1)
 			elif k == KEY_3:
 				on_buy(2)
+			elif k == KEY_4:
+				on_buy(3)
+			elif k == KEY_5:
+				on_buy(4)
 			return
 		if sim.ended:
 			if k == KEY_ENTER or k == KEY_KP_ENTER or k == KEY_R or k == KEY_SPACE:
@@ -381,11 +436,38 @@ func _unhandled_input(ev: InputEvent) -> void:
 		if k == KEY_X and paused:
 			give_up()
 			return
+		if k == KEY_Q and not paused and not sim.over:
+			flare_q = true
+			return
 		if k == KEY_ESCAPE or k == KEY_P:
 			if not sim.over:
 				toggle_pause()
 		elif k == KEY_M:
 			toggle_mute()
+
+
+func _trigger_flare() -> void:
+	if sim.has_method("trigger_flare"):
+		var ok: Variant = sim.call("trigger_flare")
+		if ok is bool and ok:
+			view.ring(sim.px, sim.py - 20.0, 260.0, Color("ffd36a"))
+			hud.force_redraw()
+
+
+func on_extract() -> void:
+	Audio.play("click")
+	if sim.has_method("choose_extract"):
+		sim.call("choose_extract")
+	hud.force_redraw()
+
+
+func on_push_deeper() -> void:
+	Audio.play("click")
+	if sim.has_method("choose_push_deeper"):
+		sim.call("choose_push_deeper")
+	var depth := int(sim.get("abyss_depth")) if sim.get("abyss_depth") != null else 2
+	hud.show_banner("深入幽冥 • 第 %d 层（魂火 +45%%）" % depth, "#ff9a3c", true)
+	hud.force_redraw()
 
 
 func on_choose(i: int) -> void:

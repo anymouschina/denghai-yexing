@@ -10,7 +10,24 @@ const GHOST := Color("7fe3ff")
 const BLOOD := Color("e0463a")
 const PANEL := Color(0.06, 0.07, 0.16, 0.92)
 const RARITY := {"white": Color("e8e6f5"), "blue": Color("6fb6ff"), "purple": Color("c08cff"), "gold": Color("ffcf5a")}
-const SCHOOL := {"fu": Color("f2c14b"), "huo": Color("ff9a3c"), "lei": Color("7fd6ff"), "gen": Color("b39cff")}
+const SCHOOL := {
+	"fu": Color("f2c14b"), "符": Color("f2c14b"),
+	"huo": Color("ff9a3c"),
+	"lei": Color("7fd6ff"),
+	"zhen": Color("7fd6ff"), "阵": Color("7fd6ff"),
+	"gu": Color("6fdc7a"), "蛊": Color("6fdc7a"),
+	"sha": Color("ff5a5a"), "煞": Color("ff5a5a"),
+	"hun": Color("c08cff"), "魂": Color("c08cff"),
+	"gen": Color("b39cff"),
+}
+const SCHOOL_NAME := {
+	"fu": "符", "符": "符",
+	"zhen": "阵", "阵": "阵",
+	"gu": "蛊", "蛊": "蛊",
+	"sha": "煞", "煞": "煞",
+	"hun": "魂", "魂": "魂",
+	"huo": "火", "lei": "雷", "gen": "通",
+}
 
 static var _font: Font = null
 static var _theme: Theme = null
@@ -118,6 +135,40 @@ static func fmt_int(n: int) -> String:
 static func fmt_time(sec: float) -> String:
 	var s := int(sec)
 	return "%d:%02d" % [s / 60, s % 60]
+
+
+static func load_json_safe(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return null
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return null
+	return JSON.parse_string(f.get_as_text())
+
+
+static func fmt_set_bonus(sd: Dictionary) -> String:
+	if sd.has("desc") and String(sd.get("desc", "")) != "":
+		return String(sd.get("desc", ""))
+	var st := String(sd.get("stat", ""))
+	var per := float(sd.get("per", 0.0))
+	match st:
+		"dmg":
+			return "伤害 +%d%%" % int(round(per * 100.0))
+		"crit":
+			return "暴击 +%d%%" % int(round(per * 100.0))
+		"speed":
+			return "移速 +%d%%" % int(round(per * 100.0))
+		"pickup":
+			return "拾取范围 +%d%%" % int(round(per * 100.0))
+		"dmgTaken":
+			return "减伤 +%d%%" % int(round(absf(per) * 100.0))
+		"maxHp":
+			return "生命上限 +%d" % int(round(per))
+		"cd":
+			return "冷却 -%d%%" % int(round(absf(per) * 100.0))
+		"oil":
+			return "灯油效率 +%d%%" % int(round(per * 100.0))
+	return ""
 
 
 static func pop_in(c: Control, delay: float = 0.0) -> void:

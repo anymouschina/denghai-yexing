@@ -1,0 +1,79 @@
+{
+  "_doc": "双阴律主动规则卡（最多同时装备 2 条，源自 MIT no-survivor-game 规则改写架构）",
+  "maxEquipped": 2,
+  "rules": [
+    {
+      "id": "rule_graze_oil",
+      "name": "擦弹聚油",
+      "desc": "擦灯闪避或近距擦过敌弹时，额外回复 12 灯油并返还 15% 冲刺冷却",
+      "icon_tag": "oil",
+      "params": {
+        "oilGain": 12.0,
+        "dashCdRefund": 0.15,
+        "grazeRadius": 44.0,
+        "grazeCd": 0.35
+      }
+    },
+    {
+      "id": "rule_step_lotus",
+      "name": "步步生莲",
+      "desc": "每移动 180 像素在身后绽放幽莲灯火，炸裂造成 32 范围伤害并附加灼烧",
+      "icon_tag": "lotus",
+      "params": {
+        "stepDist": 180.0,
+        "dmg": 32.0,
+        "radius": 88.0,
+        "burnStacks": 1
+      }
+    },
+    {
+      "id": "rule_corpse_flame",
+      "name": "尸爆传火",
+      "desc": "灼烧中的妖物死亡时炸裂，对 105 像素内造成其 12% 最大生命伤害并传染灼烧（连锁上限 1 层）",
+      "icon_tag": "flame",
+      "params": {
+        "radius": 105.0,
+        "hpPct": 0.12,
+        "minDmg": 24.0,
+        "maxDmg": 420.0,
+        "maxDepth": 1,
+        "burnStacks": 1
+      }
+    },
+    {
+      "id": "rule_low_frenzy",
+      "name": "残灯狂澜",
+      "desc": "处于残灯态（灯油 < 30%）时，全武器伤害额外 +28%、冷却 -18%，击杀回复 2 生命",
+      "icon_tag": "frenzy",
+      "params": {
+        "oilThreshold": 30.0,
+        "dmgAdd": 0.28,
+        "cdMul": 0.82,
+        "killHeal": 2.0
+      }
+    },
+    {
+      "id": "rule_shrine_ward",
+      "name": "龛火护身",
+      "desc": "触发挑灯爆焰或点亮荒野灯龛后，获得 6 秒护身灯罩：减伤 25% 且每秒灼伤周围 28",
+      "icon_tag": "ward",
+      "params": {
+        "dur": 6.0,
+        "dmgReduce": 0.25,
+        "auraRadius": 140.0,
+        "auraDps": 28.0
+      }
+    },
+    {
+      "id": "rule_synergy_echo",
+      "name": "灯派共鸣",
+      "desc": "每激活一档灯派羁绊（2/4/6），全伤害 +8%、暴击伤害 +15%，异常乘区上限 +0.10",
+      "icon_tag": "echo",
+      "params": {
+        "dmgPerTier": 0.08,
+        "critMulPerTier": 0.15,
+        "ailCapAdd": 0.10
+      }
+    }
+  ]
+}
