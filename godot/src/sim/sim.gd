@@ -171,6 +171,17 @@ var break_idx := -1          # 当前段间序号 0/1/2
 var break_t := 0.0
 var gift_pending := false
 var rift_entries := 0
+var rift_ready_at := 0.0          # 第 3 次起进裂隙需等冷却（clock 秒）
+var poi_cd: Dictionary = {}       # 地标/POI 的冷却到期时刻（clock 秒）
+var vine_runs := 0                # 葫芦藤秘境已挑战次数（决定门票价与 BOSS 强度）
+var vine_boss: SimEnemy = null
+var vine_guard_t := 0.0
+var vine_ticket_paid := 0
+var sw_master := 0                # 飞剑满阶后的「精通」层数（+8% 飞剑伤害/层，上限 5）
+var sw_kill5 := 0
+var sw_cnt: Dictionary = {}       # 各攻击方式命中次数（实测记录）
+var gourd_log: Array = []         # 每件葫芦散件的来源与时间
+var poi_log: Array = []           # 各交互点实际触发记录
 var rift_clears := 0
 var rift_sealed: Dictionary = {}
 var threat_next := 0
@@ -537,6 +548,8 @@ func _step_combat(dt: float) -> void:
 	_update_pois(dt)
 	_update_pet(dt)
 	_update_minis()
+	if phase == PH_SEG and stretch > 1.0 and gourds.size() < 7 and clock >= 170.0 * float(gourds.size() + 1):
+		grant_gourd("保底")
 	if phase == PH_SEG and t >= seg_to(seg) - 20.0 / stretch and not announced.has(seg):
 		announced[seg] = true
 		_ev("banner", "20 秒后清场 • 场地中央将裂开「灯骸裂隙」", "#d9b8ff")
@@ -950,10 +963,9 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 		hp = minf(maxhp, hp + 1.0)
 	if e.el.has("mini"):
 		_mini_drop(e)
-	if has_sword() and sw_stage < 5:
+	if has_sword():
 		sw_kills += 1
-		if sw_kills >= int(GameData.DG.sword.stages.kills[sw_stage - 1]):
-			_sword_advance("剑意(击杀)")
+		_sw_check()
 	e.mark_t = 0.0
 	_ev("kill", e)
 	if e.warden:
@@ -1289,6 +1301,7 @@ func _update_sword(dt: float) -> void:
 
 func _sword_strike(e: SimEnemy, base: float, thrust: bool, key: String = "sword", crit: bool = false) -> void:
 	var sw: Dictionary = GameData.DG.sword
+	sw_cnt[key] = int(sw_cnt.get(key, 0)) + 1
 	# 先叠剑痕再结算：本次伤害就吃到新层（+6%/层，5 层封顶）
 	e.marks = mini(int(sw.markMax), e.marks + 1)
 	e.marks_t = sw.markLife
@@ -1296,7 +1309,7 @@ func _sword_strike(e: SimEnemy, base: float, thrust: bool, key: String = "sword"
 	if crit:
 		o["forceCrit"] = true
 	# 阶段与剑冢通关带来的剑意增益（加算，随飞剑成长）：+30%/阶 +25%/次剑冢通关
-	var grow: float = 1.0 + 0.3 * float(sw_stage - 1) + float([0.0, 0.5, 0.6][mini(rift_clears, 2)])
+	var grow: float = 1.0 + 0.3 * float(sw_stage - 1) + float([0.0, 0.5, 0.6][mini(rift_clears, 2)]) + 0.08 * float(sw_master)
 	damage(e, base * grow * (sw.thrustMul if thrust else 1.0), key, o)
 
 
@@ -2131,13 +2144,28 @@ func rift_gate(sealed_key: int) -> String:
 	## 进入裂隙的通用条件（段间与大地图入口共用）：返回 "ok" 或原因
 	if rift_sealed.has(sealed_key):
 		return "sealed"
-	if rift_entries >= int(GameData.DG.rift.maxEntries):
-		return "max"
+	if rift_entries >= 2 and clock < rift_ready_at:
+		return "cooldown"
 	if hp < maxhp * float(GameData.DG.rift.hpGate):
 		return "weak"
 	if wicks < int(GameData.DG.wick.riftCost):
 		return "nowick"
 	return "ok"
+
+
+func rift_cd_left() -> float:
+	return maxf(0.0, rift_ready_at - clock) if rift_entries >= 2 else 0.0
+
+
+func vine_ticket() -> int:
+	return 40 + 20 * vine_runs
+
+
+## 下一件葫芦的保底倒计时（仅完整/疾速模式；经典口径不发保底，保持平衡基线）
+func gourd_guarantee_left() -> float:
+	if stretch <= 1.0 or gourds.size() >= 7:
+		return -1.0
+	return maxf(0.0, 170.0 * float(gourds.size() + 1) - clock)
 
 
 func rift_state() -> String:
@@ -2148,8 +2176,12 @@ func rift_state() -> String:
 
 
 func poi_state(i: int) -> String:
-	if phase == PH_SEG and (pois[i].kind == "gourd" or pois[i].kind == "vault"):
+	if phase == PH_SEG and pois[i].kind == "gourd":
+		return "noticket" if coins < vine_ticket() else "ok"
+	if phase == PH_SEG and pois[i].kind == "vault":
 		return "sealed" if rift_sealed.has(100 + i) else "ok"
+	if phase == PH_SEG and LM_KINDS.has(pois[i].kind):
+		return lm_state(i)
 	if phase != PH_SEG or pois[i].kind != "sword":
 		return "none"
 	return rift_gate(100 + i)
@@ -2161,7 +2193,9 @@ func _gen_pois() -> void:
 	pois = [{"kind": "sword", "x": c.x + 450.0, "y": c.y - 300.0, "name": "剑冢裂隙 • 东北"}, {"kind": "sword", "x": c.x - 1100.0, "y": c.y + 720.0, "name": "剑冢裂隙 • 西南"},
 		{"kind": "merchant", "x": c.x - 300.0, "y": c.y - 200.0, "name": "游商灯摊"},
 		{"kind": "vine", "x": c.x + 300.0, "y": c.y + 250.0, "name": "葫芦灵藤"}, {"kind": "vine", "x": c.x - 1300.0, "y": c.y - 300.0, "name": "葫芦灵藤"},
-		{"kind": "gourd", "x": c.x + 1300.0, "y": c.y + 650.0, "name": "古药葫芦秘境"}, {"kind": "vault", "x": c.x - 400.0, "y": c.y - 950.0, "name": "镇魂宝库"}]
+		{"kind": "gourd", "x": c.x + 1300.0, "y": c.y + 650.0, "name": "葫芦藤秘境"}, {"kind": "vault", "x": c.x - 400.0, "y": c.y - 950.0, "name": "镇魂宝库"},
+		{"kind": "altar", "x": c.x, "y": 260.0, "name": "古井祭坛"}, {"kind": "arch", "x": W - 300.0, "y": c.y, "name": "破败牌坊"},
+		{"kind": "tomb", "x": 300.0, "y": c.y, "name": "灯冢废墟"}, {"kind": "incense", "x": c.x, "y": H - 260.0, "name": "荒庙香炉"}]
 	explored.resize(36 * 24)
 	_spawn_pickup("chest", c.x + 160.0, c.y + 90.0, 1)
 
@@ -2181,6 +2215,96 @@ func _mark_explored() -> void:
 					explored_n += 1
 
 
+const LM_KINDS := ["altar", "arch", "tomb", "incense"]
+const LM_CD := {"altar": 180.0, "arch": 120.0, "tomb": 200.0, "incense": 90.0}
+const LM_COST := {"altar": 0, "arch": 30, "tomb": 0, "incense": 20}
+
+
+func lm_cd_left(i: int) -> float:
+	return maxf(0.0, float(poi_cd.get(i, 0.0)) - clock)
+
+
+func lm_state(i: int) -> String:
+	var k: String = pois[i].kind
+	if lm_cd_left(i) > 0.0:
+		return "cd"
+	if coins < int(LM_COST[k]):
+		return "nocoin"
+	if k == "altar" and hp < maxhp * 0.4:
+		return "weak"
+	if k == "incense" and hp >= maxhp - 0.5:
+		return "full"
+	return "ok"
+
+
+func lm_hint(i: int) -> String:
+	var k: String = pois[i].kind
+	match lm_state(i):
+		"cd": return "冷却中 %d 秒" % int(ceil(lm_cd_left(i)))
+		"nocoin": return "需要铜钱 %d（现有 %d）" % [int(LM_COST[k]), coins]
+		"weak": return "生命需高于 40%"
+		"full": return "生命已满，无需上香"
+	match k:
+		"altar": return "站定献祭：失去 20% 生命，换一件遗物"
+		"arch": return "站定许愿：铜钱 30，随机 灯芯 / 宝箱 / 葫芦"
+		"tomb": return "站定掘冢：惊出守冢精英，击败得宝箱"
+		"incense": return "站定上香：铜钱 20，回复 40% 生命"
+	return ""
+
+
+func _use_landmark(i: int) -> void:
+	var k: String = pois[i].kind
+	var pp := Vector2(float(pois[i].x), float(pois[i].y))
+	poi_cd[i] = clock + float(LM_CD[k])
+	coins -= int(LM_COST[k])
+	var what := ""
+	match k:
+		"altar":
+			hp = maxf(1.0, hp - maxhp * 0.2)
+			var pool: Array = []
+			for r in GameData.RELICS:
+				if not relics.has(r.id) and not r.has("part") and r.tier != "white":
+					pool.append(r.id)
+			if pool.size() > 0:
+				var rid: String = pool[int(rng.randf() * pool.size())]
+				relics.append(rid)
+				_recalc()
+				_ev("relic", rid)
+				what = "献祭 -20%% 生命，得遗物「%s」" % GameData.RELIC_BY_ID[rid].name
+			else:
+				coins += 80
+				what = "献祭 -20% 生命，遗物已齐，换得铜钱 80"
+		"arch":
+			var r2 := rng.randf()
+			if r2 < 0.45:
+				wicks += 1
+				what = "许愿成真 • 灯芯 +1"
+			elif r2 < 0.8:
+				pending_chest += 1
+				what = "许愿成真 • 古灯宝箱 ×1"
+			elif grant_gourd("牌坊许愿"):
+				what = "许愿成真 • 彩虹葫芦散件"
+			else:
+				coins += 90
+				what = "许愿成真 • 铜钱 90"
+		"tomb":
+			var base: Dictionary = GameData.EN.elites["jiangshi"].duplicate()
+			base.hp = float(base.hp) * 0.5
+			spawn_enemy("jiangshi", -1.0, -1.0, {"elite": true, "el": base, "pos": pp + Vector2(0, -160.0)})
+			for j in range(6):
+				var a := rng.randf() * TAU
+				spawn_enemy("paperman", -1.0, -1.0, {"pos": pp + Vector2(cos(a), sin(a)) * 240.0})
+			what = "灯冢惊魂 • 击败守冢精英得宝箱"
+		"incense":
+			var heal := maxhp * 0.4
+			hp = minf(maxhp, hp + heal)
+			_ev("heal", heal)
+			what = "上香 • 回复 %d 生命" % int(heal)
+	poi_log.append({"t": snappedf(clock, 0.1), "kind": k, "i": i, "res": what})
+	_ev("sfx", "chest")
+	_ev("banner", "%s • %s" % [pois[i].name, what], "#ffcf5a")
+
+
 func _update_pois(dt: float) -> void:
 	_mark_explored()
 	if phase != PH_SEG:
@@ -2195,7 +2319,7 @@ func _update_pois(dt: float) -> void:
 				poi_hold[i] = float(poi_hold.get(i, 0.0)) + dt
 				if float(poi_hold[i]) >= float(GameData.DG.rift.hold):
 					vine_taken[i] = true
-					if not grant_gourd():
+					if not grant_gourd("葫芦灵藤"):
 						coins += 80
 			else:
 				poi_hold[i] = 0.0
@@ -2213,6 +2337,15 @@ func _update_pois(dt: float) -> void:
 			else:
 				poi_hold[i] = 0.0
 				shop_inside = false
+			continue
+		if LM_KINDS.has(pois[i].kind):
+			if Vector2(px, py).distance_to(pp) < zr and lm_state(i) == "ok":
+				poi_hold[i] = float(poi_hold.get(i, 0.0)) + dt
+				if float(poi_hold[i]) >= float(GameData.DG.rift.hold):
+					poi_hold[i] = 0.0
+					_use_landmark(i)
+			else:
+				poi_hold[i] = 0.0
 			continue
 		if Vector2(px, py).distance_to(pp) < zr and poi_state(i) == "ok":
 			var is_arena: bool = pois[i].kind == "gourd" or pois[i].kind == "vault"
@@ -2350,8 +2483,9 @@ func enter_rift(poi: int = -1) -> bool:
 	rift_t = 0.0
 	rift_dmg_dealt = 0.0
 	var tcfg: Dictionary = dg.rift.entries[mini(entry_no, 2) - 1]
-	rift_target = tcfg.target
-	rift_limit = tcfg.limit
+	var extra := maxi(0, entry_no - 2)   # 第 3 次起：目标击杀时间 +10s/次（守关者血量 = DPS×目标），限时 +10s，伤害 +10%/次
+	rift_target = float(tcfg.target) + 10.0 * extra
+	rift_limit = float(tcfg.limit) + 10.0 * extra
 	pickups.clear()
 	gem_count = 0
 	bullets.clear()
@@ -2367,8 +2501,8 @@ func enter_rift(poi: int = -1) -> bool:
 	rift_by = {}
 	# 守关者：剑冢「剑灵」——专属机制（御剑环身 / 回鞘突刺 / 剑雨），血量 = 当前 DPS × 目标击杀秒数
 	var wd: Dictionary = dg.warden
-	var wdef := {"name": wd.name, "tex": wd.tex, "h": wd.h, "r": wd.r, "hp": 1, "speed": wd.speed, "dmg": wd.dmg, "xp": 0, "ai": "swordwarden", "faceRight": true, "knock": 0.0, "fx": "spark"}
-	var base_el := {"name": wd.name, "scale": wd.scale, "hp": rift_dps_est * rift_target, "dmg": wd.dmg, "speed": wd.speed, "xp": 0, "armor": wd.armor, "glow": 0}
+	var wdef := {"name": wd.name, "tex": wd.tex, "h": wd.h, "r": wd.r, "hp": 1, "speed": wd.speed, "dmg": float(wd.dmg) * (1.0 + 0.1 * extra), "xp": 0, "ai": "swordwarden", "faceRight": true, "knock": 0.0, "fx": "spark"}
+	var base_el := {"name": wd.name, "scale": wd.scale, "hp": rift_dps_est * rift_target, "dmg": float(wd.dmg) * (1.0 + 0.1 * extra), "speed": wd.speed, "xp": 0, "armor": wd.armor, "glow": 0}
 	var w := spawn_enemy("swordwarden", -1.0, -1.0, {"el": base_el, "def": wdef, "pos": c + Vector2(float(dg.rift.spawnDist), 0.0), "warden": true})
 	w.warden = true
 	w.atk_t = 1.5
@@ -2388,6 +2522,9 @@ func enter_arena(poi: int, kind: String) -> void:
 	phase = PH_RIFT
 	rift_t = 0.0
 	rift_limit = 75.0 if kind == "vault" else 60.0
+	if kind == "gourd":
+		_enter_vine()
+		return
 	pickups.clear()
 	gem_count = 0
 	bullets.clear()
@@ -2404,7 +2541,58 @@ func enter_arena(poi: int, kind: String) -> void:
 	_ev("banner", "镇魂宝库 • 限时清空精英潮" if kind == "vault" else "古药葫芦秘境 • 清除守护妖藤与小怪", "#ffcf5a")
 
 
+func _enter_vine() -> void:
+	vine_ticket_paid = vine_ticket()
+	coins -= vine_ticket_paid
+	vine_runs += 1
+	var n := vine_runs
+	for e2: SimEnemy in enemies:
+		e2.alive = false
+	enemies.clear()
+	pickups.clear()
+	gem_count = 0
+	bullets.clear()
+	ebullets.clear()
+	var c := Vector2(W / 2.0, H / 2.0)
+	px = c.x - 260.0
+	py = c.y
+	invuln = 1.0
+	rift_limit = minf(120.0, 70.0 + 8.0 * float(n - 1))
+	var base: Dictionary = GameData.EN.elites["lantern"].duplicate()
+	var tsec := 40.0 + 10.0 * float(n - 1)
+	base.hp = maxf(build_dps(), 15.0) * tsec
+	base.dmg = float(base.dmg) * (1.0 + 0.18 * float(n - 1))
+	base.name = "葫芦藤妖 • 第%d劫" % n
+	base.xp = 0
+	vine_boss = spawn_enemy("lantern", -1.0, -1.0, {"elite": true, "el": base, "pos": c + Vector2(330.0, 0.0)})
+	vine_boss.maxhp = vine_boss.hp
+	vine_guard_t = 6.0
+	rift_warden = null
+	arena_spawned = 0
+	arena_total = 0
+	_ev("rift_enter", 9)
+	_ev("banner", "葫芦藤秘境 第%d劫 • 门票 %d 铜钱 • 藤妖血量×%.1f 伤害×%.2f，击败得葫芦散件" % [n, vine_ticket_paid, tsec / 40.0, 1.0 + 0.18 * float(n - 1)], "#9fffb0")
+
+
+func _vine_step(dt: float) -> void:
+	vine_guard_t -= dt
+	var n := vine_runs
+	if vine_guard_t <= 0.0 and vine_boss != null and vine_boss.alive:
+		vine_guard_t = maxf(5.0, 10.0 - float(n))
+		var c := Vector2(W / 2.0, H / 2.0)
+		for i in range(2 + n):
+			var a := rng.randf() * TAU
+			spawn_enemy("paperman" if i % 3 != 0 else "foxfire", -1.0, -1.0, {"pos": c + Vector2(cos(a), sin(a)) * 380.0})
+	if vine_boss != null and not vine_boss.alive:
+		_arena_end(true)
+	elif rift_t >= rift_limit:
+		_arena_end(false)
+
+
 func _arena_step(dt: float) -> void:
+	if rift_kind == "gourd":
+		_vine_step(dt)
+		return
 	arena_next -= dt
 	if arena_spawned < arena_total and arena_next <= 0.0:
 		var c := Vector2(W / 2.0, H / 2.0)
@@ -2444,9 +2632,14 @@ func _arena_end(ok: bool) -> void:
 	px = rift_ret.x
 	py = rift_ret.y
 	invuln = 2.0
-	rift_sealed[100 + rift_poi] = true
 	var kind := rift_kind
+	if kind != "gourd":
+		rift_sealed[100 + rift_poi] = true
 	rift_kind = "sword"
+	var boss_info := {}
+	if kind == "gourd":
+		boss_info = {"n": vine_runs, "ticket": vine_ticket_paid, "boss_hp": (vine_boss.maxhp if vine_boss != null else 0.0)}
+		vine_boss = null
 	if ok:
 		if kind == "vault":
 			var amt := 240 + int(rng.randf() * 121.0)
@@ -2463,14 +2656,31 @@ func _arena_end(ok: bool) -> void:
 				_ev("relic", rid)
 			_ev("banner", "镇魂宝库通关 • 铜钱 %d + 高阶遗物" % amt, "#ffcf5a")
 		else:
-			if not grant_gourd():
+			var n := vine_runs
+			var got := grant_gourd("葫芦藤秘境第%d劫" % n)
+			if not got:
 				coins += 80
 			for i in range(3):
-				_spawn_pickup("coin", px + (rng.randf() - 0.5) * 100.0, py + (rng.randf() - 0.5) * 80.0, 20)
-			_ev("banner", "古药葫芦秘境通关 • 葫芦散件 + 铜钱", "#ffcf5a")
+				_spawn_pickup("coin", px + (rng.randf() - 0.5) * 100.0, py + (rng.randf() - 0.5) * 80.0, 20 + 10 * n)
+			var extra_txt := ""
+			if has_sword():
+				sw_kills += 120 * n
+				_sw_check()
+				extra_txt = " + 剑意 %d" % (120 * n)
+			if n % 3 == 0:
+				pending_chest += 1
+				extra_txt += " + 宝箱"
+			_ev("banner", "葫芦藤秘境第%d劫通关 • %s + 铜钱%s" % [n, "葫芦散件" if got else "铜钱 80", extra_txt], "#9fffb0")
 	else:
-		_ev("banner", "秘境超时 • 未获奖励", "#ff8a7a")
-	rift_log.append({"poi": rift_poi, "kind": kind, "ok": ok, "t": rift_t, "how": "clear" if ok else "timeout"})
+		if kind == "gourd":
+			coins += vine_ticket_paid
+			vine_runs = maxi(0, vine_runs - 1)
+			_ev("banner", "挑战超时 • 门票 %d 铜钱已返还，藤妖强度不变" % vine_ticket_paid, "#ff8a7a")
+		else:
+			_ev("banner", "秘境超时 • 未获奖励", "#ff8a7a")
+	var rec2 := {"poi": rift_poi, "kind": kind, "ok": ok, "t": rift_t, "how": "clear" if ok else "timeout"}
+	rec2.merge(boss_info)
+	rift_log.append(rec2)
 	_ev("rift_exit", ok, "clear" if ok else "timeout")
 	checkpoint()
 
@@ -2509,8 +2719,11 @@ func _rift_end(ok: bool, how: String, hp_ref: float) -> void:
 	if sw_state == SW_ORBIT or sw_state == SW_RECALL:
 		sw_state = SW_CD
 		sw_t = 0.5
+	rift_ready_at = clock + 90.0
 	if ok:
 		rift_clears += 1
+		if entry_no >= 3:
+			wicks += 1   # 第 3 次起通关返还 1 灯芯：只要打得过就能持续进入，节奏由 90 秒冷却控制
 		if artifact == "":
 			artifact = "sword"
 			sw_state = SW_STOW
@@ -2641,7 +2854,7 @@ func duel_warden(build: Dictionary, entry: int, with_sword: bool) -> void:
 
 const SAVE_KEYS := ["seed_v", "phase", "t", "real_t", "seg", "kills", "coins", "level", "xp", "need", "pending_lv", "hp", "px", "py", "levels", "evo", "relics",
 	"wicks", "artifact", "rift_entries", "rift_clears", "rift_sealed", "threat_next", "threat_cur", "rerolls", "revive", "bonus_soul", "break_idx", "gift_pending", "shop",
-	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock", "gourds", "pet_on", "pet_hp", "pet_marks", "pet_dead_t", "mini_idx", "vine_taken", "set_kills"]
+	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock", "gourds", "pet_on", "pet_hp", "pet_marks", "pet_dead_t", "mini_idx", "vine_taken", "set_kills", "rift_ready_at", "poi_cd", "vine_runs", "sw_master", "sw_kill5", "sw_cnt", "gourd_log", "poi_log"]
 
 
 ## 检查点存档：只在「段/段间」两种阶段落档；恢复时妖物/弹幕清空，从该点继续（局内中断续档）
@@ -2711,7 +2924,7 @@ func _aoe(x: float, y: float, r: float, dmg: float, key: String) -> void:
 			damage(e, dmg, key, {"noCrit": true, "kx": e.x - x, "ky": e.y - y, "kb": 90.0})
 
 
-func grant_gourd() -> bool:
+func grant_gourd(src: String = "") -> bool:
 	var left: Array = []
 	for gp in GameData.GD.pieces:
 		if not gourds.has(gp.id):
@@ -2720,6 +2933,7 @@ func grant_gourd() -> bool:
 		return false
 	var gid: String = left[int(rng.randf() * left.size())]
 	gourds.append(gid)
+	gourd_log.append({"t": snappedf(clock, 0.1), "id": gid, "src": src})
 	_ev("gourd", gid)
 	_ev("banner", "彩虹葫芦 • %s（%d/7）" % [GameData.GP_BY_ID[gid].name, gourds.size()], "#ffcf5a")
 	if gourds.size() >= 7 and not pet_on:
@@ -2821,7 +3035,7 @@ func _mini_drop(e: SimEnemy) -> void:
 		_spawn_pickup("coin", e.x + (rng.randf() - 0.5) * 120.0, e.y + (rng.randf() - 0.5) * 80.0, int(int(G.miniCoins[k]) / 4))
 	_spawn_pickup("chest", e.x, e.y, 1)
 	wicks += 1
-	grant_gourd()
+	grant_gourd("小BOSS掉落")
 	if pet_on and pet_marks < int(G.pet.marks):
 		pet_marks += 1
 		_recalc()
@@ -3020,10 +3234,33 @@ func _trigger_fusion() -> void:
 	pending_fusion = 1
 
 
+func _sw_thr(i: int) -> int:
+	# 完整/疾速模式战斗更久：剑意门槛打 55 折（经典口径保持原值，平衡基线不变）
+	return int(float(GameData.DG.sword.stages.kills[i]) * (0.55 if stretch > 1.0 else 1.0))
+
+
+func _sw_check() -> void:
+	if sw_stage < 5:
+		if sw_kills >= _sw_thr(sw_stage - 1):
+			_sword_advance("剑意(击杀)")
+	elif sw_master < 5 and sw_kills - sw_kill5 >= 800 * (sw_master + 1):
+		sw_master += 1
+		sw_log.append({"t": snappedf(real_t, 0.1), "stage": 5, "src": "精通%d(击杀)" % sw_master})
+		_ev("banner", "飞剑精通 %d / 5 • 飞剑伤害 +%d%%" % [sw_master, 8 * sw_master], "#7fe3ff")
+
+
 func _sword_advance(src: String) -> void:
-	if not has_sword() or sw_stage >= 5:
+	if not has_sword():
+		return
+	if sw_stage >= 5:
+		if sw_master < 5:
+			sw_master += 1
+			sw_log.append({"t": snappedf(real_t, 0.1), "stage": 5, "src": "精通%d(%s)" % [sw_master, src]})
+			_ev("banner", "飞剑精通 %d / 5 • 飞剑伤害 +%d%%（%s）" % [sw_master, 8 * sw_master, src], "#7fe3ff")
 		return
 	sw_stage += 1
+	if sw_stage == 5:
+		sw_kill5 = sw_kills
 	sw_log.append({"t": snappedf(real_t, 0.1), "stage": sw_stage, "src": src})
 	pending_sw += 1
 	_ev("sword_stage", sw_stage, src)

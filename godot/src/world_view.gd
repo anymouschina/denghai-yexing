@@ -388,7 +388,7 @@ func _draw_bg(c: Node2D) -> void:
 			c.draw_arc(mp, 120.0, 0, TAU, 40, Color(mc, 0.35), 4.0, true)
 			c.draw_rect(Rect2(mp.x - 14, mp.y - 80, 28, 80), Color(mc, 0.3))
 			c.draw_rect(Rect2(mp.x - 50, mp.y - 90, 100, 14), Color(mc, 0.3))
-			c.draw_string(font, mp + Vector2(-100, 40), String(m[1]), HORIZONTAL_ALIGNMENT_CENTER, 200.0, 26, Color(mc, 0.6))
+			c.draw_string(font, mp + Vector2(-100, 40), String(m[1]), HORIZONTAL_ALIGNMENT_CENTER, 200.0, 26, Color(mc, 0.35))
 	if sim.phase == Sim.PH_RIFT:
 		var cc := Vector2(Sim.W / 2.0, Sim.H / 2.0)
 		var R: float = GameData.DG.rift.arenaRadius
@@ -875,6 +875,18 @@ func _draw_poi(i: int) -> void:
 		if mp2.distance_to(Vector2(sim.px, sim.py)) <= 380.0 and not (sgn.x - 130.0 < 430.0 and sgn.y - 36.0 < 340.0):   # 不压左上角血条/葫芦珠区域
 			_draw_zone_text(mp2 + Vector2(0, 56.0), String(sim.pois[i].name), "站定 1 秒打开商店（铜钱换遗物）", UI.GOLD)
 		return
+	if Sim.LM_KINDS.has(sim.pois[i].kind):
+		var lp := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
+		var lst := sim.lm_state(i)
+		var near := lp.distance_to(Vector2(sim.px, sim.py)) < 420.0
+		b_glow_ground.full(lp.x - 150, lp.y - 110, 300, 220, Color(0.5, 0.8, 1.0, 0.35 if lst == "ok" else 0.12))
+		draw_arc(lp, float(GameData.SEG["break"].zoneR), 0, TAU, 40, Color(1, 0.8, 0.4, 0.5 if lst == "ok" else 0.2), 3.0, true)
+		if near:
+			_draw_zone_text(lp + Vector2(0, -70.0), String(sim.pois[i].name), sim.lm_hint(i), UI.GOLD if lst == "ok" else Color("ff8a7a"))
+		var lh: float = float(sim.poi_hold.get(i, 0.0))
+		if lh > 0.0:
+			draw_arc(lp, float(GameData.SEG["break"].zoneR), -PI / 2.0, -PI / 2.0 + clampf(lh / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, 40, Color(1.0, 0.9, 0.5, 0.95), 7.0, true)
+		return
 	var pp := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
 	var tx: Texture2D = T.rift_portal
 	var st := sim.poi_state(i)
@@ -885,7 +897,9 @@ func _draw_poi(i: int) -> void:
 	var is_ar: bool = sim.pois[i].kind == "gourd" or sim.pois[i].kind == "vault"
 	var tint2 := Color(0.6, 1.0, 0.6) if sim.pois[i].kind == "gourd" else (Color(1.0, 0.7, 0.4) if sim.pois[i].kind == "vault" else Color.WHITE)
 	draw_texture_rect(tx, Rect2(pp.x - w / 2.0, pp.y - h * 0.75, w, h), false, tint2 if st == "ok" else Color(0.55, 0.5, 0.62))
-	var sub: String = ("站定进入 • 限时挑战" if is_ar else "站定进入 • 消耗灯芯×1") if st == "ok" else {"weak": "灯弱，不可入", "nowick": "灯芯不足", "sealed": "裂隙已闭合", "max": "本局已入两次"}.get(st, "")
+	var sub: String = ("站定进入 • 限时挑战" if is_ar else "站定进入 • 消耗灯芯×1") if st == "ok" else {"weak": "灯弱，不可入", "nowick": "灯芯不足", "sealed": "裂隙已闭合", "cooldown": "冷却中 %d 秒（第 3 次起每次间隔 90 秒）" % int(ceil(sim.rift_cd_left())), "noticket": "门票 %d 铜钱（现有 %d）" % [sim.vine_ticket(), sim.coins]}.get(st, "")
+	if sim.pois[i].kind == "gourd" and st == "ok":
+		sub = "站定入内 • 门票 %d 铜钱 • 第 %d 劫（失败返还）" % [sim.vine_ticket(), sim.vine_runs + 1]
 	_draw_zone_text(pp + Vector2(0, -h * 0.75 - 10.0), String(sim.pois[i].name), sub, UI.GOLD if st == "ok" else Color("ff8a7a"))
 	var zr: float = GameData.SEG["break"].zoneR
 	var hv: float = float(sim.poi_hold.get(i, 0.0))
@@ -913,7 +927,7 @@ func _draw_zone(which: String) -> void:
 				"weak": sub = "灯弱，不可入"; col = Color("ff8a7a")
 				"nowick": sub = "灯芯不足"; col = Color("ff8a7a")
 				"sealed": sub = "裂隙已闭合"; col = Color("9aa3cf")
-				"max": sub = "本局已入两次"; col = Color("9aa3cf")
+				"cooldown": sub = "冷却中 %d 秒" % int(ceil(sim.rift_cd_left())); col = Color("9aa3cf")
 			_draw_zone_text(p + Vector2(0, -h * 0.75 - 10.0), label, sub, col)
 		"merchant":
 			var tx2: Texture2D = T.merchant

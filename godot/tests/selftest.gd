@@ -200,7 +200,19 @@ func _init() -> void:
 	ok(g.artifact == "sword" and (g.pending_chest == 1 or (not g.choice.is_empty() and g.choice.kind in ["chest", "swb"])), "一局最多 1 件法宝：第二次通关改发宝箱")
 	ok(g.relics.size() == 1, "…外加一件免费遗物")
 	to_break(g, 2)
-	ok(g.rift_state() == "max", "每局最多进 2 次")
+	ok(g.rift_state() == "cooldown" and g.rift_cd_left() > 0.0, "第 3 次起有冷却而不是硬上限（剩余 %.0f 秒）" % g.rift_cd_left())
+	var g3 := g.fork()
+	g3.choice = {}
+	g3.pending_chest = 0
+	g3.clock += 100.0
+	g3.wicks = 3
+	g3.hp = g3.maxhp
+	ok(g3.rift_state() == "ok", "冷却结束后可再次进入（不限总次数）")
+	ok(g3.enter_rift() and g3.rift_target == 80.0 and g3.rift_limit == 100.0, "第 3 次：目标 80s、限时 100s（难度递增）")
+	var w3_dmg: float = g3.rift_warden.dmg
+	g3.damage(g3.rift_warden, 1e9, "fu", {"noCrit": true, "pierce": true})
+	g3.step(0.05)
+	ok(g3.rift_clears >= 2 and g3.wicks == 3, "第 3 次通关：返还 1 灯芯 (clears=%d wicks=%d)" % [g3.rift_clears, g3.wicks])
 
 	print("== 飞剑术 ==")
 	var h := fresh()
@@ -313,7 +325,7 @@ func _init() -> void:
 	print("== 大地图 / 战斗中裂隙入口 ==")
 	var mp := fresh(21)
 	ok(Sim.W == 3600.0 and Sim.H == 2400.0, "主战场 3600×2400")
-	ok(mp.pois.size() == 7 and mp.poi_state(0) == "ok", "大地图 2 剑冢 + 游商 + 2 灵藤 + 古药葫芦 + 镇魂宝库（kind 字段）")
+	ok(mp.pois.size() == 11 and mp.poi_state(0) == "ok", "大地图 2 剑冢 + 游商 + 2 灵藤 + 葫芦藤秘境 + 镇魂宝库 + 4 地标（kind 字段）")
 	ok(mp.pickups.size() >= 1 and mp.pickups[0].kind == "chest" and Vector2(mp.pickups[0].x - mp.px, mp.pickups[0].y - mp.py).length() < 350.0, "出生点 350px 内刷古灯宝箱")
 	var mw0 := mp.wicks
 	mp.px = float(mp.pois[0].x); mp.py = float(mp.pois[0].y)
@@ -405,6 +417,7 @@ func _init() -> void:
 		var idx := 5 if kind == "gourd" else 6
 		ar.px = float(ar.pois[idx].x); ar.py = float(ar.pois[idx].y)
 		var hp0 := ar.hp
+		ar.coins = 200
 		var co0 := ar.coins
 		for i in range(40):
 			ar.step(0.05)
@@ -421,11 +434,65 @@ func _init() -> void:
 			ar.pickups.clear()
 			ar.step(0.1)
 			gi += 1
-		ok(ar.phase == Sim.PH_SEG and absf(ar.px - float(ar.pois[idx].x)) < 1.0 and ar.rift_sealed.has(100 + idx), kind + " 通关后传回原位并封闭")
+		ok(ar.phase == Sim.PH_SEG and absf(ar.px - float(ar.pois[idx].x)) < 1.0 and (kind == "gourd" or ar.rift_sealed.has(100 + idx)), kind + " 通关后传回原位（宝库封闭，葫芦藤可重复挑战）")
 		if kind == "gourd":
-			ok(ar.gourds.size() == 1, "古药葫芦秘境必得 1 片散件")
+			ok(ar.gourds.size() == 1 and ar.coins < 200 + 100 and ar.gourd_log[0].src.begins_with("葫芦藤秘境"), "葫芦藤秘境通关必得 1 片散件，门票已扣")
+			ok(ar.vine_ticket() == 60 and ar.poi_state(idx) == "ok", "第 2 劫门票涨到 60 铜钱")
+			var hp_first: float = float(ar.rift_log[0].boss_hp)
+			ar.px = float(ar.pois[idx].x); ar.py = float(ar.pois[idx].y)
+			for i in range(40):
+				ar.step(0.05)
+				if ar.phase == Sim.PH_RIFT:
+					break
+			ok(ar.phase == Sim.PH_RIFT and ar.vine_runs == 2 and ar.vine_boss != null and ar.vine_boss.maxhp > hp_first * 0.99 and ar.vine_boss.dmg > 0.0, "第 2 劫：藤妖血量/伤害比第 1 劫更高")
+			var dmg2: float = ar.vine_boss.dmg
+			ar.rift_t = ar.rift_limit + 1.0
+			var coins_before := ar.coins
+			ar.step(0.05)
+			ok(ar.phase == Sim.PH_SEG and ar.coins >= coins_before + 60 and ar.vine_runs == 1, "超时失败：门票全额返还，强度不升级")
+			var poor := fresh(43)
+			poor.coins = 10
+			ok(poor.poi_state(5) == "noticket", "铜钱不足：提示门票价格")
 		else:
 			ok(ar.relics.size() == 1 and ar.pickups.size() > 0, "镇魂宝库给高阶遗物与铜钱")
+	print("== 地标交互 / 飞剑精通 / 葫芦保底 ==")
+	var lm := fresh(44)
+	lm.coins = 100
+	lm.hp = lm.maxhp * 0.5
+	for k in range(4):
+		var idx2 := 7 + k
+		lm.px = float(lm.pois[idx2].x); lm.py = float(lm.pois[idx2].y)
+		var st0: String = lm.poi_state(idx2)
+		for i in range(30):
+			lm.step(0.05)
+			if lm.poi_log.size() > k:
+				break
+		ok(lm.poi_log.size() == k + 1 and lm.poi_cd.has(idx2), "%s：站定后真实触发（%s）" % [lm.pois[idx2].name, lm.poi_log[k].res if lm.poi_log.size() > k else "未触发 state=" + st0])
+	ok(lm.relics.size() >= 1 and lm.coins < 100 + 90 and lm.hp > lm.maxhp * 0.5 * 0.8 - 1.0, "祭坛得遗物、香炉回血、牌坊/香炉扣铜钱")
+	var again := lm.poi_state(7)
+	ok(again == "cd" and lm.lm_hint(7).contains("冷却"), "地标有冷却并写明剩余秒数")
+	var swm := fresh(45)
+	swm.artifact = "sword"
+	swm.sw_state = Sim.SW_STOW
+	swm.sw_stage = 5
+	swm.sw_kill5 = 0
+	swm.sw_kills = 799
+	swm._sw_check()
+	ok(swm.sw_master == 0, "精通：未满 800 击杀不升")
+	swm.sw_kills = 800
+	swm._sw_check()
+	ok(swm.sw_master == 1, "飞剑 5/5 后每 800 击杀精通 +1（+8% 伤害）")
+	swm._sword_advance("副本守关者")
+	ok(swm.sw_master == 2, "再破守关者精通 +1")
+	var gg := fresh(46)
+	gg.stretch = 3.75
+	gg.clock = 175.0
+	gg.step(0.05)
+	ok(gg.gourds.size() == 1 and gg.gourd_log[0].src == "保底", "完整模式保底：约每 170 秒必出一件葫芦散件")
+	var gc := fresh(47)
+	gc.clock = 400.0
+	gc.step(0.05)
+	ok(gc.gourds.size() == 0, "经典口径不发保底（平衡基线不变）")
 	var sm := fresh(42)
 	sm.relics = ["coin", "thunder", "talisman", "ember", "horse", "blade", "bell", "purse", "mirror", "shade", "gold1", "gold2", "soul1", "soul2", "army1", "army2"]
 	sm._recalc()

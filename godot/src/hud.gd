@@ -286,6 +286,10 @@ func _draw_hud_inner() -> void:
 	# 铜钱 / 葫芦进度珠 / 小金刚 / 套装
 	var gcols := {"red": Color("ff4a3a"), "orange": Color("ff9a3c"), "yellow": Color("ffe04a"), "green": Color("5ade6a"), "cyan": Color("4adfe0"), "blue": Color("4a7aff"), "purple": Color("b05aff")}
 	_text(Vector2(L, ry + 138 * k), "彩虹葫芦 %d/7" % sim.gourds.size(), _fs(20), Color("ffcf5a"))
+	if sim.gourds.size() < 7:
+		var gl := sim.gourd_guarantee_left()
+		var gtxt := "下一件：灵藤 / 小BOSS 必掉 / 葫芦藤秘境 / 牌坊许愿" + (" / 保底 %s 后" % UI.fmt_time(gl) if gl >= 0.0 else "")
+		_text(Vector2(L, ry + 138 * k + 24), gtxt, _fs(15), Color(1.0, 0.85, 0.5, 0.9))
 	var bx2 := L + 160.0
 	var by2 := ry + 132 * k
 	for gp in ([] if Playtest.hide.contains("hbuild") else GameData.GD.pieces):
@@ -406,7 +410,7 @@ func _draw_hud_inner() -> void:
 			var nxt := "下一阶「%s」：剑意 %d / %d（击杀）或击败副本守关者" % [nms[sim.sw_stage], sim.sw_kills, int(SS.kills[sim.sw_stage - 1])]
 			_text(Vector2(L, ry + 74 * k), nxt, _fs(15), Color(0.8, 0.9, 1.0))
 		else:
-			_text(Vector2(L, ry + 74 * k), "飞剑已臻圆满", _fs(15), Color(0.8, 0.9, 1.0))
+			_text(Vector2(L, ry + 74 * k), "飞剑已臻圆满 • 精通 %d / 5（+%d%% 伤害）• 每 800 击杀或再破一次守关者/藤妖 +1" % [sim.sw_master, 8 * sim.sw_master], _fs(15), Color(0.8, 0.9, 1.0))
 	if sim.fusion != "":
 		_text(Vector2(L, T + 190 * k), "融合 • %s" % GameData.DG.fusion.names[sim.fusion], _fs(17), Color(1.0, 0.85, 0.4))
 
@@ -434,13 +438,13 @@ func _draw_minimap(vw: Vector2) -> void:
 		canvas.draw_texture_rect(mm_tex, Rect2(x0, y0, mw, mh), false)
 	_frame(Rect2(x0, y0, mw, mh), UI.ORANGE, 2.0)
 	for pp in sim.pois:
-		var st_: Color = {"sword": Color(0.8, 0.45, 1.0), "merchant": Color(1.0, 0.8, 0.3), "vine": Color(0.4, 1.0, 0.5), "gourd": Color(0.5, 1.0, 0.8), "vault": Color(1.0, 0.4, 0.3)}[pp.kind]
+		var st_: Color = {"sword": Color(0.8, 0.45, 1.0), "merchant": Color(1.0, 0.8, 0.3), "vine": Color(0.4, 1.0, 0.5), "gourd": Color(0.5, 1.0, 0.8), "vault": Color(1.0, 0.4, 0.3), "altar": Color(0.6, 0.8, 1.0), "arch": Color(1.0, 0.7, 0.4), "tomb": Color(0.8, 0.6, 1.0), "incense": Color(1.0, 0.5, 0.4)}[pp.kind]
 		hb_front.circle(Vector2(x0 + float(pp.x) / Sim.W * mw, y0 + float(pp.y) / Sim.H * mh), 5.0, st_, 10)
 	for k in sim.pickups:
 		if k.kind == "chest":
 			_rect(Rect2(x0 + k.x / Sim.W * mw - 3, y0 + k.y / Sim.H * mh - 3, 6, 6), Color(1.0, 0.85, 0.3), true)
 	hb_front.circle(Vector2(x0 + sim.px / Sim.W * mw, y0 + sim.py / Sim.H * mh), 4.0, Color(0.5, 1.0, 1.0), 10)
-	_text(Vector2(x0, y0 + mh + 16), "紫剑 绿藤 金商 青葫 赤宝", 12, Color(0.85, 0.85, 0.95), mw, HORIZONTAL_ALIGNMENT_CENTER)
+	_text(Vector2(x0, y0 + mh + 16), "紫剑 绿藤 金商 青葫 赤宝 + 4 地标", 12, Color(0.85, 0.85, 0.95), mw, HORIZONTAL_ALIGNMENT_CENTER)
 	_frame(Rect2(x0 + sim.px / Sim.W * mw - 7, y0 + sim.py / Sim.H * mh - 4, 14, 8), Color(1, 1, 1, 0.5), 1.0)
 
 
@@ -677,7 +681,7 @@ func show_pause(on: bool) -> void:
 		var gx := UI.label(gl, 20, Color("c9e8ff"), 4)
 		gx.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		col.add_child(gx)
-	var info := UI.label("灯芯 ×%d  •  已入裂隙 %d / %d 次%s" % [sim.wicks, sim.rift_entries, int(GameData.DG.rift.maxEntries), "  •  法宝：飞剑术" if sim.artifact == "sword" else ""], 22, UI.GOLD, 4)
+	var info := UI.label("灯芯 ×%d  •  已入裂隙 %d 次（前 2 次免冷却，之后每次间隔 90 秒）%s" % [sim.wicks, sim.rift_entries, "  •  法宝：飞剑术" if sim.artifact == "sword" else ""], 22, UI.GOLD, 4)
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(info)
 	var bc := CenterContainer.new()
