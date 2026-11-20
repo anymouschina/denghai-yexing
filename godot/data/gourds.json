@@ -15,14 +15,14 @@
   {
    "id": "yellow",
    "name": "黄•金钟",
-   "stat": "maxHp",
-   "per": 12
+   "stat": "dmgTaken",
+   "per": -0.04
   },
   {
    "id": "green",
    "name": "绿•回春",
-   "stat": "maxHp",
-   "per": 12
+   "stat": "regen",
+   "per": 1.5
   },
   {
    "id": "cyan",

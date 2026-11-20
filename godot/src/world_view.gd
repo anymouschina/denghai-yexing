@@ -1,8 +1,35 @@
 class_name WorldView
 extends Node2D
 ## 渲染层：只读 Sim 状态，用 _draw 画世界（背景/实体按 y 排序/弹幕/特效），并把 Sim 事件翻译成飘字、粒子、震屏与音效。
+## 性能架构：TriBatch 零扩容合批 + 零分配 SoA 粒子池 + 预警/地标/血条统一白图合批 + 地标文字后置统一提交 + SNKRX 阻尼弹簧/创伤平方震屏/动态灯油光晕。
 
 const LayerScript := preload("res://src/layer.gd")
+const FLASH_SHADER: Shader = preload("res://src/flash.gdshader")
+
+const FL_MERGE := 0.45
+const PICKUP_KINDS := ["soul", "coin", "oil", "chest"]
+const PICKUP_TEX := {"soul": "drop_soul", "coin": "drop_coin", "oil": "drop_oil", "chest": "drop_chest"}
+const FLOATER_SIZES := [20, 26]
+const AIL_COL := [Color(1.0, 0.6, 0.24), Color(0.5, 0.84, 1.0), Color(0.95, 0.76, 0.3), Color(0.62, 0.91, 1.0)]
+const PET_SHOT_COLS := [Color(1.0, 0.45, 0.2), Color(1.0, 0.85, 0.35), Color(0.55, 0.95, 1.0)]
+const RAINBOW_COLS := [Color("ff4a3a"), Color("ff9a3c"), Color("ffe04a"), Color("5ade6a"), Color("4adfe0"), Color("4a7aff"), Color("b05aff")]
+const PET_FX_COLS := [Color(1.0, 0.45, 0.15), Color(0.7, 0.85, 1.0), Color(1.0, 0.88, 0.35)]
+const POI_TINTS := {
+	"gourd": Color(0.6, 1.0, 0.6),
+	"vault": Color(1.0, 0.7, 0.4),
+	"coinfarm": Color(1.0, 0.88, 0.35),
+	"soulfarm": Color(0.55, 0.85, 1.0),
+}
+const SHEETS := {
+	"jiangshi_hop": {"tex": "res://assets/anim/jiangshi_hop.png", "w": 119, "h": 200, "n": 8},
+}
+const REACT_FX := {
+	"leihuo": ["雷火爆", "ffd36a", 110.0],
+	"fenfu": ["焚符", "ff7a3c", 70.0],
+	"zhenlei": ["镇雷", "bfeaff", 80.0],
+	"bind": ["定身", "f2c14b", 54.0],
+	"collapse": ["百邪崩", "d9b8ff", 120.0],
+}
 
 var sim: Sim
 var cam: Camera2D
@@ -13,10 +40,11 @@ var white_layer: Node2D
 var T: Dictionary = {}
 var t_anim := 0.0
 var floaters: Array = []
-var parts: Array = []
+var part_pool := Fx.ParticlePool.new(320)
 var rings: Array = []
 var fx_sprites: Array = []
 var ghosts: Array = []
+var trauma := 0.0
 var shake_amp := 0.0
 var shake_t := 0.0
 var hit_stop := 0.0
@@ -34,13 +62,42 @@ var items: Array = []
 var font: Font
 var banner_cb: Callable
 var drop_ring := 0.0
-var _fl_by_uid: Dictionary = {}   # 伤害数字合并：同一只妖物 0.45 秒内的命中累加进同一个数字（Veloren sct_dmg_accum_duration 的做法）
-var _react_t: Dictionary = {}     # 反应字样限流：同名反应 0.3 秒内只出一次字
-const FL_MERGE := 0.45
+var _fl_by_uid: Dictionary = {}
+var _react_t: Dictionary = {}
+var _local_flare_wave := 0.0
 
-const SHEETS := {
-	"jiangshi_hop": {"tex": "res://assets/anim/jiangshi_hop.png", "w": 119, "h": 200, "n": 8},
-}
+# SNKRX 阻尼弹簧：主角受击/冲刺/爆焰回弹 + 灯笼光晕脉动回弹
+var player_spring := Fx.Spring.new(1.0, 320.0, 18.0)
+var lantern_spring := Fx.Spring.new(1.0, 220.0, 14.0)
+
+var _keys := PackedInt64Array()
+var _objs: Array = []
+var _kinds := PackedInt32Array()
+var _cull := Rect2()
+var _vis_enemies: Array = []
+var _enemy_cache: Dictionary = {}
+var _pk_cache: Dictionary = {}
+var _lamp_cache_seg := -999
+var _lamp_pos_cache := PackedVector2Array()
+var _poi_labels: Array = []
+
+var b_shadow := TriBatch.new(512)
+var b_enemy_back := TriBatch.new(512)
+var b_enemy_front := TriBatch.new(512)
+var b_pick := {"soul": TriBatch.new(256), "coin": TriBatch.new(128), "oil": TriBatch.new(32), "chest": TriBatch.new(16)}
+var b_talisman := TriBatch.new(256)
+var b_ghostfire := TriBatch.new(128)
+var b_sword := TriBatch.new(64)
+var b_flame := TriBatch.new(64)
+var b_glow_ground := TriBatch.new(128)
+var b_glow_fx := TriBatch.new(512)
+var b_white_fx := TriBatch.new(512)
+var b_world_white := TriBatch.new(256)
+var b_bg := TriBatch.new(32)
+var b_flash := TriBatch.new(256)
+var b_fxs := {}
+var _ekeys := PackedInt64Array()
+var _eobjs: Array = []
 
 
 func setup(p_sim: Sim) -> void:
@@ -51,7 +108,7 @@ func setup(p_sim: Sim) -> void:
 		T[n] = load("res://assets/%s.png" % n)
 	for k in SHEETS:
 		T[k] = load(SHEETS[k].tex)
-	for pk in ["soul", "coin", "oil", "chest"]:
+	for pk in PICKUP_KINDS:
 		var ptx: Texture2D = T[PICKUP_TEX[pk]]
 		_pk_cache[pk] = [b_pick[pk], float(ptx.get_width()), float(ptx.get_height()), {"soul": 0.42, "coin": 0.42, "oil": 0.62, "chest": 0.75}[pk]]
 	T.glow = Fx.glow()
@@ -72,10 +129,8 @@ func setup(p_sim: Sim) -> void:
 	ground_add = _mk_layer(-2, true, _draw_ground_add)
 	fx_add = _mk_layer(1, true, _draw_fx_add)
 	white_layer = _mk_layer(2, false, _draw_white)
-	var sh := Shader.new()
-	sh.code = FileAccess.get_file_as_string("res://src/flash.gdshader")
 	var mat := ShaderMaterial.new()
-	mat.shader = sh
+	mat.shader = FLASH_SHADER
 	white_layer.material = mat
 	cam_pos = Vector2(sim.px, sim.py)
 
@@ -93,12 +148,33 @@ func _mk_layer(z: int, additive: bool, cb: Callable) -> Node2D:
 	return n
 
 
+func _sim_float(prop: String, fallback: float) -> float:
+	var v: Variant = sim.get(prop)
+	return float(v) if v != null else fallback
+
+
+func _sim_int(prop: String, fallback: int) -> int:
+	var v: Variant = sim.get(prop)
+	return int(v) if v != null else fallback
+
+
+func _swap_remove(arr: Array, idx: int) -> void:
+	var last := arr.size() - 1
+	if idx < last:
+		arr[idx] = arr[last]
+	arr.resize(last)
+
+
 # ======================================================================
 # 帧更新
 # ======================================================================
 func tick(delta: float) -> void:
 	t_anim += delta
 	_consume_events()
+	player_spring.step(delta)
+	lantern_spring.step(delta)
+	if _local_flare_wave > 0.0:
+		_local_flare_wave = maxf(0.0, _local_flare_wave - delta)
 	var vis := get_viewport_rect().size
 	var target := Vector2(sim.px, sim.py - 30.0)
 	var arena := sim.phase == Sim.PH_RIFT
@@ -109,9 +185,21 @@ func tick(delta: float) -> void:
 	if arena:
 		cam_pos = cam_pos.lerp(Vector2(Sim.W / 2.0, Sim.H / 2.0), clampf(delta * 3.0, 0, 1))
 	var c := Vector2(clampf(cam_pos.x, lo.x, maxf(lo.x, hi.x)), clampf(cam_pos.y, lo.y, maxf(lo.y, hi.y)))
-	var off := Vector2.ZERO
+	# SNKRX 创伤平方震屏：兼容 sim.shake_trauma 与传统 _shake()
+	var sim_tr := _sim_float("shake_trauma", 0.0)
+	if sim_tr > trauma:
+		trauma = clampf(sim_tr, 0.0, 1.0)
 	if shake_t > 0.0:
 		shake_t -= delta
+	var off := Vector2.ZERO
+	if trauma > 0.001:
+		var mag := trauma * trauma * 24.0
+		off = Vector2(
+			sin(t_anim * 71.0) * 0.6 + (randf() - 0.5) * 0.8,
+			cos(t_anim * 83.0) * 0.6 + (randf() - 0.5) * 0.8
+		) * mag
+		trauma = maxf(0.0, trauma - delta * 1.85)
+	elif shake_t > 0.0:
 		off = Vector2(randf() - 0.5, randf() - 0.5) * 2.0 * shake_amp * 1280.0
 	cam.position = c
 	cam.offset = off
@@ -122,62 +210,59 @@ func tick(delta: float) -> void:
 	else:
 		zoom_t = 0.0
 	cam.zoom = Vector2(zt, zt)
-	# 粒子 / 飘字 / 圆环
-	for i in range(parts.size() - 1, -1, -1):
-		var p: Dictionary = parts[i]
-		p.life -= delta
-		if p.life <= 0.0:
-			parts.remove_at(i)
-			continue
-		p.vy += p.grav * delta
-		p.x += p.vx * delta
-		p.y += p.vy * delta
+	# 粒子 / 飘字 / 圆环 / 残影 / 闪电（O(1) 交换删除）
+	part_pool.tick(delta)
 	for i in range(floaters.size() - 1, -1, -1):
 		var f: Dictionary = floaters[i]
 		f.life -= delta
 		f.y -= 46.0 * delta
 		if f.life <= 0.0:
-			floaters.remove_at(i)
+			_swap_remove(floaters, i)
 	for i in range(rings.size() - 1, -1, -1):
 		rings[i].life -= delta
 		if rings[i].life <= 0.0:
-			rings.remove_at(i)
+			_swap_remove(rings, i)
 	for i in range(fx_sprites.size() - 1, -1, -1):
 		fx_sprites[i].life -= delta
 		if fx_sprites[i].life <= 0.0:
-			fx_sprites.remove_at(i)
+			_swap_remove(fx_sprites, i)
 	for i in range(ghosts.size() - 1, -1, -1):
 		ghosts[i].life -= delta
 		if ghosts[i].life <= 0.0:
-			ghosts.remove_at(i)
+			_swap_remove(ghosts, i)
 	for i in range(sim.bolts.size() - 1, -1, -1):
 		sim.bolts[i].life -= delta
 		if sim.bolts[i].life <= 0.0:
-			sim.bolts.remove_at(i)
+			_swap_remove(sim.bolts, i)
 	if sim.dash_t > 0.0:
 		ghost_t -= delta
 		if ghost_t <= 0.0:
 			ghost_t = 0.03
 			if ghosts.size() >= 32:
-				ghosts.pop_front()
+				_swap_remove(ghosts, 0)
 			ghosts.append({"x": sim.px, "y": sim.py, "fr": _player_frame(), "flip": sim.face_x < 0, "life": 0.32})
 	if fade > 0.0:
 		fade = maxf(0.0, fade - delta * 1.6)
-	if sim.phase != last_phase or sim.seg != last_seg:
+	var phase_changed := sim.phase != last_phase or sim.seg != last_seg
+	if phase_changed:
 		if last_phase != -1:
 			fade = 1.0
 			if sim.phase == Sim.PH_RIFT or last_phase == Sim.PH_RIFT:
 				cam_pos = Vector2(sim.px, sim.py - 30.0)
 		last_phase = sim.phase
 		last_seg = sim.seg
-	queue_redraw()
-	bg_layer.queue_redraw()
-	ground_add.queue_redraw()
-	fx_add.queue_redraw()
-	white_layer.queue_redraw()
+	# 暂停/弹窗期间（delta == 0 且无转场/震屏）跳过 5 层重绘，降低空转 GPU/CPU 消耗
+	if delta > 0.0 or phase_changed or fade > 0.0 or trauma > 0.001:
+		queue_redraw()
+		bg_layer.queue_redraw()
+		ground_add.queue_redraw()
+		fx_add.queue_redraw()
+		white_layer.queue_redraw()
 
 
 func _shake(ms: float, amp: float) -> void:
+	var add_tr := clampf(amp * 95.0, 0.12, 0.85)
+	trauma = clampf(maxf(trauma, add_tr), 0.0, 1.0)
 	if shake_t > 0.0 and shake_amp > amp:
 		return
 	shake_t = ms / 1000.0
@@ -187,36 +272,29 @@ func _shake(ms: float, amp: float) -> void:
 func burst(x: float, y: float, n: int, col: Color, speed: float = 220.0, size: float = 0.4, life: float = 0.5, grav: float = 0.0) -> void:
 	if low_perf:
 		n = int(n * 0.5)
-	for i in range(n):
-		if parts.size() > 240:
-			return
-		var a := randf() * TAU
-		var s := speed * (0.35 + randf() * 0.65)
-		parts.append({"x": x, "y": y, "vx": cos(a) * s, "vy": sin(a) * s, "life": life * (0.6 + randf() * 0.6), "max": life, "size": size * (0.7 + randf() * 0.6), "col": col, "grav": grav})
+	part_pool.burst(x, y, n, col, speed, size, life, grav)
 
 
 func ring(x: float, y: float, r: float, col: Color) -> void:
 	if rings.size() >= 64:
-		rings.pop_front()
+		_swap_remove(rings, 0)
 	rings.append({"x": x, "y": y, "r": r, "life": 0.38, "max": 0.38, "col": col})
 
 
 func _push_fx_sprite(d: Dictionary) -> void:
 	if fx_sprites.size() >= 80:
-		fx_sprites.pop_front()
+		_swap_remove(fx_sprites, 0)
 	fx_sprites.append(d)
 
 
 func _float(x: float, y: float, text: String, col: Color, size: int = 22) -> Dictionary:
 	if floaters.size() > 44:
-		floaters.pop_front()
+		_swap_remove(floaters, 0)
 	var f := {"x": x, "y": y, "text": text, "col": col, "size": size, "life": 0.85, "t0": t_anim, "amt": 0.0}
 	floaters.append(f)
 	return f
 
 
-## 一次命中的表现。同一只妖物 0.45 秒内的后续命中只把数字累加进已有的飘字，不再新建飘字/粒子——
-## 后期每帧 40+ 次命中时，表现开销按“正在挨打的妖物数”而不是“命中次数”增长。
 func _on_dmg(e: SimEnemy, d: float, crit: bool, synergy: bool) -> void:
 	var f: Variant = _fl_by_uid.get(e.uid)
 	if f != null and float(f.life) > 0.0 and t_anim - float(f.t0) < FL_MERGE:
@@ -229,7 +307,7 @@ func _on_dmg(e: SimEnemy, d: float, crit: bool, synergy: bool) -> void:
 		return
 	var col := Color("ffc977") if crit else (Color("c9a6ff") if synergy else Color.WHITE)
 	if not crit and e.ail_kinds >= 2:
-		col = Color("e6c8ff")   # 异常共鸣中：数字带紫
+		col = Color("e6c8ff")
 	var nf := _float(e.x + (randf() - 0.5) * 20.0, e.y - e.h * 0.75, ("%d!" % int(d)) if crit else str(int(d)), col, 32 if crit else 22)
 	nf.amt = d
 	nf.crit = crit
@@ -242,15 +320,6 @@ func _on_dmg(e: SimEnemy, d: float, crit: bool, synergy: bool) -> void:
 	else:
 		Audio.play("hit", 0.7)
 	burst(e.x, e.y - e.h * 0.5, 2, Color("ffe9a8"), 160.0, 0.25, 0.3)
-
-
-const REACT_FX := {
-	"leihuo": ["雷火爆", "ffd36a", 110.0],
-	"fenfu": ["焚符", "ff7a3c", 70.0],
-	"zhenlei": ["镇雷", "bfeaff", 80.0],
-	"bind": ["定身", "f2c14b", 54.0],
-	"collapse": ["百邪崩", "d9b8ff", 120.0],
-}
 
 
 func _on_react(id: String, x: float, y: float) -> void:
@@ -270,6 +339,7 @@ func _on_react(id: String, x: float, y: float) -> void:
 
 
 func _consume_events() -> void:
+	var streak := _sim_int("kill_streak", 0)
 	for ev in sim.events:
 		match ev[0]:
 			"dmg":
@@ -282,7 +352,8 @@ func _consume_events() -> void:
 				var fxn: String = e2.def.get("fx", "spark")
 				var col := Color("f3e6c8") if fxn == "paper" else (Color("7fe3ff") if fxn == "wisp" else Color("ffa040"))
 				burst(e2.x, e2.y - e2.h * 0.45, 40 if big else 9, col, 300.0 if big else 220.0, 0.5, 0.7, 260.0 if fxn == "paper" else 0.0)
-				Audio.play("kill", 0.8)
+				Audio.play_kill(streak, 0.8)
+				lantern_spring.impulse(0.6)
 				if big:
 					hit_stop = maxf(hit_stop, 0.08)
 					_shake(400, 0.006)
@@ -290,20 +361,36 @@ func _consume_events() -> void:
 					_push_fx_sprite({"tex": "fx_boom", "x": e2.x, "y": e2.y - 40.0, "life": 0.5, "max": 0.5, "scale": 1.6})
 					Audio.play("boom")
 			"hurt":
-				_shake(160, 0.003)
+				_shake(160, 0.004)
+				player_spring.impulse(-3.2)
 				Audio.play("hurt")
 				_float(sim.px, sim.py - 80.0, "-%d" % int(ev[1]), Color("ff6a5a"), 26)
 			"dash":
 				Audio.play("dash")
 				_shake(90, 0.002)
+				player_spring.impulse(2.6)
 				ring(sim.px, sim.py - 6.0, 46.0, Color("7fe3ff"))
+			"perfect_dash":
+				Audio.play_perfect_dash()
+				player_spring.impulse(3.2)
+				lantern_spring.impulse(2.8)
+				ring(sim.px, sim.py - 20.0, 110.0, Color("7fe3ff"))
+				_float(sim.px, sim.py - 92.0, "擦弹!", Color("7fe3ff"), 26)
+			"flare":
+				Audio.play_flare()
+				_local_flare_wave = 0.55
+				_shake(260, 0.0075)
+				player_spring.impulse(3.4)
+				lantern_spring.impulse(4.8)
+				part_pool.burst_flare(sim.px, sim.py - 30.0, 48 if not low_perf else 24)
+				ring(sim.px, sim.py - 30.0, 320.0, Color("ffd36a"))
+				_float(sim.px, sim.py - 104.0, "挑灯爆焰!", Color("ffd36a"), 26)
 			"shock":
 				ring(ev[1], ev[2], ev[3], Color("ff7a6a"))
 				_push_fx_sprite({"tex": "fx_boom", "x": ev[1], "y": ev[2] - 10.0, "life": 0.45, "max": 0.45, "scale": ev[3] / 140.0})
 				Audio.play("boom", 0.8)
 				_shake(200, 0.005)
 			"sweep":
-				# 半壁灯海落下：矩形里铺一片爆炎
 				var sx: float = ev[1]
 				var sy: float = ev[2]
 				var sw2: float = ev[3]
@@ -332,12 +419,14 @@ func _consume_events() -> void:
 					banner_cb.call(ev[1], ev[2])
 			"pickup":
 				Audio.play("pickup", 0.6)
+				lantern_spring.impulse(0.35)
 			"heal":
 				Audio.play("heal")
 				_float(sim.px, sim.py - 90.0, "+%d" % int(ev[1]), Color("7dff9a"), 24)
 				burst(sim.px, sim.py - 40.0, 8, Color("7dff9a"), 160.0, 0.3, 0.5)
 			"levelup":
 				Audio.play("levelup")
+				player_spring.impulse(2.8)
 				ring(sim.px, sim.py - 30.0, 160.0, Color("7fe3ff"))
 				burst(sim.px, sim.py - 40.0, 30, Color("ffd36a"), 420.0, 0.5, 0.8)
 			"die":
@@ -420,7 +509,6 @@ func _consume_events() -> void:
 # ======================================================================
 # 绘制
 # ======================================================================
-## 背景按当前段/秘境按需加载（其余卸载），1280×720 一张，镜像无缝平铺铺满整图
 func _bg_tex() -> Texture2D:
 	var key: String = "field_rift" if sim.phase == Sim.PH_RIFT else String(sim.seg_theme(sim.seg).field)
 	if not T.has(key):
@@ -444,7 +532,6 @@ func _draw_bg(c: Node2D) -> void:
 	var ty_n := int(ceil(Sim.H / th))
 	for iy in range(ty_n):
 		for ix in range(tx_n):
-			# 奇数格镜像（交换 UV），相邻瓦片边缘连续；全部瓦片合成一次提交
 			var trc := Rect2(ix * tw, iy * th, tw, th)
 			if _cull.size.x > 0.0 and not trc.intersects(_cull.grow(120.0)):
 				continue
@@ -460,12 +547,16 @@ func _draw_bg(c: Node2D) -> void:
 		c.draw_arc(cc, R + 14.0, 0, TAU, 96, Color(1.0, 0.8, 0.5, 0.35), 2.0, true)
 
 
-func _lamp_positions() -> Array:
-	var out: Array = []
-	var cc := Vector2(Sim.W / 2.0, Sim.H / 2.0)
-	for lp in sim.seg_theme(sim.seg).lamps:
-		out.append(cc + Vector2(lp[0], lp[1]))
-	return out
+func _lamp_positions() -> PackedVector2Array:
+	if _lamp_cache_seg != sim.seg:
+		_lamp_cache_seg = sim.seg
+		var lamps: Array = sim.seg_theme(sim.seg).lamps
+		_lamp_pos_cache.resize(lamps.size())
+		var cc := Vector2(Sim.W / 2.0, Sim.H / 2.0)
+		for i in range(lamps.size()):
+			var lp: Array = lamps[i]
+			_lamp_pos_cache[i] = cc + Vector2(float(lp[0]), float(lp[1]))
+	return _lamp_pos_cache
 
 
 func _lamps_lit() -> bool:
@@ -480,47 +571,74 @@ func _draw_ground_add(c: Node2D) -> void:
 
 func defer__draw_ground_add(c: Node2D) -> void:
 	var g: Texture2D = T.glow
-	# 主角脚下灯光
+	# 主角脚下动态灯油光晕：盛灯(>70%)暖金扩域，残灯(<30%)赤红收缩心跳，爆焰期(flare_t>0)耀金增幅
+	var oil := clampf(_sim_float("lantern_oil", 100.0), 0.0, 100.0)
+	var flare_t := _sim_float("flare_t", 0.0)
+	var sp := clampf(lantern_spring.x, 0.85, 1.3)
+	var rad_mul := 1.0
 	var lit := 0.26 + sin(t_anim * 3.1) * 0.03
-	b_glow_ground.full(sim.px - 270, sim.py - 20 - 220, 540, 440, Color(1.0, 0.66, 0.31, lit))
+	var lcol := Color(1.0, 0.66, 0.31, lit)
+	if flare_t > 0.0:
+		rad_mul = 1.35 * sp
+		lcol = Color(1.0, 0.84, 0.42, clampf(lit * 1.45, 0.0, 0.6))
+	elif oil > 70.0:
+		var k_hi := (oil - 70.0) / 30.0
+		rad_mul = (1.0 + 0.18 * k_hi) * sp
+		lcol = Color(1.0, 0.66 + 0.12 * k_hi, 0.31 + 0.07 * k_hi, lit * (1.0 + 0.2 * k_hi))
+	elif oil < 30.0:
+		var k_lo := oil / 30.0
+		var beat := sin(t_anim * 10.5) * 0.06
+		rad_mul = (0.58 + 0.42 * k_lo + beat) * sp
+		lcol = Color(1.0, 0.3 + 0.36 * k_lo, 0.18 + 0.13 * k_lo, maxf(0.14, lit * (0.95 + beat * 2.0)))
+	else:
+		rad_mul = sp
+	var lw := 540.0 * rad_mul
+	var lh := 440.0 * rad_mul
+	b_glow_ground.full(sim.px - lw * 0.5, sim.py - 20.0 - lh * 0.5, lw, lh, lcol)
 	# 骨灯光池
-	for lp in _lamp_positions():
-		if _lamps_lit():
+	if _lamps_lit():
+		for lp in _lamp_positions():
 			var fl := 0.34 + sin(t_anim * 2.4 + lp.x) * 0.06
-			b_glow_ground.full(lp.x - 190, lp.y - 120, 380, 240, Color(1.0, 0.6, 0.24, fl))
+			b_glow_ground.full(lp.x - 190.0, lp.y - 120.0, 380.0, 240.0, Color(1.0, 0.6, 0.24, fl))
 	# 火路
 	for tr in sim.trails:
 		var a: float = clampf(tr.life / 1.4, 0.0, 1.0)
-		b_glow_ground.full(tr.x - 34, tr.y - 34, 68, 68, Color(1.0, 0.5, 0.15, 0.7 * a))
+		b_glow_ground.full(tr.x - 34.0, tr.y - 34.0, 68.0, 68.0, Color(1.0, 0.5, 0.15, 0.7 * a))
+	# 大地图 POI 地面光池（全部在 ground_add 统一合批，彻底消除跨层 b_glow_ground 泄漏）
+	if sim.phase == Sim.PH_SEG:
+		for i in range(sim.pois.size()):
+			var poi: Dictionary = sim.pois[i]
+			var px2 := float(poi.x)
+			var py2 := float(poi.y)
+			if _cull.size.x > 0.0 and not _visible(px2, py2, 300.0):
+				continue
+			var pk: String = poi.kind
+			if pk == "vine":
+				if not sim.vine_taken.has(i):
+					b_glow_ground.full(px2 - 110.0, py2 - 110.0, 220.0, 220.0, Color(0.3, 1.0, 0.5, 0.45))
+			elif Sim.LM_KINDS.has(pk):
+				var lst := sim.lm_state(i)
+				b_glow_ground.full(px2 - 150.0, py2 - 110.0, 300.0, 220.0, Color(0.5, 0.8, 1.0, 0.35 if lst == "ok" else 0.12))
+			elif pk != "merchant":
+				var st := sim.poi_state(i)
+				b_glow_ground.full(px2 - 200.0, py2 - 260.0, 400.0, 300.0, Color(0.7, 0.3, 1.0, 0.45 if st == "ok" else 0.15))
 	# 段间：裂隙与游商的光
 	if sim.phase == Sim.PH_BREAK:
 		var rp := sim.break_pos("rift")
 		var pulse := 0.5 + sin(t_anim * 3.0) * 0.12
-		b_glow_ground.full(rp.x - 260, rp.y - 200, 520, 400, Color(0.75, 0.3, 1.0, pulse))
-		b_glow_ground.full(rp.x - 90, rp.y - 900, 180, 960, Color(0.7, 0.3, 1.0, 0.55 if sim.rift_state() == "ok" else 0.2))
+		b_glow_ground.full(rp.x - 260.0, rp.y - 200.0, 520.0, 400.0, Color(0.75, 0.3, 1.0, pulse))
+		b_glow_ground.full(rp.x - 90.0, rp.y - 900.0, 180.0, 960.0, Color(0.7, 0.3, 1.0, 0.55 if sim.rift_state() == "ok" else 0.2))
 		var mp := sim.break_pos("merchant")
-		b_glow_ground.full(mp.x - 160, mp.y - 110, 320, 220, Color(1.0, 0.7, 0.3, 0.45))
+		b_glow_ground.full(mp.x - 160.0, mp.y - 110.0, 320.0, 220.0, Color(1.0, 0.7, 0.3, 0.45))
 		var gp := sim.break_pos("gate")
-		b_glow_ground.full(gp.x - 120, gp.y - 330, 240, 420, Color(1.0, 0.85, 0.5, 0.45 + sin(t_anim * 2.2) * 0.08))
+		b_glow_ground.full(gp.x - 120.0, gp.y - 330.0, 240.0, 420.0, Color(1.0, 0.85, 0.5, 0.45 + sin(t_anim * 2.2) * 0.08))
 	b_glow_ground.flush(c.get_canvas_item(), g)
 
 
 func _player_frame() -> int:
 	if sim.moving or sim.dash_t > 0.0:
-		var ratio := 1.0
-		return int(t_anim * 12.0 * ratio) % 12
+		return int(t_anim * 12.0) % 12
 	return 0
-
-
-func _draw_shadow(x: float, y: float, rx: float, ry: float, a: float = 0.4) -> void:
-	draw_texture_rect(T.glow, Rect2(x - rx, y - ry * 0.5, rx * 2.0, ry), false, Color(0, 0, 0, a))
-
-
-var _keys := PackedInt64Array()
-var _objs: Array = []
-var _cull := Rect2()
-var _vis_enemies: Array = []
-var _enemy_cache: Dictionary = {}   # 小怪 → [图集, 区域, w, h, 1.0]，常量查表，无逐帧分配
 
 
 func _visible(x: float, y: float, margin: float) -> bool:
@@ -528,32 +646,9 @@ func _visible(x: float, y: float, margin: float) -> bool:
 
 
 func _push(y: float, kind: int, obj: Variant) -> void:
-	# 按 y 排序：key = (y*4 取整 + 偏移) << 20 | (kind << 16... 下标)，用原生 PackedInt64Array.sort（无闭包、无逐帧数组分配）
 	_keys.append((int(y * 4.0) + 40000) << 20 | _objs.size())
 	_objs.append(obj)
 	_kinds.append(kind)
-
-
-var _kinds := PackedInt32Array()
-
-
-var b_shadow := TriBatch.new()
-var b_enemy_back := TriBatch.new()
-var b_enemy_front := TriBatch.new()
-var b_pick := {"soul": TriBatch.new(), "coin": TriBatch.new(), "oil": TriBatch.new(), "chest": TriBatch.new()}
-var b_talisman := TriBatch.new()
-var b_ghostfire := TriBatch.new()
-var b_sword := TriBatch.new()
-var b_flame := TriBatch.new()
-var b_glow_ground := TriBatch.new()
-var b_glow_fx := TriBatch.new()
-var b_white_fx := TriBatch.new()   # 加色层里的圆环/闪电/线条：白图 + 顶点色，一次提交
-var b_bg := TriBatch.new()
-var b_flash := TriBatch.new()
-var b_fxs := {}
-var _ekeys := PackedInt64Array()
-var _eobjs: Array = []
-var _marks_lines := PackedVector2Array()
 
 
 func _is_special(e: SimEnemy) -> bool:
@@ -563,7 +658,6 @@ func _is_special(e: SimEnemy) -> bool:
 func _draw() -> void:
 	var t_draw := Time.get_ticks_usec()
 	var ci := get_canvas_item()
-	# 视口裁剪：只处理镜头范围内（含边距）的实体，屏外不提交绘制
 	var vis := get_viewport_rect().size / maxf(0.01, cam.zoom.x)
 	_cull = Rect2(cam.position - vis / 2.0, vis)
 	_keys.resize(0)
@@ -572,10 +666,16 @@ func _draw() -> void:
 	_vis_enemies.clear()
 	_objs.clear()
 	_kinds.resize(0)
+	_poi_labels.clear()
 	for lp in _lamp_positions():
 		if _visible(lp.x, lp.y, 200.0):
-			_draw_lamp(lp)   # 路灯是地面装饰：先于实体统一画
+			_draw_lamp(lp)
 	b_shadow.full(sim.px - 28.0, sim.py - 7.0, 56.0, 14.0, Color(0, 0, 0, 0.4))
+	if sim.pet_on and sim.pet_dead_t <= 0.0:
+		b_shadow.full(sim.pet_pos.x - 28.0, sim.pet_pos.y + 8.0, 56.0, 14.0, Color(0, 0, 0, 0.42))
+	if sim.phase == Sim.PH_BREAK:
+		var mp_sh := sim.break_pos("merchant")
+		b_shadow.full(mp_sh.x - 44.0, mp_sh.y - 10.0, 88.0, 20.0, Color(0, 0, 0, 0.4))
 	var cx0 := _cull.position.x - 130.0
 	var cx1 := _cull.end.x + 130.0
 	var cy0 := _cull.position.y - 130.0
@@ -604,19 +704,21 @@ func _draw() -> void:
 		_push(sim.break_pos("gate").y, 4, "gate")
 	_keys.sort()
 	_ekeys.sort()
-	_draw_teles()
+	# 预警圈统一进白图批（1 次绘制调用）
+	_batch_teles()
+	b_world_white.flush(ci, T.white)
 	# 掉落物：每种贴图一个批
 	var t_pk := Time.get_ticks_usec()
 	for k: SimPickup in sim.pickups:
 		if _visible(k.x, k.y, 60.0):
 			_batch_pickup(k)
-	for kind in ["soul", "coin", "oil", "chest"]:
+	for kind in PICKUP_KINDS:
 		(b_pick[kind] as TriBatch).flush(ci, T[PICKUP_TEX[kind]])
 	PerfStat.add("d_pickup", t_pk)
 	var t_s := Time.get_ticks_usec()
 	b_shadow.flush(ci, T.glow)
 	PerfStat.add("d_shadow", t_s)
-	# 普通小怪：按 y 排序后以主角 y 为界拆成“身后/身前”两批（各 1 次提交），精英/Boss/主角/POI 在中间按 y 排序
+	# 普通小怪：按 y 排序后以主角 y 为界拆成“身后/身前”两批（各 1 次提交）
 	var t_e := Time.get_ticks_usec()
 	var py_key := (int(sim.py * 4.0) + 40000)
 	for key in _ekeys:
@@ -635,17 +737,17 @@ func _draw() -> void:
 			4: _draw_zone(o)
 			5: _draw_poi(o)
 	b_enemy_front.flush(ci, T.enemy_atlas)
-	_marks_lines.resize(0)
+	# 叠加层：血条 / 符印 / 剑痕 / 异常色点 / POI 环 / 文字底框 → 统一进 b_world_white 一次提交
 	for e2: SimEnemy in _vis_enemies:
 		if e2.mark_t > 0.0 or e2.marks > 0 or e2.elite or e2.boss or e2.ail_kinds > 0:
-			_draw_enemy_overlays(e2)
-	if _marks_lines.size() > 0:
-		draw_multiline(_marks_lines, Color(0.5, 0.92, 1.0), 3.0, false)
-	b_pips.flush(ci, T.white)
+			_batch_enemy_overlays(e2)
 	var t_p := Time.get_ticks_usec()
 	_draw_projectiles()
 	PerfStat.add("d_proj", t_p)
+	b_world_white.flush(ci, T.white)
+	# 所有世界文字（POI 标牌 + 飘字）在所有实体/弹幕之后统一提交，避免打断精灵合批
 	var t_f := Time.get_ticks_usec()
+	_draw_poi_labels()
 	_draw_floaters()
 	PerfStat.add("d_float", t_f)
 	PerfStat.add("world_draw", t_draw)
@@ -654,31 +756,33 @@ func _draw() -> void:
 func _draw_lamp(p: Vector2) -> void:
 	var tx: Texture2D = T.field_lantern
 	var lit := _lamps_lit()
-	var s := 1.0
-	var sz := Vector2(tx.get_width(), tx.get_height()) * s
+	var sz := Vector2(tx.get_width(), tx.get_height())
 	var col := Color.WHITE if lit else Color(0.35, 0.36, 0.5)
 	draw_texture_rect(tx, Rect2(p.x - sz.x / 2.0, p.y - sz.y, sz.x, sz.y), false, col)
-	if not lit and sim.phase == Sim.PH_RIFT:
-		pass
 
 
-func _draw_teles() -> void:
+func _batch_teles() -> void:
 	for tl: SimTele in sim.teles:
 		if tl.is_rect():
-			# 半壁灯海：整片半屏的矩形预警，由外向内填满，倒计时一目了然
 			var kr := clampf(tl.t / maxf(0.01, tl.dur), 0.0, 1.0)
-			var rc := Rect2(tl.x - tl.rw * 0.5, tl.y - tl.rh * 0.5, tl.rw, tl.rh)
-			draw_rect(rc, Color(0.95, 0.25, 0.18, 0.10 + 0.22 * kr), true)
-			draw_rect(rc, Color(1.0, 0.45, 0.35, 0.9), false, 4.0)
-			var inner := rc.grow(-minf(rc.size.x, rc.size.y) * 0.5 * (1.0 - kr))
-			draw_rect(inner, Color(1.0, 0.7, 0.45, 0.22), true)
+			var rx := tl.x - tl.rw * 0.5
+			var ry := tl.y - tl.rh * 0.5
+			b_world_white.full(rx, ry, tl.rw, tl.rh, Color(0.95, 0.25, 0.18, 0.10 + 0.22 * kr))
+			b_world_white.rect_frame(rx, ry, tl.rw, tl.rh, 4.0, Color(1.0, 0.45, 0.35, 0.9))
+			var inset := minf(tl.rw, tl.rh) * 0.5 * (1.0 - kr)
+			var iw := tl.rw - inset * 2.0
+			var ih := tl.rh - inset * 2.0
+			if iw > 0.0 and ih > 0.0:
+				b_world_white.full(rx + inset, ry + inset, iw, ih, Color(1.0, 0.7, 0.45, 0.22))
 			continue
 		if tl.r <= 0.0:
 			continue
 		var k := clampf(tl.t / maxf(0.01, tl.dur), 0.0, 1.0)
-		draw_circle(Vector2(tl.x, tl.y), tl.r, Color(0.88, 0.27, 0.23, 0.12 + 0.18 * k))
-		draw_arc(Vector2(tl.x, tl.y), tl.r, 0, TAU, 48, Color(1.0, 0.45, 0.35, 0.8), 3.0, true)
-		draw_arc(Vector2(tl.x, tl.y), tl.r * k, 0, TAU, 48, Color(1.0, 0.7, 0.5, 0.7), 2.0, true)
+		var cc := Vector2(tl.x, tl.y)
+		b_world_white.circle(cc, tl.r, Color(0.88, 0.27, 0.23, 0.12 + 0.18 * k), 28)
+		b_world_white.ring(cc, tl.r, 3.0, Color(1.0, 0.45, 0.35, 0.8), 28)
+		if k > 0.02:
+			b_world_white.ring(cc, tl.r * k, 2.0, Color(1.0, 0.7, 0.5, 0.7), 24)
 
 
 func _draw_player() -> void:
@@ -700,14 +804,14 @@ func _draw_player() -> void:
 		rot = sin(t_anim * 18.0) * 0.04 + sim.in_move.x * 0.06
 	else:
 		wob = 1.0 + sin(t_anim * 4.0) * 0.025
-	var w := fw * sc
-	var h := fh * sc * wob
+	var sp := clampf(player_spring.x, 0.82, 1.22)
+	var w := fw * sc / sp
+	var h := fh * sc * wob * sp
 	draw_set_transform(Vector2(sim.px, sim.py), rot, Vector2.ONE)
 	var src := Rect2((fr % 6) * fw, (fr / 6) * fh, fw, fh)
 	var dst := Anchors.rect(0.0, -h * 0.92, w, h, "hero_run", sim.face_x < 0)
 	draw_texture_rect_region(tx, dst, src, col)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	# 冲刺残影在加色层画
 
 
 func _anchor_key(e: SimEnemy) -> String:
@@ -720,7 +824,6 @@ func _anchor_key(e: SimEnemy) -> String:
 	return String(e.def.tex)
 
 
-## 小 BOSS / 宠物贴图按需加载：出场前不占显存
 func _tex(name: String) -> Texture2D:
 	if not T.has(name):
 		T[name] = load("res://assets/%s.png" % name)
@@ -728,7 +831,6 @@ func _tex(name: String) -> Texture2D:
 
 
 func _enemy_tex(e: SimEnemy) -> Array:
-	## 返回 [texture, src_rect(or null), frame_w, frame_h, sheet_scale]
 	if e.warden:
 		var wt: Texture2D = _tex("boss_swordwarden")
 		return [wt, null, float(wt.get_width()), float(wt.get_height()), 1.0]
@@ -738,7 +840,7 @@ func _enemy_tex(e: SimEnemy) -> Array:
 	if e.boss:
 		var n := int(t_anim * 8.0) % 8
 		if not T.has("boss_idle"):
-			T.boss_idle = load("res://assets/anim/boss_idle.png")   # 按需加载：只有 Boss 在场才占显存
+			T.boss_idle = load("res://assets/anim/boss_idle.png")
 		return [T.boss_idle, Rect2(n * 118, 0, 118, 192), 118.0, 192.0, 1.05]
 	if e.elite and e.type == "jiangshi":
 		var ph := fmod(e.hop, 1.0)
@@ -751,7 +853,6 @@ func _enemy_tex(e: SimEnemy) -> Array:
 	return _enemy_cache[e.def.tex]
 
 
-## 普通小怪：写进批（水平翻转 = 交换 UV），不产生独立绘制调用；锚点/宽高比来自缓存，热路径无字典再查
 func _batch_enemy(e: SimEnemy, b: TriBatch) -> void:
 	var d: Dictionary = e.def
 	var info: Array = _enemy_cache[d.tex]
@@ -818,12 +919,12 @@ func _draw_enemy(e: SimEnemy) -> void:
 	if e.ai == "sedan" and e.warn_t > 0.0:
 		var CS: Dictionary = GameData.MB.sedan
 		var o2 := Vector2(e.x, e.y - 20.0)
-		draw_line(o2, o2 + e.lunge_dir * float(CS.chargeLen), Color(1.0, 0.2, 0.2, 0.6), 50.0, true)
+		b_world_white.line(o2, o2 + e.lunge_dir * float(CS.chargeLen), 50.0, Color(1.0, 0.2, 0.2, 0.6))
 	if e.ai == "lamps":
 		for li in range(int(GameData.MB.lamps.lamps)):
 			var lp := sim.lamp_pos(e, li)
-			draw_texture_rect(T.glow, Rect2(lp.x - 36, lp.y - 36, 72, 72), false, Color(0.5, 1.0, 0.6, 0.8))
-			draw_circle(lp, 11.0, Color(0.7, 1.0, 0.7))
+			b_glow_fx.full(lp.x - 36.0, lp.y - 36.0, 72.0, 72.0, Color(0.5, 1.0, 0.6, 0.8))
+			b_world_white.circle(lp, 11.0, Color(0.7, 1.0, 0.7), 10)
 	var y0 := e.y - h * 0.95 - e.lift
 	var dst := Anchors.rect(e.x, y0, w, h, _anchor_key(e), flip)
 	if info[1] != null:
@@ -834,24 +935,21 @@ func _draw_enemy(e: SimEnemy) -> void:
 		flash_list.append([tx, dst, info[1]])
 
 
-## 叠加循环：血条/剑痕/符印在所有实体画完之后统一提交（线条/圆弧与贴图混排会不断打断合批）
-func _draw_enemy_overlays(e: SimEnemy) -> void:
+func _batch_enemy_overlays(e: SimEnemy) -> void:
 	if e.mark_t > 0.0:
 		var k: float = 1.0 - e.mark_t / float(GameData.EVOS.fu.stats.markDelay)
 		var cy := e.y - e.h * 0.45
 		var rr := 16.0 + e.r * 0.4
-		draw_arc(Vector2(e.x, cy), rr, 0, TAU, 24, Color(1, 0.83, 0.42, 0.5), 2.0, false)
-		draw_arc(Vector2(e.x, cy), rr, -PI / 2.0, -PI / 2.0 + k * TAU, 24, Color(1, 0.9, 0.66, 0.95), 4.0, false)
+		b_world_white.ring(Vector2(e.x, cy), rr, 2.0, Color(1, 0.83, 0.42, 0.5), 24)
+		b_world_white.arc(Vector2(e.x, cy), rr, 4.0, -PI / 2.0, -PI / 2.0 + k * TAU, Color(1, 0.9, 0.66, 0.95), 24)
 	if e.marks > 0:
-		# 剑痕：头顶青色斜痕，层数 = 痕数
 		var cx := e.x - (e.marks - 1) * 6.0
+		var py := e.y - e.h - 6.0 - e.lift
 		for i in range(e.marks):
 			var px := cx + i * 12.0
-			var py := e.y - e.h - 6.0 - e.lift
-			_marks_lines.append(Vector2(px - 4, py + 7))
-			_marks_lines.append(Vector2(px + 4, py - 7))
+			b_world_white.line(Vector2(px - 4.0, py + 7.0), Vector2(px + 4.0, py - 7.0), 3.0, Color(0.5, 0.92, 1.0))
 	if e.elite or e.boss:
-		_draw_bar(e)
+		_batch_bar(e)
 	if e.ail_kinds > 0:
 		_ail_pips(e, e.x, e.y - e.h - (34.0 if not e.boss else 70.0) - e.lift)
 
@@ -871,24 +969,20 @@ func _draw_warden_fx(e: SimEnemy) -> void:
 		var L: Dictionary = C.lunge
 		var o := Vector2(e.x, e.y - 20.0)
 		var k := 1.0 - e.warn_t / float(L.warn)
-		draw_line(o, o + e.lunge_dir * float(L.len), Color(1.0, 0.3, 0.25, 0.25 + 0.45 * k), float(L.width) * (0.5 + 0.5 * k), true)
-		draw_line(o, o + e.lunge_dir * float(L.len), Color(1.0, 0.8, 0.7, 0.9), 3.0, true)
+		b_world_white.line(o, o + e.lunge_dir * float(L.len), float(L.width) * (0.5 + 0.5 * k), Color(1.0, 0.3, 0.25, 0.25 + 0.45 * k))
+		b_world_white.line(o, o + e.lunge_dir * float(L.len), 3.0, Color(1.0, 0.8, 0.7, 0.9))
 	if e.stagger_t > 0.0:
-		_shadow_text(Vector2(e.x - 100, e.y - e.h - 40.0), "破绽！承伤+%d%%" % int((float(C.lunge.staggerTakenMul) - 1.0) * 100.0), 200.0, 26, Color(1.0, 0.9, 0.4))
+		_queue_label(Vector2(e.x - 100.0, e.y - e.h - 40.0), "破绽！承伤+%d%%" % int((float(C.lunge.staggerTakenMul) - 1.0) * 100.0), 200.0, 26, Color(1.0, 0.9, 0.4))
 
 
-func _draw_bar(e: SimEnemy) -> void:
-	# 精英/守关者头顶血条（Boss 的大血条在 HUD）
+func _batch_bar(e: SimEnemy) -> void:
 	if e.boss:
 		return
 	var w := 90.0
-	var x := e.x - w / 2.0
+	var x := e.x - w * 0.5
 	var y := e.y - e.h - 22.0 - e.lift
-	draw_rect(Rect2(x - 2, y - 2, w + 4, 10), UI.INK)
-	draw_rect(Rect2(x, y, w * clampf(e.hp / e.maxhp, 0.0, 1.0), 6), Color("ff5a4a") if e.warden else Color("ff9a3c"))
-
-
-const PICKUP_TEX := {"soul": "drop_soul", "coin": "drop_coin", "oil": "drop_oil", "chest": "drop_chest"}
+	b_world_white.full(x - 2.0, y - 2.0, w + 4.0, 10.0, UI.INK)
+	b_world_white.full(x, y, w * clampf(e.hp / maxf(1.0, e.maxhp), 0.0, 1.0), 6.0, Color("ff5a4a") if e.warden else Color("ff9a3c"))
 
 
 func _batch_pickup(k: SimPickup) -> void:
@@ -907,9 +1001,6 @@ func _batch_pickup(k: SimPickup) -> void:
 	var w: float = inf[1] * sc
 	var h: float = inf[2] * sc
 	(inf[0] as TriBatch).full(k.x - w * 0.5, k.y - h * 0.5 + sin(k.bob) * 3.0, w, h, col)
-
-
-var _pk_cache: Dictionary = {}
 
 
 func _draw_pickup(k: SimPickup) -> void:
@@ -934,54 +1025,59 @@ func _draw_pickup(k: SimPickup) -> void:
 
 
 func _draw_poi(i: int) -> void:
-	if sim.pois[i].kind == "vine":
+	var poi: Dictionary = sim.pois[i]
+	var pk: String = poi.kind
+	if pk == "vine":
 		if sim.vine_taken.has(i):
 			return
-		var vp := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
-		draw_texture_rect(T.glow, Rect2(vp.x - 110, vp.y - 110, 220, 220), false, Color(0.3, 1.0, 0.5, 0.45))
+		var vp := Vector2(float(poi.x), float(poi.y))
 		for a in range(3):
-			draw_line(vp, vp + Vector2(sin(t_anim + a * 2.1) * 40.0, -70.0 - a * 14.0), Color(0.3, 0.8, 0.3), 5.0, true)
-		draw_circle(vp + Vector2(0, -80), 16.0, Color(1.0, 0.7, 0.2))
-		_draw_zone_text(vp + Vector2(0, -110.0), "葫芦灵藤", "站定 1 秒采集彩虹葫芦散件", Color("9fffb0"))
+			b_world_white.line(vp, vp + Vector2(sin(t_anim + a * 2.1) * 40.0, -70.0 - a * 14.0), 5.0, Color(0.3, 0.8, 0.3))
+		b_world_white.circle(vp + Vector2(0.0, -80.0), 16.0, Color(1.0, 0.7, 0.2), 14)
+		_queue_zone_text(vp + Vector2(0.0, -110.0), "葫芦灵藤", "站定 1 秒采集彩虹葫芦散件", Color("9fffb0"))
 		var vh: float = float(sim.poi_hold.get(i, 0.0))
 		if vh > 0.0:
-			draw_arc(vp, 78.0, -PI / 2.0, -PI / 2.0 + clampf(vh / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, 48, Color(1.0, 0.9, 0.5, 0.95), 7.0, true)
+			b_world_white.arc(vp, 78.0, 7.0, -PI / 2.0, -PI / 2.0 + clampf(vh / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, Color(1.0, 0.9, 0.5, 0.95), 28)
 		return
-	if sim.pois[i].kind == "merchant":
-		var mp2 := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
+	if pk == "merchant":
+		var mp2 := Vector2(float(poi.x), float(poi.y))
 		var mt: Texture2D = T.merchant
 		var mh := 150.0
 		var mw := mt.get_width() * mh / mt.get_height()
 		draw_texture_rect(mt, Rect2(mp2.x - mw / 2.0, mp2.y - mh * 0.95, mw, mh), false, Color.WHITE)
-		var sgn := mp2 + Vector2(0, 56.0) - cam.position + get_viewport_rect().size / 2.0
-		if mp2.distance_to(Vector2(sim.px, sim.py)) <= 380.0 and not (sgn.x - 130.0 < 430.0 and sgn.y - 36.0 < 340.0):   # 不压左上角血条/葫芦珠区域
-			_draw_zone_text(mp2 + Vector2(0, 56.0), String(sim.pois[i].name), "站定 1 秒打开商店（铜钱换遗物）", UI.GOLD)
+		var sgn := mp2 + Vector2(0.0, 56.0) - cam.position + get_viewport_rect().size / 2.0
+		if mp2.distance_to(Vector2(sim.px, sim.py)) <= 380.0 and not (sgn.x - 130.0 < 430.0 and sgn.y - 36.0 < 340.0):
+			_queue_zone_text(mp2 + Vector2(0.0, 56.0), String(poi.name), "站定 1 秒打开商店（铜钱换遗物）", UI.GOLD)
 		return
-	if Sim.LM_KINDS.has(sim.pois[i].kind):
-		var lp := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
+	if Sim.LM_KINDS.has(pk):
+		var lp := Vector2(float(poi.x), float(poi.y))
 		var lst := sim.lm_state(i)
-		var near := lp.distance_to(Vector2(sim.px, sim.py)) < 420.0
-		b_glow_ground.full(lp.x - 150, lp.y - 110, 300, 220, Color(0.5, 0.8, 1.0, 0.35 if lst == "ok" else 0.12))
-		draw_arc(lp, float(GameData.SEG["break"].zoneR), 0, TAU, 40, Color(1, 0.8, 0.4, 0.5 if lst == "ok" else 0.2), 3.0, true)
-		if near:
-			_draw_zone_text(lp + Vector2(0, -70.0), String(sim.pois[i].name), sim.lm_hint(i), UI.GOLD if lst == "ok" else Color("ff8a7a"))
+		var zr_lm := float(GameData.SEG["break"].zoneR)
+		b_world_white.ring(lp, zr_lm, 3.0, Color(1.0, 0.8, 0.4, 0.5 if lst == "ok" else 0.2), 28)
+		if lp.distance_to(Vector2(sim.px, sim.py)) < 420.0:
+			_queue_zone_text(lp + Vector2(0.0, -70.0), String(poi.name), sim.lm_hint(i), UI.GOLD if lst == "ok" else Color("ff8a7a"))
 		var lh: float = float(sim.poi_hold.get(i, 0.0))
 		if lh > 0.0:
-			draw_arc(lp, float(GameData.SEG["break"].zoneR), -PI / 2.0, -PI / 2.0 + clampf(lh / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, 40, Color(1.0, 0.9, 0.5, 0.95), 7.0, true)
+			b_world_white.arc(lp, zr_lm, 7.0, -PI / 2.0, -PI / 2.0 + clampf(lh / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, Color(1.0, 0.9, 0.5, 0.95), 28)
 		return
-	var pp := Vector2(float(sim.pois[i].x), float(sim.pois[i].y))
+	var pp := Vector2(float(poi.x), float(poi.y))
 	var tx: Texture2D = T.rift_portal
 	var st := sim.poi_state(i)
 	var sc := 1.0 + sin(t_anim * 3.0) * 0.03
 	var w := tx.get_width() * sc
 	var h := tx.get_height() * sc
-	draw_texture_rect(T.glow, Rect2(pp.x - 200, pp.y - 260, 400, 300), false, Color(0.7, 0.3, 1.0, 0.45 if st == "ok" else 0.15))
-	var pk: String = sim.pois[i].kind
 	var is_ar: bool = Sim.ARENA_KINDS.has(pk)
-	var tint2: Color = {"gourd": Color(0.6, 1.0, 0.6), "vault": Color(1.0, 0.7, 0.4), "coinfarm": Color(1.0, 0.88, 0.35), "soulfarm": Color(0.55, 0.85, 1.0)}.get(pk, Color.WHITE)
+	var tint2: Color = POI_TINTS.get(pk, Color.WHITE)
 	draw_texture_rect(tx, Rect2(pp.x - w / 2.0, pp.y - h * 0.75, w, h), false, tint2 if st == "ok" else Color(0.55, 0.5, 0.62))
-	var sub: String = ("站定进入 • 限时挑战" if is_ar else "站定进入 • 消耗灯芯×1") if st == "ok" else {"weak": "灯弱，不可入", "nowick": "灯芯不足", "sealed": "裂隙已闭合", "cooldown": "冷却中 %d 秒（第 3 次起每次间隔 90 秒）" % int(ceil(sim.rift_cd_left())), "noticket": "门票 %d 铜钱（现有 %d）" % [sim.vine_ticket(), sim.coins]}.get(st, "")
-	if sim.pois[i].kind == "gourd" and st == "ok":
+	var sub: String = ("站定进入 • 限时挑战" if is_ar else "站定进入 • 消耗灯芯×1") if st == "ok" else ""
+	if st != "ok":
+		match st:
+			"weak": sub = "灯弱，不可入"
+			"nowick": sub = "灯芯不足"
+			"sealed": sub = "裂隙已闭合"
+			"cooldown": sub = "冷却中 %d 秒（第 3 次起每次间隔 90 秒）" % int(ceil(sim.rift_cd_left()))
+			"noticket": sub = "门票 %d 铜钱（现有 %d）" % [sim.vine_ticket(), sim.coins]
+	if pk == "gourd" and st == "ok":
 		sub = "站定入内 • 门票 %d 铜钱 • 第 %d 劫（超时返还）" % [sim.vine_ticket(), sim.vine_runs + 1]
 	if Sim.FARM_KINDS.has(pk):
 		var FM: Dictionary = GameData.DG.farms[pk]
@@ -991,12 +1087,12 @@ func _draw_poi(i: int) -> void:
 			sub = "冷却中 %d 秒（可反复刷）" % int(ceil(sim.lm_cd_left(i)))
 		elif st == "weak":
 			sub = "生命需高于 %d%%" % int(float(FM.hpGate) * 100.0)
-	_draw_zone_text(pp + Vector2(0, -h * 0.75 - 10.0), String(sim.pois[i].name), sub, UI.GOLD if st == "ok" else Color("ff8a7a"))
+	_queue_zone_text(pp + Vector2(0.0, -h * 0.75 - 10.0), String(poi.name), sub, UI.GOLD if st == "ok" else Color("ff8a7a"))
 	var zr: float = GameData.SEG["break"].zoneR
 	var hv: float = float(sim.poi_hold.get(i, 0.0))
-	draw_arc(pp, zr, 0, TAU, 48, Color(1, 0.8, 0.4, 0.35), 3.0, true)
+	b_world_white.ring(pp, zr, 3.0, Color(1.0, 0.8, 0.4, 0.35), 28)
 	if hv > 0.0:
-		draw_arc(pp, zr, -PI / 2.0, -PI / 2.0 + clampf(hv / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, 48, Color(1.0, 0.9, 0.5, 0.95), 7.0, true)
+		b_world_white.arc(pp, zr, 7.0, -PI / 2.0, -PI / 2.0 + clampf(hv / float(GameData.DG.rift.hold), 0.0, 1.0) * TAU, Color(1.0, 0.9, 0.5, 0.95), 28)
 
 
 func _draw_zone(which: String) -> void:
@@ -1019,37 +1115,49 @@ func _draw_zone(which: String) -> void:
 				"nowick": sub = "灯芯不足"; col = Color("ff8a7a")
 				"sealed": sub = "裂隙已闭合"; col = Color("9aa3cf")
 				"cooldown": sub = "冷却中 %d 秒" % int(ceil(sim.rift_cd_left())); col = Color("9aa3cf")
-			_draw_zone_text(p + Vector2(0, -h * 0.75 - 10.0), label, sub, col)
+			_queue_zone_text(p + Vector2(0.0, -h * 0.75 - 10.0), label, sub, col)
 		"merchant":
 			var tx2: Texture2D = T.merchant
 			var h2 := 150.0
 			var w2 := tx2.get_width() * h2 / tx2.get_height()
-			_draw_shadow(p.x, p.y, 44.0, 20.0)
 			draw_texture_rect(tx2, Rect2(p.x - w2 / 2.0, p.y - h2 * 0.95 + sin(t_anim * 2.0) * 2.0, w2, h2), false, Color.WHITE)
-			_draw_zone_text(p + Vector2(0, 56.0), "游商", "站定交易 • 铜钱换遗物", UI.GOLD)
+			_queue_zone_text(p + Vector2(0.0, 56.0), "游商", "站定交易 • 铜钱换遗物", UI.GOLD)
 		"gate":
 			var tx3: Texture2D = T.field_lantern
 			for sx in [-70.0, 70.0]:
 				draw_texture_rect(tx3, Rect2(p.x + sx - tx3.get_width() / 2.0, p.y - tx3.get_height() + 30.0, tx3.get_width(), tx3.get_height()), false, Color.WHITE)
 			var sub3 := "站定启程 • 领取馈赠三选一" if sim.gift_pending else "站定启程（馈赠已放弃）"
-			_draw_zone_text(p + Vector2(0, -tx3.get_height() - 4.0), "启程", sub3, UI.GOLD)
-	# 站定进度环
+			_queue_zone_text(p + Vector2(0.0, -tx3.get_height() - 4.0), "启程", sub3, UI.GOLD)
 	var hv: float = float(sim.hold.get(which, 0.0))
 	var need: float = GameData.DG.rift.hold
-	draw_arc(p, zr, 0, TAU, 48, Color(1, 0.8, 0.4, 0.35), 3.0, true)
+	b_world_white.ring(p, zr, 3.0, Color(1.0, 0.8, 0.4, 0.35), 28)
 	if hv > 0.0:
-		draw_arc(p, zr, -PI / 2.0, -PI / 2.0 + clampf(hv / need, 0.0, 1.0) * TAU, 48, Color(1.0, 0.9, 0.5, 0.95), 7.0, true)
+		b_world_white.arc(p, zr, 7.0, -PI / 2.0, -PI / 2.0 + clampf(hv / need, 0.0, 1.0) * TAU, Color(1.0, 0.9, 0.5, 0.95), 28)
 
 
-func _draw_zone_text(p: Vector2, title: String, sub: String, col: Color) -> void:
-	draw_rect(Rect2(p.x - 130, p.y - 36, 260, 48), Color(0.03, 0.04, 0.1, 0.6))
-	_shadow_text(p + Vector2(-200, -14), title, 400.0, 20, UI.PAPER)
-	_shadow_text(p + Vector2(-260, 6), sub, 520.0, 16, col)
+func _queue_label(pos: Vector2, text: String, w: float, size: int, col: Color) -> void:
+	_poi_labels.append([pos, text, w, UI.snap_size(size), col])
 
 
-func _shadow_text(pos: Vector2, text: String, w: float, size: int, col: Color) -> void:
-	draw_string(font, pos + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_CENTER, w, size, UI.INK)
-	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_CENTER, w, size, col)
+func _queue_zone_text(p: Vector2, title: String, sub: String, col: Color) -> void:
+	b_world_white.full(p.x - 130.0, p.y - 36.0, 260.0, 48.0, Color(0.03, 0.04, 0.1, 0.6))
+	_queue_label(p + Vector2(-200.0, -14.0), title, 400.0, 20, UI.PAPER)
+	_queue_label(p + Vector2(-260.0, 6.0), sub, 520.0, 16, col)
+
+
+func _draw_poi_labels() -> void:
+	if _poi_labels.is_empty():
+		return
+	for pass_i in range(2):
+		for sz in [16, 20, 26]:
+			for item in _poi_labels:
+				if int(item[3]) != sz:
+					continue
+				var pos: Vector2 = item[0]
+				if pass_i == 0:
+					draw_string(font, pos + Vector2(1.5, 1.5), String(item[1]), HORIZONTAL_ALIGNMENT_CENTER, float(item[2]), sz, UI.INK)
+				else:
+					draw_string(font, pos, String(item[1]), HORIZONTAL_ALIGNMENT_CENTER, float(item[2]), sz, item[4])
 
 
 func _draw_projectiles() -> void:
@@ -1070,44 +1178,44 @@ func _draw_projectiles() -> void:
 		var ph := 94.0
 		var pw := pt.get_width() * ph / pt.get_height()
 		var bob := sin(t_anim * 6.5) * 6.0
-		# 脚下投影 + 实体朝向 + 迷你生命条
-		draw_texture_rect(T.glow, Rect2(pp.x - 28.0, pp.y + 8.0, 56.0, 14.0), false, Color(0, 0, 0, 0.42))
 		draw_texture_rect(pt, Anchors.rect(pp.x, pp.y - ph * 0.72 + bob, pw, ph, "pet_huluwa", sim.pet_flip), false, Color.WHITE)
 		var bw := 54.0
 		var bx := pp.x - bw * 0.5
 		var by := pp.y - ph * 0.78 + bob - 10.0
-		draw_rect(Rect2(bx - 1.5, by - 1.5, bw + 3.0, 8.0), UI.INK)
-		draw_rect(Rect2(bx, by, bw, 5.0), Color(0.12, 0.12, 0.2))
-		draw_rect(Rect2(bx, by, bw * clampf(sim.pet_hp / maxf(1.0, sim.pet_maxhp()), 0.0, 1.0), 5.0), Color("ffcf5a"))
-	# 葫芦小金刚赤炎连珠弹体
-	var pscols := [Color(1.0, 0.45, 0.2), Color(1.0, 0.85, 0.35), Color(0.55, 0.95, 1.0)]
+		b_world_white.full(bx - 1.5, by - 1.5, bw + 3.0, 8.0, UI.INK)
+		b_world_white.full(bx, by, bw, 5.0, Color(0.12, 0.12, 0.2))
+		b_world_white.full(bx, by, bw * clampf(sim.pet_hp / maxf(1.0, sim.pet_maxhp()), 0.0, 1.0), 5.0, Color("ffcf5a"))
+	var fl2: Texture2D = T.proj_flame
+	var fl2_w := fl2.get_width() * 0.52
+	var fl2_h := fl2.get_height() * 0.52
 	for sh in sim.pet_shots:
-		var fl2: Texture2D = T.proj_flame
-		var col_s: Color = pscols[int(sh.get("col", 0)) % pscols.size()]
+		var col_s: Color = PET_SHOT_COLS[int(sh.get("col", 0)) % 3]
 		var ang_s := atan2(float(sh.vy), float(sh.vx))
-		b_flame.rot(Vector2(float(sh.x), float(sh.y)), ang_s, fl2.get_width() * 0.52, fl2.get_height() * 0.52, col_s)
-	# 剑轮 / 剑气（阶段3-5）
+		b_flame.rot(Vector2(float(sh.x), float(sh.y)), ang_s, fl2_w, fl2_h, col_s)
 	var swt: Texture2D = T.proj_sword
+	var sw_w := float(swt.get_width())
+	var sw_h := float(swt.get_height())
 	for wp: Vector2 in sim.sw_wheel_pos:
 		var wa := atan2(wp.y - (sim.py - 30.0), wp.x - sim.px) + PI / 2.0
-		b_sword.rot(wp, wa, swt.get_width() * 0.4, swt.get_height() * 0.4, Color(0.8, 1.0, 1.0))
+		b_sword.rot(wp, wa, sw_w * 0.4, sw_h * 0.4, Color(0.8, 1.0, 1.0))
 	for qb: SimBullet in sim.sw_qi:
 		var big: float = 0.42 if qb.hits.key == "sw_array" else 0.32
-		b_sword.rot(Vector2(qb.x, qb.y), qb.ang, swt.get_width() * big, swt.get_height() * big, Color(1.0, 0.9, 0.6) if qb.hits.key == "sw_array" else Color(0.6, 1.0, 1.0))
+		b_sword.rot(Vector2(qb.x, qb.y), qb.ang, sw_w * big, sw_h * big, Color(1.0, 0.9, 0.6) if qb.hits.key == "sw_array" else Color(0.6, 1.0, 1.0))
 	var fl: Texture2D = T.proj_flame
+	var fl_s := 0.5 + sin(t_anim * 14.0) * 0.05
+	var fl_ow := fl.get_width() * fl_s
+	var fl_oh := fl.get_height() * fl_s
 	for o in sim.orb_pos:
-		var s := 0.5 + sin(t_anim * 14.0) * 0.05
-		b_flame.full(o.x - fl.get_width() * s / 2.0, o.y - fl.get_height() * s / 2.0, fl.get_width() * s, fl.get_height() * s, Color.WHITE)
-	# 飞剑
+		b_flame.full(o.x - fl_ow * 0.5, o.y - fl_oh * 0.5, fl_ow, fl_oh, Color.WHITE)
 	if sim.has_sword() and (sim.sw_state == Sim.SW_ORBIT or sim.sw_state == Sim.SW_RECALL):
 		var ang := 0.0
 		if sim.sw_state == Sim.SW_ORBIT:
 			ang = atan2(cos(sim.sw_ang) * GameData.DG.sword.orbitRy, -sin(sim.sw_ang) * GameData.DG.sword.orbitRx)
 		else:
 			ang = atan2(sim.sw_dir.y, sim.sw_dir.x)
-		b_sword.rot(Vector2(sim.sw_x, sim.sw_y), ang, swt.get_width() * 0.62, swt.get_height() * 0.62, Color.WHITE)
+		b_sword.rot(Vector2(sim.sw_x, sim.sw_y), ang, sw_w * 0.62, sw_h * 0.62, Color.WHITE)
 	elif sim.has_sword() and sim.sw_state == Sim.SW_DROP:
-		b_sword.rot(Vector2(sim.px + 40.0, sim.py + 6.0), 0.5, swt.get_width() * 0.5, swt.get_height() * 0.5, Color(0.6, 0.6, 0.65))
+		b_sword.rot(Vector2(sim.px + 40.0, sim.py + 6.0), 0.5, sw_w * 0.5, sw_h * 0.5, Color(0.6, 0.6, 0.65))
 	b_talisman.flush(ci, tx)
 	b_ghostfire.flush(ci, eg)
 	b_sword.flush(ci, swt)
@@ -1115,9 +1223,11 @@ func _draw_projectiles() -> void:
 
 
 func _draw_floaters() -> void:
-	var from_i := maxi(0, floaters.size() - 12)   # 飘字最多同时画 12 条；阴影与正文分两遍、同字号连续提交（字形图集页不来回切换）
+	if floaters.is_empty():
+		return
+	var from_i := maxi(0, floaters.size() - 12)
 	for pass_i in range(2):
-		for sz in [20, 26]:
+		for sz in FLOATER_SIZES:
 			for fi in range(from_i, floaters.size()):
 				var f: Dictionary = floaters[fi]
 				if UI.snap_size(int(f.size)) != sz:
@@ -1151,72 +1261,79 @@ func defer__draw_fx_add(c: Node2D) -> void:
 		var src := Rect2((fr % 6) * fw, (fr / 6) * fh, fw, fh)
 		var dst := Anchors.rect(gh.x, gh.y - h * 0.92, w, h, "hero_run", gh.flip)
 		c.draw_texture_rect_region(tx, dst, src, Color(0.5, 0.89, 1.0, a))
+	# 挑灯爆焰：金色清弹冲击波 + 爆发光环
+	var fw_t := maxf(_sim_float("flare_wave_t", 0.0), _local_flare_wave)
+	var fl_t := _sim_float("flare_t", 0.0)
+	var pctr := Vector2(sim.px, sim.py - 30.0)
+	if fw_t > 0.0:
+		var k_fw := clampf(1.0 - fw_t / 0.55, 0.0, 1.0)
+		var rad_fw := 40.0 + 360.0 * (1.0 - (1.0 - k_fw) * (1.0 - k_fw))
+		var al_fw := (1.0 - k_fw) * 0.95
+		b_white_fx.ring(pctr, rad_fw, 12.0 * (1.0 - k_fw) + 3.0, Color(1.0, 0.84, 0.38, al_fw), 36)
+		b_white_fx.ring(pctr, rad_fw * 0.78, 5.0 * (1.0 - k_fw) + 1.5, Color(1.0, 0.96, 0.82, al_fw * 0.85), 28)
+		b_glow_fx.full(pctr.x - rad_fw * 0.8, pctr.y - rad_fw * 0.8, rad_fw * 1.6, rad_fw * 1.6, Color(1.0, 0.78, 0.3, al_fw * 0.38))
+	if fl_t > 0.0:
+		var pulse_fl := 0.72 + 0.28 * sin(t_anim * 16.0)
+		b_white_fx.ring(pctr, 56.0 + sin(t_anim * 12.0) * 5.0, 3.5, Color(1.0, 0.86, 0.42, 0.65 * pulse_fl), 28)
+		b_glow_fx.full(pctr.x - 110.0, pctr.y - 110.0, 220.0, 220.0, Color(1.0, 0.82, 0.35, 0.32 * pulse_fl))
 	# 子弹辉光
 	for b: SimBullet in sim.bullets:
-		b_glow_fx.full(b.x - 26, b.y - 26, 52, 52, Color(1.0, 0.85, 0.4, 0.55))
+		b_glow_fx.full(b.x - 26.0, b.y - 26.0, 52.0, 52.0, Color(1.0, 0.85, 0.4, 0.55))
 	for b: SimBullet in sim.ebullets:
-		b_glow_fx.full(b.x - 30, b.y - 30, 60, 60, Color(0.5, 1.0, 0.7, 0.55))
+		b_glow_fx.full(b.x - 30.0, b.y - 30.0, 60.0, 60.0, Color(0.5, 1.0, 0.7, 0.55))
 	for o in sim.orb_pos:
-		b_glow_fx.full(o.x - 44, o.y - 44, 88, 88, Color(1.0, 0.55, 0.2, 0.8))
+		b_glow_fx.full(o.x - 44.0, o.y - 44.0, 88.0, 88.0, Color(1.0, 0.55, 0.2, 0.8))
 	if sim.pet_on and sim.pet_dead_t <= 0.0:
-		var rb := [Color("ff4a3a"), Color("ff9a3c"), Color("ffe04a"), Color("5ade6a"), Color("4adfe0"), Color("4a7aff"), Color("b05aff")]
 		for ri in range(7):
 			var ra := t_anim * 3.8 + ri * TAU / 7.0
-			b_white_fx.circle(sim.pet_pos + Vector2(cos(ra) * 38.0, sin(ra) * 26.0 - 16.0), 5.5, rb[ri], 8)
-		b_glow_fx.full(sim.pet_pos.x - 64, sim.pet_pos.y - 64, 128, 128, Color(1.0, 0.85, 0.42, 0.58))
+			b_white_fx.circle(sim.pet_pos + Vector2(cos(ra) * 38.0, sin(ra) * 26.0 - 16.0), 5.5, RAINBOW_COLS[ri], 8)
+		b_glow_fx.full(sim.pet_pos.x - 64.0, sim.pet_pos.y - 64.0, 128.0, 128.0, Color(1.0, 0.85, 0.42, 0.58))
 	for sh in sim.pet_shots:
-		b_glow_fx.full(float(sh.x) - 34, float(sh.y) - 34, 68, 68, Color(1.0, 0.65, 0.25, 0.75))
+		b_glow_fx.full(float(sh.x) - 34.0, float(sh.y) - 34.0, 68.0, 68.0, Color(1.0, 0.65, 0.25, 0.75))
 	for fx in sim.pet_fx:
 		var fmax: float = maxf(0.01, float(fx[4]) if fx.size() > 4 else 0.4)
 		var fk: float = clampf(float(fx[3]) / fmax, 0.0, 1.0)
 		var frad: float = float(fx[5]) if fx.size() > 5 else 140.0
 		var fp := Vector2(fx[1], fx[2])
 		var ftype := int(fx[0])
-		var fc: Color = [Color(1.0, 0.45, 0.15), Color(0.7, 0.85, 1.0), Color(1.0, 0.88, 0.35)][ftype % 3]
+		var fc: Color = PET_FX_COLS[ftype % 3]
 		var rcur := frad * (0.28 + 0.72 * (1.0 - fk))
-		b_white_fx.arc(fp, rcur, 8.0 * fk + 2.0, 0, TAU, Color(fc, fk), 28)
+		b_white_fx.ring(fp, rcur, 8.0 * fk + 2.0, Color(fc, fk), 28)
 		b_glow_fx.full(fp.x - rcur * 0.7, fp.y - rcur * 0.7, rcur * 1.4, rcur * 1.4, Color(fc, fk * 0.42))
 		if ftype == 2:
-			b_white_fx.arc(fp, rcur * 0.68, 5.0 * fk + 1.0, 0, TAU, Color(0.55, 0.95, 1.0, fk * 0.85), 24)
+			b_white_fx.ring(fp, rcur * 0.68, 5.0 * fk + 1.0, Color(0.55, 0.95, 1.0, fk * 0.85), 24)
 	if sim.combo_fx > 0.0:
 		var ck := clampf(sim.combo_fx / 0.85, 0.0, 1.0)
-		var rb2 := [Color("ff4a3a"), Color("ff9a3c"), Color("ffe04a"), Color("5ade6a"), Color("4adfe0"), Color("4a7aff"), Color("b05aff")]
-		var cpos := Vector2(sim.px, sim.py - 30.0)
+		var cr_base := float(GameData.GD.pet.comboR) * (1.12 - ck * 0.85)
 		for ci2 in range(7):
-			var cr2 := float(GameData.GD.pet.comboR) * (1.12 - ck * 0.85) * (0.52 + 0.08 * float(ci2))
-			b_white_fx.arc(cpos, cr2, 8.0 * ck + 2.0, 0, TAU, Color(rb2[ci2], ck * 0.9), 36)
+			var cr2 := cr_base * (0.52 + 0.08 * float(ci2))
+			b_white_fx.ring(pctr, cr2, 8.0 * ck + 2.0, Color(RAINBOW_COLS[ci2], ck * 0.9), 36)
 	# 剑轮/剑气光 + 剑阵环
 	for wp2: Vector2 in sim.sw_wheel_pos:
-		b_glow_fx.full(wp2.x - 40, wp2.y - 40, 80, 80, Color(0.4, 0.9, 1.0, 0.55))
+		b_glow_fx.full(wp2.x - 40.0, wp2.y - 40.0, 80.0, 80.0, Color(0.4, 0.9, 1.0, 0.55))
 	for qb2: SimBullet in sim.sw_qi:
-		b_glow_fx.full(qb2.x - 32, qb2.y - 32, 64, 64, Color(1.0, 0.85, 0.4, 0.7) if qb2.hits.key == "sw_array" else Color(0.4, 0.95, 1.0, 0.6))
+		b_glow_fx.full(qb2.x - 32.0, qb2.y - 32.0, 64.0, 64.0, Color(1.0, 0.85, 0.4, 0.7) if qb2.hits.key == "sw_array" else Color(0.4, 0.95, 1.0, 0.6))
 	if sim.sw_array_fx > 0.0:
 		var ka := sim.sw_array_fx / 0.6
-		b_white_fx.arc(Vector2(sim.px, sim.py - 30.0), 340.0 * (1.2 - ka), 8.0 * ka + 2.0, 0, TAU, Color(1.0, 0.9, 0.5, ka), 40)
-	# 飞剑光
+		b_white_fx.ring(pctr, 340.0 * (1.2 - ka), 8.0 * ka + 2.0, Color(1.0, 0.9, 0.5, ka), 40)
+	# 飞剑光（椭圆轨道零分配）
 	if sim.has_sword() and (sim.sw_state == Sim.SW_ORBIT or sim.sw_state == Sim.SW_RECALL):
-		b_glow_fx.full(sim.sw_x - 56, sim.sw_y - 56, 112, 112, Color(0.4, 0.9, 1.0, 0.7))
+		b_glow_fx.full(sim.sw_x - 56.0, sim.sw_y - 56.0, 112.0, 112.0, Color(0.4, 0.9, 1.0, 0.7))
 		if sim.sw_state == Sim.SW_ORBIT:
-			# 椭圆轨迹淡线
-			var pts := PackedVector2Array()
-			for i in range(41):
-				var a2 := float(i) / 40.0 * TAU
-				pts.append(Vector2(sim.px + cos(a2) * GameData.DG.sword.orbitRx, sim.py - 30.0 + sin(a2) * GameData.DG.sword.orbitRy))
-			b_white_fx.polyline(pts, 3.0, Color(0.5, 0.9, 1.0, 0.22))
+			b_white_fx.ellipse_ring(pctr, float(GameData.DG.sword.orbitRx), float(GameData.DG.sword.orbitRy), 3.0, Color(0.5, 0.9, 1.0, 0.22), 36)
 	if sim.sw_thrust_fx > 0.0:
 		var k := sim.sw_thrust_fx / 0.25
 		var d := sim.sw_dir.normalized()
-		var o := Vector2(sim.px, sim.py - 30.0)
 		var hw: float = GameData.DG.sword.thrustHalfW
 		var L: float = GameData.DG.sword.thrustLen
-		b_white_fx.line(o, o + d * L, hw * 0.7 * k + 4.0, Color(0.6, 0.95, 1.0, 0.9 * k))
-		b_white_fx.line(o, o + d * L, 6.0 * k + 1.0, Color(1, 1, 1, k))
-	# 圆环 / 闪电 / 爆炸图
+		b_white_fx.line(pctr, pctr + d * L, hw * 0.7 * k + 4.0, Color(0.6, 0.95, 1.0, 0.9 * k))
+		b_white_fx.line(pctr, pctr + d * L, 6.0 * k + 1.0, Color(1, 1, 1, k))
+	# 圆环 / 闪电 / 爆炸图 / 粒子池
 	for r in rings:
 		var k2: float = 1.0 - float(r.life) / float(r.max)
 		var col: Color = r.col
 		col.a = (1.0 - k2) * 0.9
-		b_white_fx.arc(Vector2(r.x, r.y), r.r * (0.3 + 0.7 * k2), 5.0 * (1.0 - k2) + 1.0, 0, TAU, col, 28)
+		b_white_fx.ring(Vector2(r.x, r.y), r.r * (0.3 + 0.7 * k2), 5.0 * (1.0 - k2) + 1.0, col, 28)
 	for f in fx_sprites:
 		var tx2: Texture2D = T[f.tex]
 		var k3: float = float(f.life) / float(f.max)
@@ -1232,14 +1349,12 @@ func defer__draw_fx_add(c: Node2D) -> void:
 	for bl in sim.bolts:
 		var p1 := Vector2(bl.x1, bl.y1)
 		var p2 := Vector2(bl.x2, bl.y2)
-		var mid := (p1 + p2) / 2.0 + Vector2(-(p2 - p1).y, (p2 - p1).x).normalized() * (float(bl.seed) - 0.5) * 40.0
-		b_white_fx.polyline(PackedVector2Array([p1, mid, p2]), 4.0, Color(0.7, 0.95, 1.0, clampf(bl.life / 0.18, 0, 1)))
-	for p in parts:
-		var k4: float = float(p.life) / float(p.max)
-		var col2: Color = p.col
-		col2.a = k4
-		var s: float = 64.0 * float(p.size) * (0.4 + 0.6 * k4)
-		b_glow_fx.full(p.x - s / 2.0, p.y - s / 2.0, s, s, col2)
+		var d_bl := p2 - p1
+		var mid := (p1 + p2) * 0.5 + Vector2(-d_bl.y, d_bl.x).normalized() * (float(bl.seed) - 0.5) * 40.0
+		var bcol := Color(0.7, 0.95, 1.0, clampf(bl.life / 0.18, 0.0, 1.0))
+		b_white_fx.line(p1, mid, 4.0, bcol)
+		b_white_fx.line(mid, p2, 4.0, bcol)
+	part_pool.draw_into(b_glow_fx)
 	var fci := c.get_canvas_item()
 	b_white_fx.flush(fci, T.white)
 	for fk2 in b_fxs:
@@ -1249,7 +1364,7 @@ func defer__draw_fx_add(c: Node2D) -> void:
 
 func _fxs_batch(tex_name: String) -> TriBatch:
 	if not b_fxs.has(tex_name):
-		b_fxs[tex_name] = TriBatch.new()
+		b_fxs[tex_name] = TriBatch.new(64)
 	return b_fxs[tex_name]
 
 
@@ -1264,12 +1379,8 @@ func _draw_white(c: Node2D) -> void:
 
 
 # ----------------------------------------------------------------------
-# 异常显示：身上颜色取最“醒目”的一种（定身 > 感电 > 灼烧 > 符缚）；2 种以上在头顶画小色点（种类数 = 点数，共鸣一眼可见）
+# 异常显示：身上颜色取最“醒目”的一种；2 种以上在头顶画小色点（零数组分配）
 # ----------------------------------------------------------------------
-const AIL_COL := [Color(1.0, 0.6, 0.24), Color(0.5, 0.84, 1.0), Color(0.95, 0.76, 0.3), Color(0.62, 0.91, 1.0)]
-var b_pips := TriBatch.new()
-
-
 func _ail_tint(e: SimEnemy) -> Color:
 	if e.bind_t > 0.0:
 		return Color(1.0, 0.92, 0.55)
@@ -1283,11 +1394,18 @@ func _ail_tint(e: SimEnemy) -> Color:
 
 
 func _ail_pips(e: SimEnemy, x: float, y: float) -> void:
-	var on := [e.burn_n > 0, e.shock_n > 0, e.seal_n > 0 or e.bind_t > 0.0, e.marks > 0]
 	var n := e.ail_kinds
-	var x0 := x - (n - 1) * 5.0
+	var x0 := x - float(n - 1) * 5.0
+	var py := y - 3.5
 	var i := 0
-	for k in range(4):
-		if on[k]:
-			b_pips.full(x0 + i * 10.0 - 3.5, y - 3.5, 7.0, 7.0, AIL_COL[k])
-			i += 1
+	if e.burn_n > 0:
+		b_world_white.full(x0 + float(i) * 10.0 - 3.5, py, 7.0, 7.0, AIL_COL[0])
+		i += 1
+	if e.shock_n > 0:
+		b_world_white.full(x0 + float(i) * 10.0 - 3.5, py, 7.0, 7.0, AIL_COL[1])
+		i += 1
+	if e.seal_n > 0 or e.bind_t > 0.0:
+		b_world_white.full(x0 + float(i) * 10.0 - 3.5, py, 7.0, 7.0, AIL_COL[2])
+		i += 1
+	if e.marks > 0:
+		b_world_white.full(x0 + float(i) * 10.0 - 3.5, py, 7.0, 7.0, AIL_COL[3])

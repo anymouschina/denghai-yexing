@@ -19,7 +19,7 @@
   "lightPull": 450,
   "lightPullSpeed": 34,
   "magnetSpeed": 640,
-  "invuln": 0.8,
+  "invuln": 0.65,
   "crit": 0.05,
   "critMul": 1.6,
   "dashCd": 2.5,
@@ -42,8 +42,8 @@
   "shakeHurt": 0.003,
   "shakeBig": 0.006,
   "shakeDeath": 0.008,
-  "stun": 0.16,
-  "stunSlow": 0.45
+  "stun": 0.06,
+  "stunSlow": 0.55
  },
  "fu": {
   "range": 430,
@@ -53,7 +53,8 @@
  },
  "huanhuo": {
   "spin": 3.0,
-  "hitInterval": 0.38,
+  "hitInterval": 0.45,
+  "maxRadius": 140,
   "knock": 190
  },
  "lei": {
@@ -78,12 +79,15 @@
    20,
    25
   ],
-  "growth": 1.15
+  "growth": 1.15,
+  "quad_a": 5,
+  "quad_b": 8,
+  "quad_c": 1.2
  },
  "drops": {
   "coin": 0.04,
   "oil": 0.012,
-  "oilHeal": 25,
+  "oilHeal": 18,
   "maxGems": 280,
   "modeCaps": {
    "soul": 80,
@@ -94,7 +98,7 @@
   },
   "magnetPop": 240,
   "chestLevels": 2,
-  "fillerHeal": 40,
+  "fillerHeal": 28,
   "fillerCoins": 10
  },
  "rerolls": 2,
@@ -109,7 +113,29 @@
  "evoAdd": 0.15,
  "lamp": {
   "radius": 150,
-  "heal": 1.2
+  "heal": 1.8
+ },
+ "lantern": {
+  "start": 80.0,
+  "max": 100.0,
+  "drainPerSec": 2.2,
+  "killGain": 1.0,
+  "oilPickupGain": 24.0,
+  "lampRefillPerSec": 9.0,
+  "highThreshold": 70.0,
+  "lowThreshold": 30.0,
+  "highXpMul": 0.20,
+  "highRevealDmg": 0.15,
+  "highRevealRadius": 220.0,
+  "lowCritAdd": 0.25,
+  "lowSpeedAdd": 0.20,
+  "flareCost": 25.0,
+  "flareDur": 4.0,
+  "flareWaveDur": 0.65,
+  "flareClearRadius": 260.0,
+  "flareDmg": 45.0,
+  "perfectDashOil": 15.0,
+  "perfectDashCdRefund": 0.50
  },
  "dt": {
   "maxStep": 0.0333

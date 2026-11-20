@@ -1,0 +1,61 @@
+{
+  "_doc": "引魂灯签难度词缀与深渊续行配置（源自 MIT abyssal-walker）",
+  "defaultId": "beacon_default",
+  "extractBonus": {
+    "depthSoulMulStep": 0.45,
+    "pushHealPct": 0.40,
+    "pushOilRestore": 50.0,
+    "depthHpMulStep": 0.35,
+    "depthDmgMulStep": 0.20
+  },
+  "beacons": [
+    {
+      "id": "beacon_default",
+      "name": "安夜签",
+      "subtitle": "常夜行灯",
+      "desc": "标准难度，适合熟悉灯油节奏与灯派构筑",
+      "danger": 0,
+      "hp_mul": 1.0,
+      "spd_mul": 1.0,
+      "elite_mul": 1.0,
+      "soul_mul": 1.0,
+      "color": "#e8e6f5"
+    },
+    {
+      "id": "beacon_mist",
+      "name": "重雾签",
+      "subtitle": "迷雾压灯",
+      "desc": "妖物生命 +18%、移速 +6%，结算魂火 ×1.35",
+      "danger": 2,
+      "hp_mul": 1.18,
+      "spd_mul": 1.06,
+      "elite_mul": 1.15,
+      "soul_mul": 1.35,
+      "color": "#6fb6ff"
+    },
+    {
+      "id": "beacon_crimson",
+      "name": "血月签",
+      "subtitle": "赤月妖潮",
+      "desc": "妖物生命 +40%、移速 +12%、精英 +35%，结算魂火 ×1.75",
+      "danger": 4,
+      "hp_mul": 1.40,
+      "spd_mul": 1.12,
+      "elite_mul": 1.35,
+      "soul_mul": 1.75,
+      "color": "#ff7a5a"
+    },
+    {
+      "id": "beacon_abyss",
+      "name": "幽冥签",
+      "subtitle": "百鬼夜行",
+      "desc": "妖物生命 +75%、移速 +18%、精英 +60%，结算魂火 ×2.30",
+      "danger": 7,
+      "hp_mul": 1.75,
+      "spd_mul": 1.18,
+      "elite_mul": 1.60,
+      "soul_mul": 2.30,
+      "color": "#c08cff"
+    }
+  ]
+}

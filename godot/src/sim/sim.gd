@@ -110,10 +110,12 @@ var s_soul_mul := 1.0
 var s_coin_chance := 0.04
 var s_dmg_taken := 1.0
 var s_invuln_add := 0.0
+var s_regen := 0.0
 var ail_on := false            # 异常体系开关（完整/疾速开，经典口径关）
 var s_ail_res := 0.0           # 百邪：共鸣每种额外加成
 var s_ail_dur := 1.0           # 百邪：异常持续时间倍率
 var ail_log: Dictionary = {}   # 反应/崩解触发次数（平衡报告用）
+var boss_by: Dictionary = {}   # 终局 Boss 受到的伤害按来源（平衡报告用）
 
 # ---- 实体 ----
 var enemies: Array = []
@@ -123,7 +125,63 @@ var pickups: Array = []
 var teles: Array = []
 var bolts: Array = []
 var trails: Array = []
-var grid: Dictionary = {}
+var grid_sys := SpatialGrid.new()
+var grid: Dictionary = {}      # 指向 grid_sys._cells（兼容外部只读检查）
+var _q_bullet: Array = []
+var _q_orb: Array = []
+var _q_trail: Array = []
+var _q_lei: Array = []
+var _q_mark: Array = []
+var _q_qi: Array = []
+var _q_qi_pick: Array = []
+var _q_wheel: Array = []
+var _q_sw_orbit: Array = []
+var _q_thrust: Array = []
+var _q_pet: Array = []
+var _q_pet_shot: Array = []
+var _q_pet_sub: Array = []
+var _q_bomber: Array = []
+var _q_flare: Array = []
+var _q_rule: Array = []
+var _q_corpse: Array = []
+var _q_aoe: Array = [[], [], [], []]
+var _q_sets: Array = [[], [], [], []]
+var _q_leihuo: Array = []
+var _q_fallback: Array = []
+
+# ---- v2.2 MIT 融合：灯油 / 双阴律 / 灯派 2-4-6 / 荒野目标 / 引魂灯签 / SNKRX 反馈 ----
+var lantern_oil := 80.0
+var flare_t := 0.0
+var flare_wave_t := 0.0
+var flare_cd := 0.0
+var perfect_dash_t := 0.0
+var _dash_grazed := false
+var active_rules: Array = []
+var school_counts: Dictionary = {}
+var active_schools: Array = []
+var school_stats: Dictionary = {}
+var pending_rule_pick := 0
+var graze_cd := 0.0
+var rule_step_acc := 0.0
+var corpse_flame_depth := 0
+var shrine_ward_t := 0.0
+var shrine_ward_tick := 0.0
+var opening_draft_done := false
+var next_obj_clock := 0.0
+var obj_serial := 0
+var objectives: Array = []
+var beacon_id := "beacon_default"
+var abyss_depth := 1
+var extract_choice_open := false
+var beacon_cfg: Dictionary = {}
+var beacon_soul_mul := 1.0
+var effective_level := 1
+var hitstop_t := 0.0
+var shake_trauma := 0.0
+var kill_streak := 0
+var kill_streak_t := 0.0
+var dps_tracker := DpsTracker.new()
+var dps_breakdown: Dictionary = {}
 var w_fu := 0.4
 var w_fu_ring := 1.0
 var w_lei := 1.2
@@ -258,13 +316,18 @@ var banner_text := ""
 
 func _init(p_seed: int = 1, opts: Dictionary = {}) -> void:
 	GameData.load_all()
+	grid = grid_sys._cells
+	dps_breakdown = dps_tracker.breakdown
 	seed_v = p_seed
 	rng.seed = p_seed
 	emit = opts.get("emit", false)
 	touch = opts.get("touch", false)
 	mode = String(opts.get("mode", "classic"))
+	beacon_id = String(opts.get("beacon_id", GameData.BEACONS_CFG.get("defaultId", "beacon_default")))
 	ail_on = (GameData.AIL.modes as Array).has(mode)
 	stretch = {"full": 1.5, "quick": 1.25}.get(mode, 1.0)
+	_apply_beacon(beacon_id)
+	lantern_oil = float(LanternRules.lcfg().get("start", 80.0))
 	var m: Dictionary = opts.get("meta", {})
 	var saved: Dictionary = m
 	for mm in GameData.META:
@@ -286,6 +349,96 @@ func _init(p_seed: int = 1, opts: Dictionary = {}) -> void:
 	need = req_for(1)
 	_gen_pois()
 	_ev("start")
+
+
+func start_run(p_mode: String = "full", p_beacon_id: String = "beacon_default") -> void:
+	## 供外部（UI/测试）在实例化后切换模式与引魂灯签
+	mode = p_mode
+	ail_on = (GameData.AIL.modes as Array).has(mode)
+	stretch = {"full": 1.5, "quick": 1.25}.get(mode, 1.0)
+	abyss_depth = 1
+	extract_choice_open = false
+	_apply_beacon(p_beacon_id)
+	lantern_oil = float(LanternRules.lcfg().get("start", 80.0))
+	_recalc()
+
+
+func _apply_beacon(bid: String) -> void:
+	beacon_cfg = SchoolRules.beacon_for(bid)
+	beacon_id = String(beacon_cfg.get("id", "beacon_default"))
+	beacon_soul_mul = float(beacon_cfg.get("soul_mul", 1.0))
+	_refresh_effective_level()
+
+
+func _refresh_effective_level() -> void:
+	var base_diff := 3 if mode == "full" else (2 if mode == "quick" else 1)
+	var danger := int(beacon_cfg.get("danger", 0))
+	effective_level = clampi(base_diff + abyss_depth - 1 + danger, 1, 100)
+
+
+func lantern_state() -> String:
+	return LanternRules.lantern_state(lantern_oil)
+
+
+func trigger_flare() -> bool:
+	return LanternRules.trigger_flare(self)
+
+
+func has_rule(id: String) -> bool:
+	return active_rules.has(id)
+
+
+func add_trauma(amount: float) -> void:
+	shake_trauma = clampf(shake_trauma + amount, 0.0, 1.0)
+
+
+func choose_extract() -> void:
+	## Boss 击杀后选择「归灯保骸」：结算魂魄并胜利结束
+	if not extract_choice_open:
+		return
+	extract_choice_open = false
+	if abyss_depth > 1:
+		bonus_soul += (abyss_depth - 1) * 180
+	victory = true
+	over = true
+	end_timer = 0.75 if emit else 0.0
+	_ev("extract_done", abyss_depth)
+	if end_timer <= 0.0:
+		_finish()
+
+
+func choose_push_deeper() -> void:
+	## Boss 击杀后选择「深入幽冥」：进入更深一层无尽循环，+45% 魂魄倍率，恢复 40% HP 与 50 灯油
+	if not extract_choice_open:
+		return
+	extract_choice_open = false
+	var eb: Dictionary = GameData.BEACONS_CFG.get("extractBonus", {})
+	abyss_depth += 1
+	beacon_soul_mul *= (1.0 + float(eb.get("depthSoulMulStep", 0.45)))
+	_refresh_effective_level()
+	var heal_amt := maxhp * float(eb.get("pushHealPct", 0.40))
+	hp = minf(maxhp, hp + heal_amt)
+	LanternRules.add_oil(self, float(eb.get("pushOilRestore", 50.0)))
+	_ev("heal", heal_amt)
+	# 清理残留弹幕与预警，开启新一层夜行
+	ebullets.clear()
+	teles.clear()
+	bullets.clear()
+	boss = null
+	boss_phase = false
+	boss_enraged = false
+	phase = PH_SEG
+	seg = 0
+	t = 0.0
+	event_idx = 0
+	announced.clear()
+	guard_done.clear()
+	guard_ref = null
+	spawn_t = 1.0
+	invuln = 2.0
+	_ev("push_deeper", abyss_depth, beacon_soul_mul)
+	_ev("banner", "深入幽冥 第 %d 层 • 魂魄收益 ×%.2f • 生命与灯油已补足" % [abyss_depth, beacon_soul_mul], "#d9b8ff")
+	checkpoint()
 
 
 func _ev(name: String, a: Variant = null, b: Variant = null, c: Variant = null, d: Variant = null) -> void:
@@ -323,10 +476,18 @@ func wstat(id: String) -> Dictionary:
 
 
 func req_for(level_: int) -> int:
-	var first: Array = GameData.BAL.xp.first
+	var xpc: Dictionary = GameData.BAL.xp
+	var first: Array = xpc.first
 	if level_ <= first.size():
 		return int(first[level_ - 1])
-	return int(round(first[first.size() - 1] * pow(GameData.BAL.xp.growth, level_ - first.size())))
+	# 多项式成长（避免 Lv30+ 指数墙卡死升级）
+	if mode != "classic" or xpc.has("quad_a"):
+		var qa := float(xpc.get("quad_a", 5.0))
+		var qb := float(xpc.get("quad_b", 8.0))
+		var qc := float(xpc.get("quad_c", 1.2))
+		var L := float(level_)
+		return maxi(1, int(round(qa + qb * L + qc * L * L)))
+	return int(round(first[first.size() - 1] * pow(xpc.growth, level_ - first.size())))
 
 
 func _per(id: String, k: String) -> float:
@@ -384,9 +545,12 @@ func _on_kill_sets(e: SimEnemy) -> void:
 	if set_depth >= 2:
 		return
 	if has_set("flame") and e.burn_t > 0.0:
+		var q: Array = _q_sets[mini(set_depth, 3)]
 		set_depth += 1
 		_ev("ring", e.x, e.y - 30.0, 100.0)
-		for o: SimEnemy in _near(e.x, e.y, 130.0):
+		grid_sys.query_into(e.x, e.y, 130.0, q)
+		for i in range(q.size()):
+			var o: SimEnemy = q[i]
 			if o != e and o.alive:
 				_fusion_ignite(o)
 		_aoe(e.x, e.y - 30.0, 100.0, 25.0, "setsplash")
@@ -411,30 +575,39 @@ func has_part(id: String) -> bool:
 
 func _recalc() -> void:
 	_sets_dirty = true
+	var sc_res := SchoolRules.compute_schools(levels, relics, active_rules)
+	school_counts = sc_res.counts
+	active_schools = sc_res.active
+	school_stats = sc_res.stats
 	var P: Dictionary = GameData.BAL.player
 	var T: Dictionary = GameData.BAL.touch
-	maxhp = P.hp + meta.maxHp + _per("yupei", "maxHp") + _relic_sum("maxHp") + forge_n * float(GameData.DG.forge.hp) + asc_hp_n * float(GameData.DG.ascend.hp)
-	s_speed = P.speed * (1.0 + meta.speed + _per("caolv", "speed") + _relic_sum("speed")) * (T.speedMul if touch else 1.0)
-	s_pickup = P.pickup * (1.0 + meta.pickup + _per("hundai", "pickup") + _relic_sum("pickup")) * (T.pickupMul if touch else 1.0)
-	# 加算：桃木心 / 局外强化 / 遗物 同一个加算池；武器进化与剑痕另加（见 _dmg_mul）
-	s_dmg_add = meta.dmg + _per("taomu", "dmg") + _relic_sum("dmg") + forge_n * float(GameData.DG.forge.dmg) + asc_dmg_n * float(GameData.DG.ascend.dmg)
-	s_crit = P.crit + _per("tiangang", "crit") + _relic_sum("crit")
-	s_crit_mul = P.critMul + _per("tiangang", "critMul")
-	s_dash_cd = P.dashCd * (1.0 - _per("jingxin", "dashCd") - _relic_sum("dashCd")) * (T.dashCdMul if touch else 1.0)
-	s_fu_cd_mul = 1.0 - _per("jishu", "fuCd")
+	maxhp = P.hp + meta.maxHp + _per("yupei", "maxHp") + _relic_sum("maxHp") + float(school_stats.get("maxHp", 0.0)) + forge_n * float(GameData.DG.forge.hp) + asc_hp_n * float(GameData.DG.ascend.hp)
+	s_speed = P.speed * (1.0 + meta.speed + _per("caolv", "speed") + _relic_sum("speed") + float(school_stats.get("speed", 0.0))) * (T.speedMul if touch else 1.0)
+	s_pickup = P.pickup * (1.0 + meta.pickup + _per("hundai", "pickup") + _relic_sum("pickup") + float(school_stats.get("pickup", 0.0))) * (T.pickupMul if touch else 1.0)
+	# 加算：桃木心 / 局外强化 / 遗物 / 灯派羁绊 同一个加算池；武器进化与剑痕另加（见 _dmg_mul）
+	s_dmg_add = meta.dmg + _per("taomu", "dmg") + _relic_sum("dmg") + float(school_stats.get("dmg", 0.0)) + forge_n * float(GameData.DG.forge.dmg) + asc_dmg_n * float(GameData.DG.ascend.dmg)
+	s_crit = P.crit + _per("tiangang", "crit") + _relic_sum("crit") + float(school_stats.get("crit", 0.0))
+	s_crit_mul = P.critMul + _per("tiangang", "critMul") + float(school_stats.get("critMul", 0.0))
+	s_dash_cd = P.dashCd * maxf(0.45, 1.0 - _per("jingxin", "dashCd") - _relic_sum("dashCd")) * (T.dashCdMul if touch else 1.0)
+	# 疾书冷却上限 -35%，灯派羁绊额外叠加且总冷却下限 0.45
+	var jishu_cdr := minf(0.35, _per("jishu", "fuCd"))
+	s_fu_cd_mul = maxf(0.45, 1.0 - jishu_cdr - float(school_stats.get("fuCd", 0.0)))
 	s_fu_speed_mul = 1.0 + _per("jishu", "fuSpeed")
-	s_fu_count = int(_per("zhongfu", "fuCount"))
-	s_burn_dps = (float(GameData.AIL.burn.baseDps) if ail_on else float(GameData.BAL.burn.baseDps)) + _per("zhuohun", "burnDps")
-	s_ail_res = _per("baixie", "ailRes")
-	s_ail_dur = 1.0 + _per("baixie", "ailDur")
+	s_fu_count = int(_per("zhongfu", "fuCount")) + int(school_stats.get("fuCount", 0))
+	var base_burn := (float(GameData.AIL.burn.baseDps) if ail_on else float(GameData.BAL.burn.baseDps)) + _per("zhuohun", "burnDps")
+	var burn_scale := float(GameData.AIL.burn.get("dmgScale", 0.5))
+	s_burn_dps = base_burn * (1.0 + burn_scale * s_dmg_add + float(school_stats.get("burnMul", 0.0)))
+	s_ail_res = _per("baixie", "ailRes") + float(school_stats.get("ailRes", 0.0))
+	s_ail_dur = 1.0 + _per("baixie", "ailDur") + float(school_stats.get("ailDur", 0.0))
 	s_ignite = _per("zhuohun", "igniteChance")
 	s_orb_r_mul = 1.0 + _per("tianyou", "orbRadius")
-	s_orb_spin_mul = 1.0 + _per("tianyou", "orbSpin")
-	s_chain = int(_per("leiyin", "chain")) + (2 if has_part("part_lei") else 0)
-	s_soul_mul = 1.0 + _per("tongqian", "soulGain")
+	s_orb_spin_mul = 1.0 + _per("tianyou", "orbSpin") + float(school_stats.get("orbSpin", 0.0))
+	s_chain = int(_per("leiyin", "chain")) + (2 if has_part("part_lei") else 0) + int(school_stats.get("chain", 0))
+	s_soul_mul = 1.0 + _per("tongqian", "soulGain") + float(school_stats.get("soulGain", 0.0))
 	s_coin_chance = GameData.BAL.drops.coin + _per("tongqian", "coinChance")
-	s_dmg_taken = 1.0 + _relic_sum("dmgTaken")
+	s_dmg_taken = maxf(0.35, 1.0 + _relic_sum("dmgTaken") + float(school_stats.get("dmgTaken", 0.0)))
 	s_invuln_add = _relic_sum("invulnAdd")
+	s_regen = _relic_sum("regen") + float(school_stats.get("regen", 0.0))
 	hp = minf(hp, maxhp)
 	_sync_orbs()
 
@@ -448,7 +621,7 @@ func _sync_orbs() -> void:
 	orb_count = want + (2 if has_part("part_huanhuo") and want > 0 else 0)
 
 
-## 伤害乘区（加算）：1 + 局外 + 桃木心 + 遗物 + 进化增伤 + 目标身上的剑痕 × 6%。法宝与进化不相乘。
+## 伤害乘区（加算）：1 + 局外 + 桃木心 + 遗物 + 灯派 + 进化增伤 + 残灯狂澜 + 剑痕 × 6%。盛灯照妖为近身独立易伤。
 func _dmg_mul(e: SimEnemy, weapon: String) -> float:
 	var m := 1.0
 	var dg: Dictionary = GameData.DG
@@ -459,6 +632,10 @@ func _dmg_mul(e: SimEnemy, weapon: String) -> float:
 			evo_key = "fu"
 		if evo.has(evo_key):
 			m += GameData.BAL.evoAdd
+	if has_rule("rule_low_frenzy"):
+		var rp_f: Dictionary = GameData.RULE_BY_ID.get("rule_low_frenzy", {}).get("params", {})
+		if lantern_oil < float(rp_f.get("oilThreshold", 30.0)):
+			m += float(rp_f.get("dmgAdd", 0.28))
 	m += e.marks * float(dg.sword.markPer)
 	return m
 
@@ -483,7 +660,11 @@ func dps_parts() -> Dictionary:
 		parts["fu"] = d * m * crit_f
 	if orb_count > 0:
 		var st2: Dictionary = GameData.EVOS.huanhuo.stats if evo.has("huanhuo") else wstat("huanhuo")
-		var d2: float = st2.dmg * orb_count / GameData.BAL.huanhuo.hitInterval
+		# 每颗火球独立命中冷却：单颗绕一圈周期为 TAU / (spin * s_orb_spin_mul)，受 hitInterval 下限约束
+		var hit_iv := float(GameData.BAL.huanhuo.get("hitInterval", 0.45))
+		var rev_t := TAU / maxf(0.5, float(GameData.BAL.huanhuo.spin) * s_orb_spin_mul)
+		var eff_iv := maxf(hit_iv, rev_t)
+		var d2: float = float(st2.dmg) * float(orb_count) / eff_iv
 		var m2: float = 1.0 + s_dmg_add + (float(GameData.BAL.evoAdd) if evo.has("huanhuo") else 0.0)
 		parts["huanhuo"] = d2 * m2 * crit_f + s_burn_dps * 0.8
 	if lv("lei") > 0:
@@ -524,9 +705,10 @@ func step(dt: float) -> void:
 			if end_timer <= 0.0:
 				_finish()
 		return
-	if not choice.is_empty() or shop_open:
+	if not choice.is_empty() or shop_open or extract_choice_open:
 		return
 	real_t += dt
+	dps_tracker.tick(dt, evo)
 	match phase:
 		PH_SEG, PH_BOSS:
 			_step_combat(dt)
@@ -538,13 +720,16 @@ func step(dt: float) -> void:
 	in_dash = false
 	in_skill = false
 	in_combo = false
-	if not over and choice.is_empty():
+	if not over and not extract_choice_open and choice.is_empty():
 		if pending_fusion > 0 and phase != PH_RIFT:
 			pending_fusion -= 1
 			_open_choice("fusion")
 		elif pending_sw > 0 and phase != PH_RIFT:
 			pending_sw -= 1
 			_open_choice("swb")
+		elif pending_rule_pick > 0 and phase != PH_RIFT:
+			pending_rule_pick -= 1
+			_open_choice("rule")
 		elif pending_chest > 0 and phase != PH_RIFT:
 			pending_chest -= 1
 			_open_choice("chest")
@@ -568,6 +753,7 @@ func _step_combat(dt: float) -> void:
 			t = seg_to(seg)   # 守关 Boss 在场：节奏钟停在段末，下一段的妖潮不提前刷出、也不会被清场吞掉
 	_rebuild_grid()
 	_update_player(dt)
+	LanternRules.step_lantern_and_rules(self, dt)
 	if phase == PH_SEG:
 		_update_spawns(dt)
 	_update_weapons(dt)
@@ -609,54 +795,18 @@ func _step_combat(dt: float) -> void:
 
 
 func _rebuild_grid() -> void:
-	grid.clear()
-	for e: SimEnemy in enemies:
-		var k := int(e.x / CELL) * 4096 + int(e.y / CELL)
-		var arr: Variant = grid.get(k)
-		if arr == null:
-			grid[k] = [e]
-		else:
-			(arr as Array).append(e)
+	grid_sys.rebuild(enemies)
 
 
 func _near(x: float, y: float, r: float) -> Array:
-	var out: Array = []
-	var x0 := int((x - r) / CELL)
-	var x1 := int((x + r) / CELL)
-	var y0 := int((y - r) / CELL)
-	var y1 := int((y + r) / CELL)
-	for cx in range(x0, x1 + 1):
-		for cy in range(y0, y1 + 1):
-			var arr: Variant = grid.get(cx * 4096 + cy)
-			if arr != null:
-				for e: SimEnemy in arr:
-					if e.alive:
-						out.append(e)
-	return out
+	return grid_sys.query_into(x, y, r, _q_fallback)
 
 
 func nearest_enemy(x: float, y: float, rng_: float) -> SimEnemy:
+	if rng_ <= 680.0 and mode != "classic":
+		return grid_sys.nearest(x, y, rng_)
 	var best: SimEnemy = null
 	var bd := rng_ * rng_
-	if rng_ <= 480.0 and mode != "classic":   # 经典口径保持原全表扫描（回归基线逐项一致）
-		# 短程查询走空间网格（不分配数组）：小金刚每发弹体每帧都要找最近目标，全表扫描是 弹数 × 妖物数
-		var x0 := int((x - rng_) / CELL)
-		var x1 := int((x + rng_) / CELL)
-		var y0 := int((y - rng_) / CELL)
-		var y1 := int((y + rng_) / CELL)
-		for cx in range(x0, x1 + 1):
-			for cy in range(y0, y1 + 1):
-				var arr: Variant = grid.get(cx * 4096 + cy)
-				if arr == null:
-					continue
-				for e: SimEnemy in arr:
-					if not e.alive:
-						continue
-					var d := (e.x - x) * (e.x - x) + (e.y - y) * (e.y - y)
-					if d < bd or (d == bd and best != null and e.uid < best.uid):
-						bd = d
-						best = e
-		return best
 	for e: SimEnemy in enemies:
 		if not e.alive:
 			continue
@@ -687,6 +837,9 @@ func _clamp_player() -> void:
 func _update_player(dt: float) -> void:
 	var P: Dictionary = GameData.BAL.player
 	var T: Dictionary = GameData.BAL.touch
+	var eff_spd := s_speed
+	if lantern_state() == "low":
+		eff_spd *= 1.0 + float(LanternRules.lcfg().get("lowSpeedAdd", 0.20))
 	var mv := in_move
 	var ln := mv.length()
 	if ln > 1.0:
@@ -708,6 +861,7 @@ func _update_player(dt: float) -> void:
 		dash_dy = d.y
 		dash_t = P.dashTime
 		dash_inv = P.dashInvuln + (T.dashInvulnAdd if touch else 0.0)
+		_dash_grazed = false
 		var mulc := float(GameData.DG.rift.dashCdMul) if phase == PH_RIFT else 1.0
 		dash_cd = s_dash_cd * mulc
 		_ev("dash")
@@ -715,23 +869,25 @@ func _update_player(dt: float) -> void:
 	if dash_t > 0.0:
 		dash_t -= dt
 		var dn := Vector2(dash_dx, dash_dy).normalized()
-		vel = dn * s_speed * P.dashSpeed
+		vel = dn * eff_spd * P.dashSpeed
 	else:
 		# 目标速度 = 摇杆/按键向量(已限长 1) × 速度；向目标做线性加减速（accelTime / decelTime 外置）
-		var tv := mv * s_speed
+		var tv := mv * eff_spd
 		if stun > 0.0:
 			tv *= P.stunSlow
 		var rate_t: float = float(M.accelTime) if tv.length() > vel.length() - 0.01 and moving else float(M.decelTime)
 		if rate_t <= 0.0:
 			vel = tv
 		else:
-			vel = vel.move_toward(tv, s_speed / rate_t * dt)
+			vel = vel.move_toward(tv, eff_spd / rate_t * dt)
 	if vel.length_squared() > 0.0001:
+		var step_dist := vel.length() * dt
 		px += vel.x * dt
 		py += vel.y * dt
 		_clamp_player()
+		LanternRules.on_player_move(self, step_dist)
 		if has_set("swift") and phase == PH_SEG:
-			set_move_acc += vel.length() * dt
+			set_move_acc += step_dist
 			if set_move_acc >= 400.0:
 				set_move_acc = 0.0
 				_spawn_qi(760.0, atan2(vel.y, vel.x), 40.0 * (1.0 + s_dmg_add), 0.8, 3, false, "sw_array", null)
@@ -743,6 +899,9 @@ func hurt_player(dmg_in: float, fx: float, fy: float, src: String) -> void:
 	if over or invuln > 0.0 or dash_inv > 0.0:
 		return
 	var dmg := dmg_in * s_dmg_taken
+	if shrine_ward_t > 0.0:
+		var rp_w: Dictionary = GameData.RULE_BY_ID.get("rule_shrine_ward", {}).get("params", {})
+		dmg *= 1.0 - float(rp_w.get("dmgReduce", 0.25))
 	if touch:
 		dmg *= T.dmgMul
 	dmg = _pet_hurt(dmg)
@@ -757,10 +916,11 @@ func hurt_player(dmg_in: float, fx: float, fy: float, src: String) -> void:
 	hurt_by[src] = float(hurt_by.get(src, 0.0)) + dmg
 	invuln = P.invuln + (T.invulnAdd if touch else 0.0) + s_invuln_add
 	var sm := float(GameData.DG.rift.stunMul) if phase == PH_RIFT else 1.0
-	stun = P.stun * sm
+	stun = minf(float(P.stun), 0.06) * sm
 	if src == "sedan:paper":
 		stun = maxf(stun, float(GameData.MB.sedan.slow))
 	hurt_flash = 0.12
+	add_trauma(0.42)
 	last_src = src
 	if sw_state == SW_RECALL:
 		_sword_drop()
@@ -796,17 +956,20 @@ func hurt_player(dmg_in: float, fx: float, fy: float, src: String) -> void:
 
 
 func _update_lamps(dt: float) -> void:
-	# 骨灯：对局中站在亮着的灯旁缓慢回血；副本内全熄，段间不生效（不做战斗间回血）
-	if phase == PH_RIFT or phase == PH_BREAK or hp >= maxhp:
+	# 骨灯：站在亮着的灯旁缓慢回血并补充灯油；副本内全熄，段间不生效
+	if phase == PH_RIFT or phase == PH_BREAK:
 		return
 	var L: Dictionary = GameData.BAL.lamp
 	var c := Vector2(W / 2.0, H / 2.0)
 	var sg: Dictionary = seg_theme(seg)
+	var oil_rate := float(LanternRules.lcfg().get("lampRefillPerSec", 12.0))
 	for lp in sg.lamps:
 		var dx: float = c.x + lp[0] - px
 		var dy: float = c.y + lp[1] - py
 		if dx * dx + dy * dy < L.radius * L.radius:
-			hp = minf(maxhp, hp + L.heal * dt)
+			if hp < maxhp:
+				hp = minf(maxhp, hp + float(L.heal) * dt)
+			LanternRules.add_oil(self, oil_rate * dt)
 			return
 
 
@@ -919,10 +1082,11 @@ func _mode_enemy_scale() -> Vector3:
 	return Vector3(hm, dm, sm)
 
 
-## 后期进度 0..（>1 表示终局后）：lateStart 之前恒为 0——补强只针对“后期太弱”，前中期手感不动
+## 后期进度 0..（>1 表示终局后）：按真实时间 real_t 标定 quick/full 难度曲线，避免拉伸时钟导致后期脱节
 func _mode_late_p() -> float:
 	var MS: Dictionary = GameData.WV.modeScale
-	var p := clampf(t / 480.0, 0.0, 1.25)
+	var target_sec := 900.0 if mode == "full" else (600.0 if mode == "quick" else 480.0)
+	var p := clampf(maxf(t / 480.0, real_t / target_sec), 0.0, 1.35)
 	var ls := float(MS.lateStart)
 	return maxf(0.0, (p - ls) / maxf(0.01, 1.0 - ls))
 
@@ -958,6 +1122,12 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 	var msc := _mode_enemy_scale()
 	var esc := _mode_elite_scale()
 	var hp_mul := pow(WV.hpMulPerMin, t / 60.0) * pow(WV.late.hpPerMin, maxf(0.0, (t - float(WV.late.from)) / 60.0)) * pow(GameData.DG.threat.hpMul, tier)
+	var eb: Dictionary = GameData.BEACONS_CFG.get("extractBonus", {})
+	var depth_hp := 1.0 + float(maxi(0, abyss_depth - 1)) * float(eb.get("depthHpMulStep", 0.35))
+	var depth_dmg := 1.0 + float(maxi(0, abyss_depth - 1)) * float(eb.get("depthDmgMulStep", 0.20))
+	var bc_hp := float(beacon_cfg.get("hp_mul", 1.0)) * depth_hp
+	var bc_spd := float(beacon_cfg.get("spd_mul", 1.0))
+	var bc_elite := float(beacon_cfg.get("elite_mul", 1.0))
 	var scale_mul: float = el.scale if not el.is_empty() else 1.0
 	e.uid = uid_n
 	uid_n += 1
@@ -971,19 +1141,19 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 	e.y = sp.y
 	if is_boss:
 		var hbm: Dictionary = def.get("hpByMode", {})
-		e.hp = float(hbm[mode]) if hbm.has(mode) else def.hp * pow(GameData.DG.threat.bossHpMul, tier)
+		e.hp = (float(hbm[mode]) if hbm.has(mode) else def.hp * pow(GameData.DG.threat.bossHpMul, tier)) * bc_hp
 		e.armor = def.get("armor", 0.0)
-		e.dmg_mul = 1.0
+		e.dmg_mul = depth_dmg
 	elif e.elite:
 		var use_esc: bool = mode != "classic" and not is_warden and not opts.get("noScale", false)
-		e.hp = float(el.hp) * (esc.x if use_esc else 1.0)
+		e.hp = float(el.hp) * (esc.x if use_esc else 1.0) * (bc_hp * bc_elite if not is_warden else 1.0)
 		e.armor = el.get("armor", 0.0)
-		e.dmg_mul = esc.y if use_esc else 1.0
+		e.dmg_mul = (esc.y if use_esc else 1.0) * (depth_dmg if not is_warden else 1.0)
 	else:
-		e.hp = float(def.hp) * hp_mul * msc.x
-		e.dmg_mul = msc.y
+		e.hp = float(def.hp) * hp_mul * msc.x * bc_hp
+		e.dmg_mul = msc.y * depth_dmg
 	var base_spd := float(el.speed if e.elite else def.speed)
-	e.speed = base_spd * (0.9 + rng.randf() * 0.2) * (1.0 if (is_boss or is_warden) else msc.z)
+	e.speed = base_spd * (0.9 + rng.randf() * 0.2) * (1.0 if (is_boss or is_warden) else msc.z * bc_spd)
 	e.dmg = float(el.dmg if e.elite else def.dmg) * e.dmg_mul
 	e.xpv = int(el.xp if e.elite else def.xp)
 	e.r = def.r * scale_mul
@@ -1014,16 +1184,27 @@ func damage(e: SimEnemy, base: float, weapon: String, o: Dictionary = O_NONE) ->
 		return
 	var dmg := base * _dmg_mul(e, weapon)
 	var crit := false
-	if not o.has("noCrit") and (o.has("forceCrit") or rng.randf() < s_crit):
+	var eff_crit := s_crit + (float(LanternRules.lcfg().get("lowCritAdd", 0.25)) if lantern_state() == "low" else 0.0)
+	if not o.has("noCrit") and (o.has("forceCrit") or rng.randf() < eff_crit):
 		crit = true
 		dmg *= s_crit_mul
 	var synergy := weapon == "lei" and e.burn_t > 0.0 and lv("leiyin") > 0
 	if synergy:
 		dmg *= 1.0 + GameData.BAL.lei.burnBonus
 	if e.stagger_t > 0.0:
-		dmg *= float(GameData.DG.warden.lunge.staggerTakenMul)
-	if e.armor > 0.0 and not o.has("pierce"):
-		dmg *= 1.0 - e.armor
+		var stag_mul := float(GameData.EN.boss.get("stagger", {}).get("takenMul", GameData.DG.warden.lunge.staggerTakenMul)) if e.boss else float(GameData.DG.warden.lunge.staggerTakenMul)
+		dmg *= stag_mul
+	# 盛灯（>70%）或挑灯爆焰期间：近身照妖 +15% 易伤
+	if lantern_state() == "high" or flare_t > 0.0:
+		var L_hi := LanternRules.lcfg()
+		var rr_hi := float(L_hi.get("highRevealRadius", 220.0))
+		if (e.x - px) * (e.x - px) + (e.y - py) * (e.y - py) <= rr_hi * rr_hi:
+			dmg *= 1.0 + float(L_hi.get("highRevealDmg", 0.15))
+	if e.armor > 0.0:
+		if o.has("armor_pierce"):
+			dmg *= 1.0 - e.armor * clampf(1.0 - float(o.armor_pierce), 0.0, 1.0)
+		elif not o.has("pierce"):
+			dmg *= 1.0 - e.armor
 	dmg *= e.ail_mul
 	e.hp -= dmg
 	if phase == PH_RIFT and e.warden:
@@ -1036,6 +1217,9 @@ func damage(e: SimEnemy, base: float, weapon: String, o: Dictionary = O_NONE) ->
 	elif weapon == "mark":
 		key = "fu"
 	dmg_by[key] = float(dmg_by.get(key, 0.0)) + dmg
+	dps_tracker.record(key, dmg)
+	if e.boss:
+		boss_by[key] = float(boss_by.get(key, 0.0)) + dmg
 	if o.has("kx") and not e.boss:
 		var l := maxf(0.001, Vector2(o.kx, o.ky).length())
 		var kb: float = o.get("kb", GameData.BAL.knockback)
@@ -1081,6 +1265,7 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 	e.alive = false
 	kills += 1
 	_on_kill_sets(e)
+	LanternRules.on_enemy_kill(self, e)
 	if has_part("part_huanhuo"):
 		hp = minf(maxhp, hp + 1.0)
 	if e.el.has("mini"):
@@ -1118,18 +1303,35 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 	if e == boss:
 		boss_time = real_t - boss_t0
 		_ev("boss_dead")
-		over = true
-		victory = true
-		end_timer = 0.75 if emit else 0.0
-		if end_timer <= 0.0:
-			_finish()
+		if mode != "classic":
+			boss = null
+			extract_choice_open = true
+			_ev("extract_open", abyss_depth)
+		else:
+			over = true
+			victory = true
+			end_timer = 0.75 if emit else 0.0
+			if end_timer <= 0.0:
+				_finish()
 
 
 # ======================================================================
 # 武器（驱邪符 / 灯火环 / 掌心雷 + 进化）
 # ======================================================================
+func _weapon_cd_mul() -> float:
+	var m := 1.0
+	if flare_t > 0.0:
+		m *= 0.85
+	if has_rule("rule_low_frenzy"):
+		var rp_f: Dictionary = GameData.RULE_BY_ID.get("rule_low_frenzy", {}).get("params", {})
+		if lantern_oil < float(rp_f.get("oilThreshold", 30.0)):
+			m *= float(rp_f.get("cdMul", 0.82))
+	return m
+
+
 func _update_weapons(dt: float) -> void:
 	var BAL: Dictionary = GameData.BAL
+	var wcdm := _weapon_cd_mul()
 	_update_marks()
 	if lv("fu") > 0:
 		w_fu -= dt
@@ -1137,7 +1339,7 @@ func _update_weapons(dt: float) -> void:
 		if w_fu <= 0.0:
 			var tgt := nearest_enemy(px, py - 30.0, BAL.fu.range)
 			if tgt != null:
-				w_fu = st.cd * s_fu_cd_mul
+				w_fu = st.cd * s_fu_cd_mul * wcdm
 				var n: int = int(st.count) + s_fu_count
 				var base := atan2(tgt.y - tgt.h * 0.4 - (py - 40.0), tgt.x - px)
 				for i in range(n):
@@ -1149,15 +1351,20 @@ func _update_weapons(dt: float) -> void:
 			w_fu_ring -= dt
 			var ev: Dictionary = GameData.EVOS.fu.stats
 			if w_fu_ring <= 0.0:
-				w_fu_ring = ev.ringCd * s_fu_cd_mul
+				w_fu_ring = ev.ringCd * s_fu_cd_mul * wcdm
 				var rc := int(ev.ringCount)
 				for i in range(rc):
 					_fire_talisman(float(i) / rc * TAU + t, st)
 				_ev("ring", px, py - 40.0, 90.0)
-	# 灯火环
+	# 灯火环（按单颗火球独立命中冷却 + 半径封顶 140，溢出天油转为火球判定半径）
 	if orb_count > 0:
 		var st2: Dictionary = GameData.EVOS.huanhuo.stats if evo.has("huanhuo") else wstat("huanhuo")
-		var radius: float = st2.radius * s_orb_r_mul
+		var raw_r: float = float(st2.radius) * s_orb_r_mul
+		var max_r: float = float(BAL.huanhuo.get("maxRadius", 140.0))
+		var radius: float = minf(raw_r, max_r)
+		var excess_r: float = maxf(0.0, raw_r - max_r)
+		var orb_hit_r: float = 26.0 + minf(excess_r * 0.25, 18.0)
+		var hit_iv: float = float(BAL.huanhuo.get("hitInterval", 0.45))
 		orb_angle += BAL.huanhuo.spin * s_orb_spin_mul * dt
 		var evo_h := evo.has("huanhuo")
 		if evo_h:
@@ -1168,11 +1375,20 @@ func _update_weapons(dt: float) -> void:
 			var ox := px + cos(a) * radius
 			var oy := py - 30.0 + sin(a) * radius * 0.8
 			orb_pos[i] = Vector2(ox, oy)
-			for e: SimEnemy in _near(ox, oy + 20.0, 60.0):
-				if real_t - e.orb_hit < BAL.huanhuo.hitInterval:
+			var orb_slot := i % 12
+			grid_sys.query_into(ox, oy + 20.0, orb_hit_r + 36.0, _q_orb)
+			for j in range(_q_orb.size()):
+				var e: SimEnemy = _q_orb[j]
+				if not e.alive:
 					continue
-				if Vector2(e.x - ox, e.y - e.h * 0.4 - oy).length() > e.r + 26.0:
+				if real_t - e.orb_hits[orb_slot] < hit_iv:
 					continue
+				var dx := e.x - ox
+				var dy := e.y - e.h * 0.4 - oy
+				var rr := e.r + orb_hit_r
+				if dx * dx + dy * dy > rr * rr:
+					continue
+				e.orb_hits[orb_slot] = real_t
 				e.orb_hit = real_t
 				if e.mark_t > 0.0:
 					_detonate_mark(e)
@@ -1195,8 +1411,15 @@ func _update_weapons(dt: float) -> void:
 		tr.tick -= dt
 		if tr.tick <= 0.0:
 			tr.tick = 0.5
-			for e: SimEnemy in _near(tr.x, tr.y, 70.0):
-				if Vector2(e.x - tr.x, e.y - tr.y).length() >= 30.0 + e.r:
+			grid_sys.query_into(float(tr.x), float(tr.y), 70.0, _q_trail)
+			for j in range(_q_trail.size()):
+				var e: SimEnemy = _q_trail[j]
+				if not e.alive:
+					continue
+				var dx := e.x - float(tr.x)
+				var dy := e.y - float(tr.y)
+				var rr := 30.0 + e.r
+				if dx * dx + dy * dy >= rr * rr:
 					continue
 				if e.mark_t > 0.0:
 					_detonate_mark(e)
@@ -1212,12 +1435,16 @@ func _update_weapons(dt: float) -> void:
 			var st3 := wstat("lei")
 			var evl := evo.has("lei")
 			var cands: Array = []
-			for e: SimEnemy in _near(px, py, BAL.lei.range):
-				if Vector2(e.x - px, e.y - py).length() < BAL.lei.range:
+			var lr := float(BAL.lei.range)
+			var lr2 := lr * lr
+			grid_sys.query_into(px, py, lr, _q_lei)
+			for j in range(_q_lei.size()):
+				var e: SimEnemy = _q_lei[j]
+				if (e.x - px) * (e.x - px) + (e.y - py) * (e.y - py) < lr2:
 					cands.append(e)
 			if cands.size() > 0:
 				var evs: Dictionary = GameData.EVOS.lei.stats
-				w_lei = evs.cd if evl else st3.cd
+				w_lei = (evs.cd if evl else st3.cd) * wcdm
 				var strikes: int = int(evs.strikes if evl else st3.strikes) + (1 if has_part("part_lei") else 0)
 				var chain: int = int(st3.chain) + s_chain + (int(evs.chainBonus) if evl else 0)
 				var hit_set: Dictionary = {}
@@ -1264,8 +1491,10 @@ func _update_bullets(dt: float) -> void:
 		b.life -= dt
 		var dead := b.life <= 0.0
 		if not dead:
-			for e: SimEnemy in _near(b.x, b.y, 70.0):
-				if b.hits.has(e.uid):
+			grid_sys.query_into(b.x, b.y, 70.0, _q_bullet)
+			for j in range(_q_bullet.size()):
+				var e: SimEnemy = _q_bullet[j]
+				if not e.alive or b.hits.has(e.uid):
 					continue
 				var cy := e.y - e.h * 0.45
 				if absf(e.x - b.x) > e.r + 16.0 or absf(cy - b.y) > e.h * 0.5 + 6.0:
@@ -1298,8 +1527,10 @@ func _detonate_mark(e: SimEnemy) -> void:
 	var x := e.x
 	var y := e.y - e.h * 0.4
 	_ev("ring", x, y, ev.markRadius)
+	grid_sys.query_into(x, y + 40.0, ev.markRadius + 80.0, _q_mark)
 	var hits: Array = []
-	for o: SimEnemy in _near(x, y + 40.0, ev.markRadius + 80.0):
+	for j in range(_q_mark.size()):
+		var o: SimEnemy = _q_mark[j]
 		if Vector2(o.x - x, o.y - o.h * 0.4 - y).length() < ev.markRadius + o.r:
 			hits.append(o)
 	for o: SimEnemy in hits:
@@ -1328,15 +1559,7 @@ func _thunder(tgt: SimEnemy, dmg: float, chain: int, hit_set: Dictionary, evl: b
 	var from := tgt
 	var d := dmg
 	for c in range(chain):
-		var nxt: SimEnemy = null
-		var bd: float = L.chainRange * L.chainRange
-		for e: SimEnemy in _near(from.x, from.y, L.chainRange):
-			if hit_set.has(e.uid):
-				continue
-			var dd := (e.x - from.x) * (e.x - from.x) + (e.y - from.y) * (e.y - from.y)
-			if dd < bd:
-				bd = dd
-				nxt = e
+		var nxt := grid_sys.nearest(from.x, from.y, float(L.chainRange), hit_set)
 		if nxt == null:
 			break
 		hit_set[nxt.uid] = true
@@ -1402,7 +1625,11 @@ func _update_sword(dt: float) -> void:
 			sw_ang += sw.orbitW * dt
 			sw_x = px + cos(sw_ang) * sw.orbitRx * sw_rm()
 			sw_y = py - 30.0 + sin(sw_ang) * sw.orbitRy * sw_rm()
-			for e: SimEnemy in _near(sw_x, sw_y + 20.0, 80.0):
+			grid_sys.query_into(sw_x, sw_y + 20.0, 80.0, _q_sw_orbit)
+			for j in range(_q_sw_orbit.size()):
+				var e: SimEnemy = _q_sw_orbit[j]
+				if not e.alive:
+					continue
 				var last: float = sw_hit.get(e.uid, -10.0)
 				if real_t - last < sw.hitInterval:
 					continue
@@ -1455,7 +1682,7 @@ func _sword_strike(e: SimEnemy, base: float, thrust: bool, key: String = "sword"
 		_ail_collapse_check(e)
 		if not e.alive:
 			return
-	var o := {"pierce": true, "kx": e.x - px, "ky": e.y - py, "kb": 60.0}
+	var o := {"armor_pierce": float(sw.get("armor_pierce", 0.5)), "kx": e.x - px, "ky": e.y - py, "kb": 60.0}
 	if crit:
 		o["forceCrit"] = true
 	# 阶段与剑冢通关带来的剑意增益（加算，随飞剑成长）：+30%/阶 +25%/次剑冢通关
@@ -1475,13 +1702,18 @@ func _sword_thrust(dir_override: Vector2 = Vector2.ZERO, key: String = "sword") 
 	_ev("sword_thrust", px, py - 30.0, d)
 	var ox := px
 	var oy := py - 30.0
-	for e: SimEnemy in enemies.duplicate():
+	var tlen := float(sw.thrustLen)
+	var mid_x := ox + d.x * (tlen * 0.5)
+	var mid_y := oy + d.y * (tlen * 0.5)
+	grid_sys.query_into(mid_x, mid_y, tlen * 0.5 + float(sw.thrustHalfW) + 80.0, _q_thrust)
+	for j in range(_q_thrust.size()):
+		var e: SimEnemy = _q_thrust[j]
 		if not e.alive:
 			continue
 		var vx := e.x - ox
 		var vy := e.y - e.h * 0.4 - oy
 		var proj := vx * d.x + vy * d.y
-		if proj < -20.0 or proj > sw.thrustLen:
+		if proj < -20.0 or proj > tlen:
 			continue
 		var perp := absf(vx * d.y - vy * d.x)
 		if perp > sw.thrustHalfW + e.r:
@@ -1612,7 +1844,7 @@ func _update_enemies(dt: float) -> void:
 				_boss_ai(e, dt)
 				if e.warn_t > 0.0:
 					e.warn_t -= dt
-				var f := 0.2 if e.warn_t > 0.0 else 1.0
+				var f := 0.0 if e.stagger_t > 0.0 else (0.2 if e.warn_t > 0.0 else 1.0)
 				vx = ux * e.speed * f
 				vy = uy * e.speed * f
 				e.lift = sin(real_t * 1.6) * 10.0
@@ -1622,25 +1854,33 @@ func _update_enemies(dt: float) -> void:
 				sf = 0.0   # 符缚叠满：定身
 			vx *= sf
 			vy *= sf
-		# 击退衰减 + 同格分离
+		# 击退衰减 + 同格分离（每实体最多检测 8 个同格邻居，彻底消除后期 O(K^2) 尖峰）
 		e.kvx *= decay
 		e.kvy *= decay
 		var sx := 0.0
 		var sy := 0.0
-		var arr: Variant = grid.get(int(e.x / CELL) * 4096 + int(e.y / CELL))
-		if arr != null and (arr as Array).size() > 1:
-			for o: SimEnemy in arr:
-				if o == e:
-					continue
-				var ox := e.x - o.x
-				var oy := e.y - o.y
-				var d2 := ox * ox + oy * oy
-				var rr := e.r + o.r
-				if d2 < rr * rr and d2 > 0.01:
-					var d := sqrt(d2)
-					var push := (rr - d) / rr
-					sx += ox / d * push * 90.0
-					sy += oy / d * push * 90.0
+		var arr: Variant = grid_sys.get_cell_at(e.x, e.y)
+		if arr != null:
+			var bucket: Array = arr
+			var bsz := bucket.size()
+			if bsz > 1:
+				var sep_n := 0
+				for bi in range(bsz):
+					var o: SimEnemy = bucket[bi]
+					if o == e:
+						continue
+					sep_n += 1
+					var ox := e.x - o.x
+					var oy := e.y - o.y
+					var d2 := ox * ox + oy * oy
+					var rr := e.r + o.r
+					if d2 < rr * rr and d2 > 0.01:
+						var d := sqrt(d2)
+						var push := (rr - d) / rr
+						sx += ox / d * push * 90.0
+						sy += oy / d * push * 90.0
+					if sep_n >= SpatialGrid.MAX_SEP_NEIGHBORS:
+						break
 		e.x += (vx + e.kvx + sx) * dt
 		e.y += (vy + e.kvy + sy) * dt
 		e.vx = vx
@@ -1816,6 +2056,10 @@ func _elite_ring(e: SimEnemy, dt: float) -> void:
 func _boss_ai(e: SimEnemy, dt: float) -> void:
 	var B: Dictionary = GameData.EN.boss
 	var ph := 1 if boss_phase else 0
+	if e.stagger_t > 0.0:
+		e.stagger_t = maxf(0.0, e.stagger_t - dt)
+		if e.atk_t > 0.0:
+			return
 	if not boss_phase and e.hp < e.maxhp * 0.5:
 		boss_phase = true
 		_ev("banner", "灯骸老祖 • 灯火尽燃（半壁灯海 左右连击）" if mode != "classic" else "灯骸老祖 • 灯火尽燃", "#ff7a6a")
@@ -1911,6 +2155,10 @@ func _boss_half_wave(e: SimEnemy, H2: Dictionary, side: float, warn: float, chai
 		if chain and e.alive and not over:
 			_ev("sfx", "warn")
 			_boss_half_wave(e, H2, -side, float(H2.gap), false)
+		elif e.alive:
+			var sdur := float(GameData.EN.boss.get("stagger", {}).get("dur", 1.5))
+			e.stagger_t = maxf(e.stagger_t, sdur)
+			_ev("stagger", e.x, e.y)
 	teles.append(tl)
 
 
@@ -1927,6 +2175,9 @@ func _boss_drop(e: SimEnemy, B: Dictionary) -> void:
 		_ev("shock", x, y, r)
 		if Vector2(px - x, py - y).length() < r + float(GameData.BAL.player.radius):
 			hurt_player(float(D2.dmg), x, y, "boss:drop")
+		var sdur := float(B.get("stagger", {}).get("dur", 1.5))
+		e.stagger_t = maxf(e.stagger_t, sdur)
+		_ev("stagger", e.x, e.y)
 	_add_tele(x, y, r, float(D2.warn), cb, null)
 
 
@@ -1948,8 +2199,10 @@ func _explode_bomber(e: SimEnemy) -> void:
 	var x := e.x
 	var y := e.y
 	_kill(e, "blast")
-	for o: SimEnemy in _near(x, y, d.blastR + 30.0):
-		if Vector2(o.x - x, o.y - y).length() < d.blastR + o.r:
+	grid_sys.query_into(x, y, d.blastR + 30.0, _q_bomber)
+	for j in range(_q_bomber.size()):
+		var o: SimEnemy = _q_bomber[j]
+		if o.alive and Vector2(o.x - x, o.y - y).length() < d.blastR + o.r:
 			damage(o, d.blastEnemyDmg, "blast", {"kx": o.x - x, "ky": o.y - y, "noCrit": true})
 
 
@@ -2105,13 +2358,14 @@ func _update_pickups(dt: float) -> void:
 	var D: Dictionary = GameData.BAL.drops
 	var tx := px
 	var ty := py - 30.0
+	var pull_r := s_pickup * (1.15 if lantern_state() == "high" else 1.0)
 	for i in range(pickups.size() - 1, -1, -1):
 		var k: SimPickup = pickups[i]
 		var dx := tx - k.x
 		var dy := ty - k.y
 		var d := maxf(0.001, sqrt(dx * dx + dy * dy))
 		if not over:
-			if not k.mag and d < s_pickup:
+			if not k.mag and d < pull_r:
 				k.mag = true
 				k.spd = -D.magnetPop
 			if k.mag:
@@ -2139,6 +2393,7 @@ func _collect(k: SimPickup) -> void:
 			_ev("sfx", "coin")
 			coins += k.val
 		"oil":
+			LanternRules.add_oil(self, float(LanternRules.lcfg().get("oilPickupGain", 28.0)))
 			if phase != PH_RIFT:
 				var h := minf(D.oilHeal, maxhp - hp)
 				hp += h
@@ -2149,7 +2404,10 @@ func _collect(k: SimPickup) -> void:
 
 
 func _gain_xp(v: int) -> void:
-	xp += v
+	var gain := v
+	if lantern_state() == "high":
+		gain = maxi(v, int(round(float(v) * (1.0 + float(LanternRules.lcfg().get("highXpMul", 0.20))))))
+	xp += gain
 	while xp >= need:
 		xp -= need
 		level += 1
@@ -2158,7 +2416,7 @@ func _gain_xp(v: int) -> void:
 
 
 # ======================================================================
-# 三选一 / 宝箱 / 馈赠
+# 三选一 / 宝箱 / 馈赠 / 阴律
 # ======================================================================
 const RARITY := ["white", "blue", "purple", "gold"]
 
@@ -2170,12 +2428,40 @@ func _school_weapon(school: String) -> String:
 	return ""
 
 
+func _roll_rule_choices() -> Array:
+	var pool: Array = []
+	for rl in GameData.RULES:
+		if not active_rules.has(rl.id):
+			pool.append(rl)
+	var out: Array = []
+	var max_r := SchoolRules.max_rules()
+	while out.size() < 3 and pool.size() > 0:
+		var idx := int(rng.randf() * pool.size())
+		var pick: Dictionary = pool[idx]
+		pool.remove_at(idx)
+		out.append({
+			"kind": "rule",
+			"id": String(pick.id),
+			"icon": String(pick.get("icon_tag", "huanhun")),
+			"name": String(pick.name),
+			"school": "gen",
+			"rarity": "gold",
+			"lvText": "阴律规则 • %d/%d" % [active_rules.size() + 1, max_r],
+			"desc": String(pick.desc) if emit else "",
+		})
+	return out
+
+
 func _open_choice(kind: String) -> void:
 	var opts := roll_choices(kind == "chest")
 	if kind == "swb":
 		opts = swb_options()
 	elif kind == "fusion":
 		opts = fusion_options()
+	elif kind == "rule":
+		var ro := _roll_rule_choices()
+		if not ro.is_empty():
+			opts = ro
 	if kind == "gift":
 		opts = opts.filter(func(o): return o.kind != "heal")
 		if opts.size() < 3:
@@ -2194,11 +2480,6 @@ func _card_hint(u: Dictionary) -> String:
 			return ah + "\n配合满级%s 〉 进化「%s」" % [GameData.UPS[ev.weapon].name, ev.name]
 	if ah != "":
 		return ah
-	for ev in GameData.UP.evolutions:
-		if ev.weapon == u.id:
-			return "\n满级 + %s 〉 进化「%s」" % [GameData.UPS[ev.needs].name, ev.name]
-		if ev.needs == u.id:
-			return "\n配合满级%s 〉 进化「%s」" % [GameData.UPS[ev.weapon].name, ev.name]
 	for r in GameData.RELICS:
 		if r.has("part") and r.part == u.id:
 			return "\n满级可购金件：%s" % r.name
@@ -2212,6 +2493,11 @@ func roll_choices(is_chest: bool) -> Array:
 		if not evo.has(ev.weapon) and lv(ev.weapon) >= int(GameData.UPS[ev.weapon].max) and lv(ev.needs) >= 1:
 			out.append({"kind": "evo", "id": ev.id, "weapon": ev.weapon, "icon": ev.icon, "name": ev.name, "school": ev.school, "rarity": "gold",
 				"lvText": "%s Lv%d + %s 〉 进化" % [GameData.UPS[ev.weapon].name, int(GameData.UPS[ev.weapon].max), GameData.UPS[ev.needs].name], "desc": Cards.fill(ev.desc, ev.stats) if emit else ""})
+	# 非经典模式：未满 2 条阴律时，宝箱或关键等级节点有机会刷出阴律规则卡
+	if mode != "classic" and out.size() < 3 and active_rules.size() < SchoolRules.max_rules() and (is_chest or level == 4 or level == 8 or (level >= 12 and rng.randf() < 0.2)):
+		var rcard := SchoolRules.roll_rule_option(active_rules, rng, emit)
+		if not rcard.is_empty():
+			out.append(rcard)
 	var cand: Array = []
 	for u in UPL:
 		if u.get("ail", false) and not ail_on:
@@ -2313,6 +2599,10 @@ func choose(i: int) -> void:
 	elif c.kind == "evo":
 		evo[c.weapon] = true
 		_ev("banner", "进化 • %s" % c.name, "#ffcf5a")
+	elif c.kind == "rule":
+		if not active_rules.has(c.id) and active_rules.size() < SchoolRules.max_rules():
+			active_rules.append(c.id)
+		_ev("banner", "习得阴律 • %s" % c.name, "#ffcf5a")
 	elif c.kind == "asc":
 		if c.id == "asc_dmg":
 			asc_dmg_n += 1
@@ -3261,7 +3551,8 @@ func soul_payout() -> int:
 	var soul: float = t * S.perSecond + kills * S.perKill + coins * S.perCoin + bonus_soul
 	if victory:
 		soul = (soul + S.bossBonus) * S.winMul
-	return int(round(soul * s_soul_mul))
+	var high_mul := 1.0 + float(LanternRules.lcfg().get("highXpMul", 0.20)) if lantern_state() == "high" else 1.0
+	return int(round(soul * s_soul_mul * beacon_soul_mul * high_mul))
 
 
 func _finish() -> void:
@@ -3299,7 +3590,7 @@ func fork() -> Sim:
 		if pr.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
 			var n: String = pr.name
 			# 妖物/掉落对象不能浅共享：duplicate(true) 不复制对象，克隆里打怪会改到真局面。大地图收起的妖物、收起的掉落不进克隆（试射只看当前场地）。
-			if n in ["rng", "enemies", "bullets", "ebullets", "pickups", "teles", "bolts", "trails", "grid", "events", "lei_queue", "boss", "rift_warden", "guard_ref", "vine_boss", "world_stash", "arena_stash", "orb_pos", "choice"]:
+			if n in ["rng", "enemies", "bullets", "ebullets", "pickups", "teles", "bolts", "trails", "grid", "grid_sys", "dps_tracker", "dps_breakdown", "_q_bullet", "_q_orb", "_q_trail", "_q_lei", "_q_mark", "_q_qi", "_q_qi_pick", "_q_wheel", "_q_sw_orbit", "_q_thrust", "_q_pet", "_q_pet_shot", "_q_pet_sub", "_q_bomber", "_q_flare", "_q_rule", "_q_corpse", "_q_aoe", "_q_sets", "_q_leihuo", "_q_fallback", "events", "lei_queue", "boss", "rift_warden", "guard_ref", "vine_boss", "world_stash", "arena_stash", "orb_pos", "choice"]:
 				continue
 			var v: Variant = get(n)
 			if v is Dictionary or v is Array:
@@ -3359,7 +3650,8 @@ func duel_warden(build: Dictionary, entry: int, with_sword: bool) -> void:
 
 const SAVE_KEYS := ["seed_v", "phase", "t", "real_t", "seg", "kills", "coins", "level", "xp", "need", "pending_lv", "hp", "px", "py", "levels", "evo", "relics",
 	"wicks", "artifact", "rift_entries", "rift_clears", "rift_sealed", "threat_next", "threat_cur", "rerolls", "revive", "bonus_soul", "break_idx", "gift_pending", "shop",
-	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock", "gourds", "pet_on", "pet_hp", "pet_marks", "pet_dead_t", "mini_idx", "vine_taken", "set_kills", "rift_ready_at", "poi_cd", "vine_runs", "sw_master", "sw_kill5", "sw_cnt", "gourd_log", "poi_log", "mid_idx", "guard_done", "forge_n", "asc_dmg_n", "asc_hp_n", "farm_runs"]
+	"break_t", "rift_log", "rift_fails", "rift_deaths", "wick_spent_rift", "wick_spent_shop", "announced", "sw_stage", "sw_kills", "sw_br", "sw_log", "fusion", "fusion_t", "pending_fusion", "pending_sw", "mode", "stretch", "clock", "gourds", "pet_on", "pet_hp", "pet_marks", "pet_dead_t", "mini_idx", "vine_taken", "set_kills", "rift_ready_at", "poi_cd", "vine_runs", "sw_master", "sw_kill5", "sw_cnt", "gourd_log", "poi_log", "mid_idx", "guard_done", "forge_n", "asc_dmg_n", "asc_hp_n", "farm_runs",
+	"lantern_oil", "active_rules", "beacon_id", "abyss_depth", "beacon_soul_mul", "opening_draft_done", "next_obj_clock", "obj_serial"]
 
 
 ## 检查点存档：只在「段/段间」两种阶段落档；恢复时妖物/弹幕清空，从该点继续（局内中断续档）
@@ -3413,6 +3705,9 @@ func from_save(d: Dictionary) -> void:
 		guard_done.erase(seg)
 	guard_ref = null
 	world_stash = []
+	beacon_cfg = SchoolRules.beacon_for(beacon_id)
+	_refresh_effective_level()
+	extract_choice_open = false
 	rng.seed = seed_v + int(real_t * 10.0)
 	_recalc()
 	hp = minf(float(d.get("hp", maxhp)), maxhp)
@@ -3436,8 +3731,11 @@ func from_save(d: Dictionary) -> void:
 
 
 func _aoe(x: float, y: float, r: float, dmg: float, key: String) -> void:
-	for e: SimEnemy in _near(x, y, r + 40.0):
-		if Vector2(e.x - x, e.y - e.h * 0.4 - y).length() < r + e.r:
+	var q: Array = _q_aoe[mini(set_depth, 3)]
+	grid_sys.query_into(x, y, r + 40.0, q)
+	for j in range(q.size()):
+		var e: SimEnemy = q[j]
+		if e.alive and Vector2(e.x - x, e.y - e.h * 0.4 - y).length() < r + e.r:
 			damage(e, dmg, key, {"noCrit": true, "kx": e.x - x, "ky": e.y - y, "kb": 90.0})
 
 
@@ -3509,12 +3807,13 @@ func _pet_add_fx(kind: int, x: float, y: float, dur: float, rad: float) -> void:
 
 
 func _pet_pick_target(rng_: float) -> SimEnemy:
-	## 优先锁定 Boss / 精英 / 守关者，其次选离小金刚最近的怪
-	## 只在主角周围“屏幕形”的椭圆里找（横 rng_、纵 rng_×0.5）：屏幕 16:9，圆形半径会让它追到画面外，玩家看不见它在打
+	## 优先锁定 Boss / 精英 / 守关者，其次选离小金刚最近的怪（走空间网格椭圆查询，零全表扫描）
 	var best: SimEnemy = null
 	var best_sc := -1e18
 	var ry := rng_ * 0.5
-	for e: SimEnemy in enemies:
+	grid_sys.query_ellipse_into(px, py, rng_, ry, _q_pet)
+	for j in range(_q_pet.size()):
+		var e: SimEnemy = _q_pet[j]
 		if not e.alive:
 			continue
 		var ex := (e.x - px) / rng_
@@ -3574,16 +3873,7 @@ func _pet_chain_thunder(tgt: SimEnemy, dmg: float) -> void:
 			_ail_add(cur, AIL_SHOCK, 1)
 		from_p = Vector2(cur.x, cur.y - cur.h * 0.45)
 		d *= 0.82
-		var nxt: SimEnemy = null
-		var bd := 240.0 * 240.0
-		for e: SimEnemy in _near(cur.x, cur.y, 240.0):
-			if hit_set.has(e.uid):
-				continue
-			var dd := (e.x - cur.x) * (e.x - cur.x) + (e.y - cur.y) * (e.y - cur.y)
-			if dd < bd:
-				bd = dd
-				nxt = e
-		cur = nxt
+		cur = grid_sys.nearest(cur.x, cur.y, 240.0, hit_set)
 
 
 func _pet_shockwave(tgt: SimEnemy, dmg: float) -> void:
@@ -3597,8 +3887,10 @@ func _pet_shockwave(tgt: SimEnemy, dmg: float) -> void:
 	var rad := 195.0
 	_pet_add_fx(2, pet_pos.x, pet_pos.y, 0.45, rad)
 	_ev("ring", pet_pos.x, pet_pos.y, rad)
-	for e: SimEnemy in _near(pet_pos.x, pet_pos.y, rad + 40.0):
-		if Vector2(e.x - pet_pos.x, e.y - e.h * 0.4 - pet_pos.y).length() < rad + e.r:
+	grid_sys.query_into(pet_pos.x, pet_pos.y, rad + 40.0, _q_pet_sub)
+	for j in range(_q_pet_sub.size()):
+		var e: SimEnemy = _q_pet_sub[j]
+		if e.alive and Vector2(e.x - pet_pos.x, e.y - e.h * 0.4 - pet_pos.y).length() < rad + e.r:
 			damage(e, dmg * 1.25, "pet", {"kx": e.x - pet_pos.x, "ky": e.y - pet_pos.y, "kb": 160.0})
 	# 顺带震碎身边敌弹护主
 	var kept: Array = []
@@ -3616,8 +3908,10 @@ func _pet_trigger_combo(G: Dictionary) -> void:
 	combo_wave_t = 0.05
 	var cdmg := maxf(float(G.comboDmg), build_dps() * float(G.get("comboDpsRatio", 2.2)) / maxf(1.0, 1.0 + s_dmg_add)) * (1.0 + 0.12 * float(pet_marks))
 	var cr := float(G.comboR)
-	for e: SimEnemy in _near(px, py - 30.0, cr + 50.0):
-		if Vector2(e.x - px, e.y - e.h * 0.4 - (py - 30.0)).length() < cr + e.r:
+	grid_sys.query_into(px, py - 30.0, cr + 50.0, _q_pet_sub)
+	for j in range(_q_pet_sub.size()):
+		var e: SimEnemy = _q_pet_sub[j]
+		if e.alive and Vector2(e.x - px, e.y - e.h * 0.4 - (py - 30.0)).length() < cr + e.r:
 			damage(e, cdmg, "pet", {"forceCrit": true, "kx": e.x - px, "ky": e.y - py, "kb": 220.0})
 	var kept: Array = []
 	for b: SimBullet in ebullets:
@@ -3649,15 +3943,19 @@ func _update_pet_shots(dt: float) -> void:
 		sh.x = float(sh.x) + float(sh.vx) * dt
 		sh.y = float(sh.y) + float(sh.vy) * dt
 		var hit_e: SimEnemy = null
-		for e: SimEnemy in _near(float(sh.x), float(sh.y), 60.0):
-			if Vector2(e.x - float(sh.x), e.y - e.h * 0.45 - float(sh.y)).length() < e.r + 22.0:
+		grid_sys.query_into(float(sh.x), float(sh.y), 60.0, _q_pet_shot)
+		for j in range(_q_pet_shot.size()):
+			var e: SimEnemy = _q_pet_shot[j]
+			if e.alive and Vector2(e.x - float(sh.x), e.y - e.h * 0.45 - float(sh.y)).length() < e.r + 22.0:
 				hit_e = e
 				break
 		if hit_e != null:
 			var sr := float(sh.r)
 			_pet_add_fx(0, float(sh.x), float(sh.y), 0.32, sr)
-			for o: SimEnemy in _near(float(sh.x), float(sh.y), sr + 30.0):
-				if Vector2(o.x - float(sh.x), o.y - o.h * 0.4 - float(sh.y)).length() < sr + o.r:
+			grid_sys.query_into(float(sh.x), float(sh.y), sr + 30.0, _q_pet_sub)
+			for j in range(_q_pet_sub.size()):
+				var o: SimEnemy = _q_pet_sub[j]
+				if o.alive and Vector2(o.x - float(sh.x), o.y - o.h * 0.4 - float(sh.y)).length() < sr + o.r:
 					damage(o, float(sh.dmg), "pet", {"kx": o.x - float(sh.x), "ky": o.y - float(sh.y), "kb": 80.0})
 					if o.alive and s_burn_dps > 0.0:
 						_ignite(o)
@@ -3736,8 +4034,10 @@ func _update_pet(dt: float) -> void:
 					bolts.append({"x1": wt.x, "y1": wt.y - 420.0, "x2": wt.x, "y2": wt.y - wt.h * 0.4, "life": 0.28, "seed": rng.randf()})
 				_ev("thunder", wt.x, wt.y)
 				_pet_add_fx(combo_waves % 3, wt.x, wt.y - wt.h * 0.35, 0.42, 150.0)
-				for o: SimEnemy in _near(wt.x, wt.y, 170.0):
-					if Vector2(o.x - wt.x, o.y - wt.y).length() < 150.0 + o.r:
+				grid_sys.query_into(wt.x, wt.y, 170.0, _q_pet_sub)
+				for j in range(_q_pet_sub.size()):
+					var o: SimEnemy = _q_pet_sub[j]
+					if o.alive and Vector2(o.x - wt.x, o.y - wt.y).length() < 150.0 + o.r:
 						damage(o, wd, "pet", {"forceCrit": true, "kx": o.x - wt.x, "ky": o.y - wt.y, "kb": 140.0})
 	# 高频主动技能循环（0.55s 一轮）
 	pet_atk_t -= dt
@@ -4051,7 +4351,11 @@ func _update_sword_stages(dt: float) -> void:
 			var a := sw_wheel_ang + float(i) / n * TAU
 			var wp := Vector2(px + cos(a) * rad, py - 30.0 + sin(a) * rad * 0.8)
 			sw_wheel_pos.append(wp)
-			for e: SimEnemy in _near(wp.x, wp.y + 20.0, 70.0):
+			grid_sys.query_into(wp.x, wp.y + 20.0, 70.0, _q_wheel)
+			for j in range(_q_wheel.size()):
+				var e: SimEnemy = _q_wheel[j]
+				if not e.alive:
+					continue
 				var hk := e.uid * 16 + i
 				if real_t - float(sw_wheel_hit.get(hk, -10.0)) < float(W.hitCd):
 					continue
@@ -4063,23 +4367,17 @@ func _update_sword_stages(dt: float) -> void:
 					_fusion_ignite(e)
 		if sw_wheel_hit.size() > 600:
 			sw_wheel_hit.clear()
-	# 阶段4：追踪剑气（自动锁定最近目标、穿透）
+	# 阶段4：追踪剑气（自动锁定最近目标、穿透；走空间网格避免 k×N 全表扫描）
 	if sw_stage >= 4:
 		var Q: Dictionary = ST.qi
 		sw_qi_t -= dt
 		if sw_qi_t <= 0.0 and enemies.size() > 0:
 			var picked: Dictionary = {}
 			var fired := 0
-			for k in range(int(Q.count) + int(sw_br.get("count", 0)) + (2 if has_part("part_sword") else 0)):
-				var best: SimEnemy = null
-				var bd := float(Q.range) * float(Q.range)
-				for e: SimEnemy in enemies:
-					if not e.alive or picked.has(e.uid):
-						continue
-					var d2 := (e.x - px) * (e.x - px) + (e.y - py) * (e.y - py)
-					if d2 < bd:
-						bd = d2
-						best = e
+			var qcnt := int(Q.count) + int(sw_br.get("count", 0)) + (2 if has_part("part_sword") else 0)
+			var qrng := float(Q.range)
+			for k in range(qcnt):
+				var best := grid_sys.nearest(px, py, qrng, picked)
 				if best == null:
 					break
 				picked[best.uid] = true
@@ -4149,8 +4447,10 @@ func _update_qi(dt: float) -> void:
 		b.life -= dt
 		var dead := b.life <= 0.0
 		if not dead:
-			for e: SimEnemy in _near(b.x, b.y, 70.0):
-				if b.hits.has(e.uid):
+			grid_sys.query_into(b.x, b.y, 70.0, _q_qi)
+			for j in range(_q_qi.size()):
+				var e: SimEnemy = _q_qi[j]
+				if not e.alive or b.hits.has(e.uid):
 					continue
 				if Vector2(e.x - b.x, e.y - e.h * 0.4 - b.y).length() > e.r + float(Q.hitR):
 					continue
@@ -4266,7 +4566,8 @@ func _ail_refresh(e: SimEnemy) -> void:
 	m += float(res[mini(k, res.size() - 1)])
 	if k >= 2:
 		m += s_ail_res * float(k - 1)
-	e.ail_mul = m
+	var max_mul := float(A.get("maxMul", 1.65)) + float(school_stats.get("ailCapAdd", 0.0))
+	e.ail_mul = minf(m, max_mul)
 
 
 ## 每只身上有异常的妖物每帧一次：只做计时，到期才重算
@@ -4309,17 +4610,20 @@ func _leihuo(e: SimEnemy) -> void:
 	_react(e, "leihuo")
 	var dmg := left * float(R.mul)
 	var r := float(R.radius)
-	var n_spl := int(R.splash)
+	var n_spl := int(R.get("splash", 2))
+	var spl_mul := float(R.get("splashMul", 0.5))
 	var near_l: Array = []
 	if n_spl > 0:
-		for o: SimEnemy in _near(e.x, e.y, r):
-			if o != e and (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) < r * r:
+		grid_sys.query_into(e.x, e.y, r, _q_leihuo)
+		for j in range(_q_leihuo.size()):
+			var o: SimEnemy = _q_leihuo[j]
+			if o != e and o.alive and (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) < r * r:
 				near_l.append(o)
 				if near_l.size() >= n_spl:
 					break
 	damage(e, dmg, "ail", O_AIL)
 	for o: SimEnemy in near_l:
-		damage(o, dmg * float(R.splashMul), "ail", O_AIL)
+		damage(o, dmg * spl_mul, "ail", O_AIL)
 
 
 func _ail_collapse_check(e: SimEnemy) -> void:

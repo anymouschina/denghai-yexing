@@ -7,7 +7,9 @@
   "stat": "dmg",
   "per": 0.05,
   "tier": "white",
-  "set": "flame"
+  "set": "flame",
+  "school": "符",
+  "school_tags": ["符", "阵"]
  },
  {
   "id": "ember",
@@ -17,7 +19,9 @@
   "stat": "dmg",
   "per": 0.08,
   "tier": "blue",
-  "set": "flame"
+  "set": "flame",
+  "school": "阵",
+  "school_tags": ["阵", "蛊"]
  },
  {
   "id": "coin",
@@ -27,7 +31,9 @@
   "stat": "crit",
   "per": 0.04,
   "tier": "white",
-  "set": "thunder"
+  "set": "thunder",
+  "school": "魂",
+  "school_tags": ["魂", "煞"]
  },
  {
   "id": "thunder",
@@ -37,7 +43,9 @@
   "stat": "crit",
   "per": 0.07,
   "tier": "blue",
-  "set": "thunder"
+  "set": "thunder",
+  "school": "煞",
+  "school_tags": ["煞", "蛊"]
  },
  {
   "id": "horse",
@@ -47,7 +55,9 @@
   "stat": "speed",
   "per": 0.05,
   "tier": "white",
-  "set": "swift"
+  "set": "swift",
+  "school": "符",
+  "school_tags": ["符", "煞"]
  },
  {
   "id": "blade",
@@ -57,7 +67,9 @@
   "stat": "dashCd",
   "per": 0.1,
   "tier": "blue",
-  "set": "swift"
+  "set": "swift",
+  "school": "煞",
+  "school_tags": ["煞"]
  },
  {
   "id": "bell",
@@ -67,7 +79,9 @@
   "stat": "pickup",
   "per": 0.25,
   "tier": "white",
-  "set": "wealth"
+  "set": "wealth",
+  "school": "魂",
+  "school_tags": ["魂"]
  },
  {
   "id": "purse",
@@ -77,7 +91,9 @@
   "stat": "pickup",
   "per": 0.35,
   "tier": "blue",
-  "set": "wealth"
+  "set": "wealth",
+  "school": "魂",
+  "school_tags": ["魂"]
  },
  {
   "id": "mirror",
@@ -87,7 +103,9 @@
   "stat": "dmgTaken",
   "per": -0.05,
   "tier": "blue",
-  "set": "ward"
+  "set": "ward",
+  "school": "阵",
+  "school_tags": ["阵"]
  },
  {
   "id": "shade",
@@ -97,7 +115,9 @@
   "stat": "maxHp",
   "per": 15,
   "tier": "white",
-  "set": "ward"
+  "set": "ward",
+  "school": "阵",
+  "school_tags": ["阵", "魂"]
  },
  {
   "id": "gold1",
@@ -107,7 +127,9 @@
   "stat": "crit",
   "per": 0.08,
   "tier": "purple",
-  "set": "burst"
+  "set": "burst",
+  "school": "煞",
+  "school_tags": ["煞", "符"]
  },
  {
   "id": "gold2",
@@ -117,7 +139,9 @@
   "stat": "dmg",
   "per": 0.11,
   "tier": "purple",
-  "set": "burst"
+  "set": "burst",
+  "school": "符",
+  "school_tags": ["符", "蛊"]
  },
  {
   "id": "soul1",
@@ -127,7 +151,9 @@
   "stat": "maxHp",
   "per": 30,
   "tier": "purple",
-  "set": "soul"
+  "set": "soul",
+  "school": "魂",
+  "school_tags": ["魂", "阵"]
  },
  {
   "id": "soul2",
@@ -137,7 +163,9 @@
   "stat": "dmgTaken",
   "per": -0.09,
   "tier": "purple",
-  "set": "soul"
+  "set": "soul",
+  "school": "魂",
+  "school_tags": ["魂", "蛊"]
  },
  {
   "id": "army1",
@@ -147,7 +175,9 @@
   "stat": "dmg",
   "per": 0.09,
   "tier": "purple",
-  "set": "army"
+  "set": "army",
+  "school": "煞",
+  "school_tags": ["煞"]
  },
  {
   "id": "army2",
@@ -157,7 +187,9 @@
   "stat": "crit",
   "per": 0.06,
   "tier": "blue",
-  "set": "army"
+  "set": "army",
+  "school": "煞",
+  "school_tags": ["煞", "符"]
  },
  {
   "id": "part_fu",
@@ -168,7 +200,9 @@
   "per": 0,
   "tier": "gold",
   "set": "",
-  "part": "fu"
+  "part": "fu",
+  "school": "符",
+  "school_tags": ["符"]
  },
  {
   "id": "part_huanhuo",
@@ -179,7 +213,9 @@
   "per": 0,
   "tier": "gold",
   "set": "",
-  "part": "huanhuo"
+  "part": "huanhuo",
+  "school": "阵",
+  "school_tags": ["阵", "魂"]
  },
  {
   "id": "part_lei",
@@ -190,7 +226,9 @@
   "per": 0,
   "tier": "gold",
   "set": "",
-  "part": "lei"
+  "part": "lei",
+  "school": "煞",
+  "school_tags": ["煞", "蛊"]
  },
  {
   "id": "part_sword",
@@ -201,6 +239,8 @@
   "per": 0,
   "tier": "gold",
   "set": "",
-  "part": "sword"
+  "part": "sword",
+  "school": "煞",
+  "school_tags": ["煞"]
  }
 ]

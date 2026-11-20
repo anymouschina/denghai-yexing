@@ -15,6 +15,10 @@ var press: Label
 var t := 0.0
 var logo2: Label
 var snd_btn: Button
+var beacon_btn: Button
+var beacon_desc: Label
+var beacons: Array = []
+var beacon_idx := 0
 var run_exists := false
 
 
@@ -52,10 +56,11 @@ func _ready() -> void:
 	shade.stretch_mode = TextureRect.STRETCH_SCALE
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(shade)
+	_load_beacons()
 	_build_left()
 	_build_record()
 	Audio.music("title")
-	Playtest.publish({"scene": "title", "has_run": run_exists})
+	Playtest.publish({"scene": "title", "has_run": run_exists, "beacon": _cur_beacon_id()})
 
 
 func _build_left() -> void:
@@ -88,39 +93,47 @@ func _build_left() -> void:
 		var bc := UI.button("继续本局（第 %d 段 • Lv %d）" % [int(save.run.get("seg", 0)) + 1, int(save.run.get("level", 1))], Vector2(320, 62), true, 26)
 		bc.pressed.connect(_continue)
 		col.add_child(bc)
-	var bm := UI.button(_mode_label(), Vector2(320, 46), false, 22)
+	var bm := UI.button(_mode_label(), Vector2(320, 44), false, 21)
 	bm.pressed.connect(func():
 		save["mode"] = "quick" if String(save.get("mode", "full")) == "full" else "full"
 		SaveData.write_save(save)
 		bm.text = _mode_label())
 	col.add_child(bm)
-	var b1 := UI.button("开始夜行" if not has_run else "新开一局", Vector2(320, 62), not has_run, 32)
+	beacon_btn = UI.button("", Vector2(320, 48), false, 21)
+	beacon_btn.pressed.connect(_cycle_beacon)
+	col.add_child(beacon_btn)
+	beacon_desc = UI.label("", 16, UI.GOLD, 4)
+	beacon_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	beacon_desc.custom_minimum_size = Vector2(390, 0)
+	col.add_child(beacon_desc)
+	_refresh_beacon()
+	var b1 := UI.button("开始夜行" if not has_run else "新开一局", Vector2(320, 58), not has_run, 30)
 	b1.pressed.connect(_start)
 	col.add_child(b1)
-	var b2 := UI.button("灯坊 • 强化", Vector2(320, 62), false, 30)
+	var b2 := UI.button("灯坊 • 强化", Vector2(320, 54), false, 28)
 	b2.pressed.connect(_open_shop)
 	col.add_child(b2)
-	snd_btn = UI.button(_snd_label(), Vector2(320, 62), false, 30)
+	snd_btn = UI.button(_snd_label(), Vector2(320, 54), false, 28)
 	snd_btn.pressed.connect(_toggle_sound)
 	col.add_child(snd_btn)
 	var hr := HBoxContainer.new()
 	hr.add_theme_constant_override("separation", 10)
-	var bclr := UI.button("清空存档", Vector2(155, 46), false, 22)
+	var bclr := UI.button("清空存档", Vector2(155, 44), false, 21)
 	bclr.pressed.connect(_clear_save)
 	hr.add_child(bclr)
-	var bhelp := UI.button("怎么玩 / 存档", Vector2(155, 46), false, 22)
+	var bhelp := UI.button("怎么玩 / 存档", Vector2(155, 44), false, 21)
 	bhelp.pressed.connect(_open_help)
 	hr.add_child(bhelp)
 	col.add_child(hr)
-	press = UI.label("— 轻点画面开始 —" if touch_mode else "— 点击画面或按 Enter / 空格 开始 —", 20, UI.GOLD, 5)
+	press = UI.label("— 轻点画面开始 —" if touch_mode else "— 点击画面或按 Enter / 空格 开始 —", 19, UI.GOLD, 5)
 	col.add_child(press)
 	if touch_mode:
-		col.add_child(UI.label("左侧拖动摇杆移动 • 右下「闪」键冲刺 • 右上暂停", 18, Color("c9cdf0"), 4))
-		col.add_child(UI.label("攻击全自动 • 升级时点卡片选择 • 拿到飞剑术后右下出现「剑」键", 18, Color("c9cdf0"), 4))
+		col.add_child(UI.label("左侧拖动摇杆移动 • 右下「闪」冲刺 /「灯」挑灯爆焰 • 右上暂停", 17, Color("c9cdf0"), 4))
+		col.add_child(UI.label("攻击全自动 • 升级点卡片选择 • 拿到飞剑后右下出现「剑」键", 17, Color("c9cdf0"), 4))
 	else:
-		col.add_child(UI.label("WASD / 方向键 移动 • 空格 冲刺 • Esc 暂停 • M 静音", 18, Color("c9cdf0"), 4))
-		col.add_child(UI.label("攻击全自动 • 升级时按 1 / 2 / 3 或点击卡片 • 飞剑术用 E / J", 18, Color("c9cdf0"), 4))
-	col.add_child(UI.label("v2.2 • 完整夜行约 18 分钟 • 葫芦小金刚助战 • 百万血终局 BOSS", 16, Color("8d93c4"), 3))
+		col.add_child(UI.label("WASD 移动 • 空格 冲刺 • Q / 右键 挑灯爆焰 • Esc 暂停 • M 静音", 17, Color("c9cdf0"), 4))
+		col.add_child(UI.label("攻击全自动 • 1 / 2 / 3 选卡 • E / J 飞剑 • R 小金刚合击", 17, Color("c9cdf0"), 4))
+	col.add_child(UI.label("v2.2 • 引魂灯签 • 双阴律 • 五派羁绊 • 百万血终局 BOSS", 15, Color("8d93c4"), 3))
 
 
 func _logo(text: String, size: int, color: Color) -> Label:
@@ -164,6 +177,67 @@ func _refresh_record() -> void:
 
 func _mode_label() -> String:
 	return "模式：完整夜行 • 约18分钟" if String(save.get("mode", "full")) == "full" else "模式：疾速试炼 • 约15分钟"
+
+
+func _load_beacons() -> void:
+	beacons.clear()
+	var raw: Variant = UI.load_json_safe("res://data/beacons.json")
+	var default_id := "beacon_default"
+	if raw is Dictionary:
+		default_id = String((raw as Dictionary).get("defaultId", default_id))
+		var arr: Variant = (raw as Dictionary).get("beacons", [])
+		if arr is Array:
+			beacons = arr
+	elif raw is Array:
+		beacons = raw
+	if beacons.is_empty():
+		beacons = [
+			{"id": "beacon_default", "name": "安夜签", "subtitle": "常夜无劫", "desc": "标准难度，魂火 ×1.0", "danger": 0, "soul_mul": 1.0, "color": "#ffc977"},
+			{"id": "beacon_mist", "name": "重雾签", "subtitle": "浓雾压灯", "desc": "妖物更强，魂火 ×1.35", "danger": 2, "soul_mul": 1.35, "color": "#7fe3ff"},
+			{"id": "beacon_crimson", "name": "血月签", "subtitle": "血月临村", "desc": "精英频出，魂火 ×1.75", "danger": 4, "soul_mul": 1.75, "color": "#ff6a5a"},
+			{"id": "beacon_abyss", "name": "幽冥签", "subtitle": "百鬼夜行", "desc": "极险幽冥，魂火 ×2.3", "danger": 7, "soul_mul": 2.3, "color": "#c08cff"},
+		]
+	var saved_id := String(save.get("beacon", default_id))
+	beacon_idx = 0
+	for i in range(beacons.size()):
+		if String(beacons[i].get("id", "")) == saved_id:
+			beacon_idx = i
+			break
+	save["beacon"] = _cur_beacon_id()
+
+
+func _cur_beacon_id() -> String:
+	if beacons.is_empty():
+		return "beacon_default"
+	return String(beacons[beacon_idx % beacons.size()].get("id", "beacon_default"))
+
+
+func _cycle_beacon() -> void:
+	if beacons.is_empty():
+		return
+	beacon_idx = (beacon_idx + 1) % beacons.size()
+	save["beacon"] = _cur_beacon_id()
+	SaveData.write_save(save)
+	Audio.play("click")
+	_refresh_beacon()
+
+
+func _refresh_beacon() -> void:
+	if beacons.is_empty() or beacon_btn == null:
+		return
+	var b: Dictionary = beacons[beacon_idx % beacons.size()]
+	var bname := String(b.get("name", "安夜签"))
+	var danger := int(b.get("danger", 0))
+	var smul := float(b.get("soul_mul", 1.0))
+	var col := Color(String(b.get("color", "#ffc977")))
+	var d_txt := "险度+%d" % danger if danger > 0 else "标准"
+	beacon_btn.text = "灯签：%s（%s • 魂×%s）" % [bname, d_txt, String.num(smul, 2)]
+	beacon_btn.add_theme_stylebox_override("normal", UI.box(Color(0.1, 0.12, 0.26, 0.95), col, 14, 3))
+	if beacon_desc != null:
+		var sub := String(b.get("subtitle", ""))
+		var desc := String(b.get("desc", ""))
+		beacon_desc.text = ("%s • %s" % [sub, desc]) if (sub != "" and desc != "") else (desc if desc != "" else sub)
+		beacon_desc.add_theme_color_override("font_color", col)
 
 
 func _snd_label() -> String:
