@@ -63,6 +63,16 @@ var swift := false
 var quake := false
 var ember := false
 var ember_t := 0.0
+# 异常体系（data/ailments.json）：层数与各自剩余时间；ail_mul 是“受到伤害倍率”的缓存，只在层数变化时重算（Mindustry StatusComp 的做法）
+var burn_n := 0
+var shock_n := 0
+var shock_t := 0.0
+var seal_n := 0
+var seal_t := 0.0
+var bind_t := 0.0
+var ail_mul := 1.0
+var ail_kinds := 0
+var collapse_cd := 0.0
 
 
 func copy() -> SimEnemy:

@@ -1,4 +1,17 @@
+# Dependencies
+node_modules
 node_modules/
+
+# Build & export outputs (regenerable via `tools/export_web.sh` / `npm run build`)
+build/
 dist/
-.src/
 dist-probe/
+
+# Godot editor & import cache (regenerable by Godot)
+godot/.godot/
+
+# Local tooling / agent metadata / OS files
+.src/
+.tapcanvas/
+.DS_Store
+

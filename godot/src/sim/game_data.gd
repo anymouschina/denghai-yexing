@@ -22,6 +22,7 @@ static var UPS: Dictionary = {}
 static var EVOS: Dictionary = {}
 static var RELIC_BY_ID: Dictionary = {}
 static var POOLS_REV: Array = []
+static var AIL: Dictionary
 
 
 static func _read(name: String) -> Variant:
@@ -47,6 +48,7 @@ static func load_all() -> void:
 	SETS = _read("sets")
 	GD = _read("gourds")
 	MB = _read("minibosses")
+	AIL = _read("ailments")
 	for st in SETS:
 		SET_BY_ID[st.id] = st
 	for gp in GD.pieces:

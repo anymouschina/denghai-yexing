@@ -110,6 +110,10 @@ var s_soul_mul := 1.0
 var s_coin_chance := 0.04
 var s_dmg_taken := 1.0
 var s_invuln_add := 0.0
+var ail_on := false            # 异常体系开关（完整/疾速开，经典口径关）
+var s_ail_res := 0.0           # 百邪：共鸣每种额外加成
+var s_ail_dur := 1.0           # 百邪：异常持续时间倍率
+var ail_log: Dictionary = {}   # 反应/崩解触发次数（平衡报告用）
 
 # ---- 实体 ----
 var enemies: Array = []
@@ -259,6 +263,7 @@ func _init(p_seed: int = 1, opts: Dictionary = {}) -> void:
 	emit = opts.get("emit", false)
 	touch = opts.get("touch", false)
 	mode = String(opts.get("mode", "classic"))
+	ail_on = (GameData.AIL.modes as Array).has(mode)
 	stretch = {"full": 1.5, "quick": 1.25}.get(mode, 1.0)
 	var m: Dictionary = opts.get("meta", {})
 	var saved: Dictionary = m
@@ -419,7 +424,9 @@ func _recalc() -> void:
 	s_fu_cd_mul = 1.0 - _per("jishu", "fuCd")
 	s_fu_speed_mul = 1.0 + _per("jishu", "fuSpeed")
 	s_fu_count = int(_per("zhongfu", "fuCount"))
-	s_burn_dps = GameData.BAL.burn.baseDps + _per("zhuohun", "burnDps")
+	s_burn_dps = (float(GameData.AIL.burn.baseDps) if ail_on else float(GameData.BAL.burn.baseDps)) + _per("zhuohun", "burnDps")
+	s_ail_res = _per("baixie", "ailRes")
+	s_ail_dur = 1.0 + _per("baixie", "ailDur")
 	s_ignite = _per("zhuohun", "igniteChance")
 	s_orb_r_mul = 1.0 + _per("tianyou", "orbRadius")
 	s_orb_spin_mul = 1.0 + _per("tianyou", "orbSpin")
@@ -445,7 +452,7 @@ func _sync_orbs() -> void:
 func _dmg_mul(e: SimEnemy, weapon: String) -> float:
 	var m := 1.0
 	var dg: Dictionary = GameData.DG
-	if weapon != "burn" and weapon != "blast":
+	if weapon != "burn" and weapon != "blast" and weapon != "ail":
 		m += s_dmg_add
 		var evo_key := weapon
 		if weapon == "mark":
@@ -631,6 +638,25 @@ func _near(x: float, y: float, r: float) -> Array:
 func nearest_enemy(x: float, y: float, rng_: float) -> SimEnemy:
 	var best: SimEnemy = null
 	var bd := rng_ * rng_
+	if rng_ <= 480.0 and mode != "classic":   # 经典口径保持原全表扫描（回归基线逐项一致）
+		# 短程查询走空间网格（不分配数组）：小金刚每发弹体每帧都要找最近目标，全表扫描是 弹数 × 妖物数
+		var x0 := int((x - rng_) / CELL)
+		var x1 := int((x + rng_) / CELL)
+		var y0 := int((y - rng_) / CELL)
+		var y1 := int((y + rng_) / CELL)
+		for cx in range(x0, x1 + 1):
+			for cy in range(y0, y1 + 1):
+				var arr: Variant = grid.get(cx * 4096 + cy)
+				if arr == null:
+					continue
+				for e: SimEnemy in arr:
+					if not e.alive:
+						continue
+					var d := (e.x - x) * (e.x - x) + (e.y - y) * (e.y - y)
+					if d < bd or (d == bd and best != null and e.uid < best.uid):
+						bd = d
+						best = e
+		return best
 	for e: SimEnemy in enemies:
 		if not e.alive:
 			continue
@@ -983,7 +1009,7 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 # ======================================================================
 # 伤害 / 击杀
 # ======================================================================
-func damage(e: SimEnemy, base: float, weapon: String, o: Dictionary = {}) -> void:
+func damage(e: SimEnemy, base: float, weapon: String, o: Dictionary = O_NONE) -> void:
 	if not e.alive:
 		return
 	var dmg := base * _dmg_mul(e, weapon)
@@ -998,6 +1024,7 @@ func damage(e: SimEnemy, base: float, weapon: String, o: Dictionary = {}) -> voi
 		dmg *= float(GameData.DG.warden.lunge.staggerTakenMul)
 	if e.armor > 0.0 and not o.has("pierce"):
 		dmg *= 1.0 - e.armor
+	dmg *= e.ail_mul
 	e.hp -= dmg
 	if phase == PH_RIFT and e.warden:
 		rift_dmg_dealt += dmg
@@ -1038,6 +1065,9 @@ func damage(e: SimEnemy, base: float, weapon: String, o: Dictionary = {}) -> voi
 
 func _ignite(e: SimEnemy) -> void:
 	if s_burn_dps <= 0.0:
+		return
+	if ail_on:
+		_ail_add(e, AIL_BURN, 1)
 		return
 	if e.burn_t <= 0.0:
 		e.burn_tick = GameData.BAL.burn.tick
@@ -1149,7 +1179,7 @@ func _update_weapons(dt: float) -> void:
 				if not e.alive:
 					continue
 				damage(e, st2.dmg, "huanhuo", {"kx": e.x - px, "ky": e.y - py, "kb": BAL.huanhuo.knock})
-				if e.alive and lv("zhuohun") > 0:
+				if e.alive and (ail_on or lv("zhuohun") > 0):
 					_ignite(e)
 			if evo_h and w_trail <= 0.0 and trails.size() < 80:
 				trails.append({"x": ox, "y": oy + 20.0, "life": GameData.EVOS.huanhuo.stats.trailLife, "tick": 0.0})
@@ -1173,7 +1203,7 @@ func _update_weapons(dt: float) -> void:
 				if not e.alive:
 					continue
 				damage(e, GameData.EVOS.huanhuo.stats.trailDmg, "huanhuo", {"noFlash": true, "noCrit": true})
-				if e.alive and lv("zhuohun") > 0:
+				if e.alive and (ail_on or lv("zhuohun") > 0):
 					_ignite(e)
 	# 掌心雷
 	if lv("lei") > 0:
@@ -1245,6 +1275,8 @@ func _update_bullets(dt: float) -> void:
 					e.mark_t = GameData.EVOS.fu.stats.markDelay
 					e.mark_dmg = b.dmg
 				damage(e, b.dmg, "fu", {"kx": b.vx, "ky": b.vy})
+				if ail_on and e.alive:
+					_ail_add(e, AIL_SEAL, 1)
 				if has_part("part_fu") and rng.randf() < 0.35:
 					_aoe(b.x, b.y, 80.0, b.dmg * 0.5, "mark")
 				b.pierce -= 1
@@ -1272,6 +1304,8 @@ func _detonate_mark(e: SimEnemy) -> void:
 			hits.append(o)
 	for o: SimEnemy in hits:
 		damage(o, dmg, "mark", {"noCrit": true, "kx": o.x - x, "ky": o.y - y, "kb": GameData.BAL.knockback * 0.6})
+		if ail_on and o.alive:
+			_ail_add(o, AIL_SEAL, 1)
 
 
 func _thunder(tgt: SimEnemy, dmg: float, chain: int, hit_set: Dictionary, evl: bool) -> void:
@@ -1285,6 +1319,8 @@ func _thunder(tgt: SimEnemy, dmg: float, chain: int, hit_set: Dictionary, evl: b
 		o1["forceCrit"] = true
 	var was_burn := tgt.burn_t > 0.0
 	damage(tgt, dmg, "lei", o1)
+	if ail_on and tgt.alive:
+		_ail_add(tgt, AIL_SHOCK, 2 if evl else 1)
 	if was_burn and has_set("thunder") and set_depth < 2:
 		set_depth += 1
 		_aoe(tgt.x, tgt.y - 40.0, 130.0, dmg * 0.5, "setsplash")
@@ -1313,6 +1349,8 @@ func _thunder(tgt: SimEnemy, dmg: float, chain: int, hit_set: Dictionary, evl: b
 		if evl:
 			o2["forceCrit"] = true
 		damage(nxt, d, "lei", o2)
+		if ail_on and nxt.alive:
+			_ail_add(nxt, AIL_SHOCK, 1)
 		from = nxt
 
 
@@ -1345,6 +1383,8 @@ func _update_sword(dt: float) -> void:
 			e.marks_t -= dt
 			if e.marks_t <= 0.0:
 				e.marks = 0
+				if ail_on:
+					_ail_refresh(e)
 	var want := in_skill
 	match sw_state:
 		SW_STOW:
@@ -1410,6 +1450,11 @@ func _sword_strike(e: SimEnemy, base: float, thrust: bool, key: String = "sword"
 	# 先叠剑痕再结算：本次伤害就吃到新层（+6%/层，5 层封顶）
 	e.marks = mini(int(sw.markMax), e.marks + 1)
 	e.marks_t = sw.markLife
+	if ail_on:
+		_ail_refresh(e)
+		_ail_collapse_check(e)
+		if not e.alive:
+			return
 	var o := {"pierce": true, "kx": e.x - px, "ky": e.y - py, "kb": 60.0}
 	if crit:
 		o["forceCrit"] = true
@@ -1455,6 +1500,8 @@ func _update_enemies(dt: float) -> void:
 	var tx := px
 	var ty := py - 20.0
 	var alive_list: Array = []
+	var decay := pow(0.0015, dt)
+	var touch_r: float = float(BAL.player.radius) + 6.0
 	var cur := enemies   # 循环里玩家可能在副本中倒下 → _return_world 把 enemies 换成大地图妖物；那时不能再用本帧的副本名单覆盖回去
 	for e: SimEnemy in cur:
 		if not e.alive:
@@ -1475,7 +1522,7 @@ func _update_enemies(dt: float) -> void:
 			e.burn_tick -= dt
 			if e.burn_tick <= 0.0:
 				e.burn_tick = BAL.burn.tick
-				damage(e, e.burn_dps * BAL.burn.tick, "burn", {"noFlash": true, "noCrit": true})
+				damage(e, e.burn_dps * BAL.burn.tick * maxi(1, e.burn_n), "burn", O_DOT)
 				if not e.alive:
 					continue
 		if e.mark_t > 0.0:
@@ -1484,6 +1531,8 @@ func _update_enemies(dt: float) -> void:
 				_detonate_mark(e)
 			if not e.alive:
 				continue
+		if e.ail_kinds > 0 or e.collapse_cd > 0.0:
+			_ail_tick(e, dt)
 		match e.ai:
 			"chase":
 				vx = ux * e.speed
@@ -1567,8 +1616,13 @@ func _update_enemies(dt: float) -> void:
 				vx = ux * e.speed * f
 				vy = uy * e.speed * f
 				e.lift = sin(real_t * 1.6) * 10.0
+		if e.seal_n > 0 or e.bind_t > 0.0:
+			var sf := maxf(0.3, 1.0 - float(e.seal_n) * float(GameData.AIL.seal.slowPer))
+			if e.bind_t > 0.0 and not e.boss and not e.warden:
+				sf = 0.0   # 符缚叠满：定身
+			vx *= sf
+			vy *= sf
 		# 击退衰减 + 同格分离
-		var decay := pow(0.0015, dt)
 		e.kvx *= decay
 		e.kvy *= decay
 		var sx := 0.0
@@ -1607,7 +1661,7 @@ func _update_enemies(dt: float) -> void:
 				e.y = clampf(e.y, MARGIN - 40.0, H - MARGIN + 40.0)
 		# 接触伤害
 		e.contact_cd -= dt
-		if not over and e.contact_cd <= 0.0 and dist < e.r + BAL.player.radius + 6.0:
+		if not over and e.contact_cd <= 0.0 and dist < e.r + touch_r:
 			hurt_player(e.dmg, e.x, e.y, ("warden" if e.warden else ("boss" if e.boss else e.type)) + ":contact")
 			e.contact_cd = 0.5
 		# 离太远的普通妖物回收
@@ -2132,6 +2186,14 @@ func _open_choice(kind: String) -> void:
 
 
 func _card_hint(u: Dictionary) -> String:
+	var ah := _ail_hint(u.id) if ail_on else ""
+	for ev in GameData.UP.evolutions:
+		if ev.weapon == u.id:
+			return ah + "\n满级 + %s 〉 进化「%s」" % [GameData.UPS[ev.needs].name, ev.name]
+		if ev.needs == u.id:
+			return ah + "\n配合满级%s 〉 进化「%s」" % [GameData.UPS[ev.weapon].name, ev.name]
+	if ah != "":
+		return ah
 	for ev in GameData.UP.evolutions:
 		if ev.weapon == u.id:
 			return "\n满级 + %s 〉 进化「%s」" % [GameData.UPS[ev.needs].name, ev.name]
@@ -2152,6 +2214,8 @@ func roll_choices(is_chest: bool) -> Array:
 				"lvText": "%s Lv%d + %s 〉 进化" % [GameData.UPS[ev.weapon].name, int(GameData.UPS[ev.weapon].max), GameData.UPS[ev.needs].name], "desc": Cards.fill(ev.desc, ev.stats) if emit else ""})
 	var cand: Array = []
 	for u in UPL:
+		if u.get("ail", false) and not ail_on:
+			continue   # 异常体系卡只在开启异常的模式出现
 		if lv(u.id) < int(u.max) and not (u.type == "weapon" and evo.has(u.id)):
 			cand.append(u)
 	var weights: Array = []
@@ -3215,6 +3279,9 @@ func _finish() -> void:
 	if sw_drops >= 0 and float(dmg_by.get("sword", 0.0)) > top_val:
 		top_val = float(dmg_by.get("sword", 0.0))
 		top_name = "飞剑术"
+	if float(dmg_by.get("ail", 0.0)) > top_val:
+		top_val = float(dmg_by.get("ail", 0.0))
+		top_name = "异常反应"
 	if float(dmg_by.get("pet", 0.0)) > top_val:
 		top_name = "葫芦小金刚"
 	_ev("result")
@@ -3503,6 +3570,8 @@ func _pet_chain_thunder(tgt: SimEnemy, dmg: float) -> void:
 		_ev("thunder", cur.x, cur.y)
 		_pet_add_fx(1, cur.x, cur.y - cur.h * 0.4, 0.34, 85.0)
 		damage(cur, d, "pet", {"kx": cur.x - pet_pos.x, "ky": cur.y - pet_pos.y, "kb": 80.0})
+		if ail_on and cur.alive:
+			_ail_add(cur, AIL_SHOCK, 1)
 		from_p = Vector2(cur.x, cur.y - cur.h * 0.45)
 		d *= 0.82
 		var nxt: SimEnemy = null
@@ -4101,6 +4170,9 @@ func _update_qi(dt: float) -> void:
 
 
 func _fusion_ignite(e: SimEnemy) -> void:
+	if ail_on:
+		_ail_add(e, AIL_BURN, 1, maxf(s_burn_dps, 10.0))
+		return
 	if e.burn_t <= 0.0:
 		e.burn_tick = GameData.BAL.burn.tick
 	e.burn_t = GameData.BAL.burn.time
@@ -4112,3 +4184,182 @@ func snapshot() -> Dictionary:
 		"phase": phase, "hp": int(round(hp)), "maxHp": int(maxhp), "level": level, "kills": kills, "t": snappedf(t, 0.1), "enemies": enemies.size(),
 		"wicks": wicks, "seg": seg, "rift": rift_entries, "artifact": artifact, "x": int(px), "y": int(py),
 	}
+
+
+# ======================================================================
+# 异常体系（data/ailments.json）
+# 四种异常：灼烧（灯火）/ 感电（雷法）/ 符缚（符咒）/ 剑痕（飞剑）。
+# 1) 各自叠层生效；2) 同一只妖物身上异常种类越多承伤越高（共鸣）；3) 反应表：新来的异常 × 已有的异常 → 处理器
+#    （Mindustry StatusEffect.affinity 的做法）；4) 合计层数过阈值引爆「百邪崩」（SPD ParalysisResist 式的阈值破）。
+# 承伤倍率 ail_mul 只在层数变化时重算并缓存在妖物上，伤害结算只乘一次——热路径没有逐命中的查表。
+# ======================================================================
+const AIL_BURN := 0
+const AIL_SHOCK := 1
+const AIL_SEAL := 2
+const O_NONE := {}
+const O_DOT := {"noFlash": true, "noCrit": true}
+const O_AIL := {"noFlash": true, "noCrit": true, "pierce": true}
+
+
+## 给妖物叠异常的唯一入口：先按反应表处理“新来的 × 已有的”，再叠层、重算倍率、检查百邪崩。
+func _ail_add(e: SimEnemy, kind: int, n: int, dps: float = -1.0) -> void:
+	if not e.alive:
+		return
+	var A: Dictionary = GameData.AIL
+	var R: Dictionary = A.reactions
+	match kind:
+		AIL_BURN:
+			var add := n
+			var fresh := e.burn_n <= 0
+			if fresh and e.seal_n >= int(R.fenfu.minSeal):
+				add += int(R.fenfu.addBurn)   # 焚符：符纸着火
+				_react(e, "fenfu")
+			if fresh:
+				e.burn_tick = float(GameData.BAL.burn.tick)
+				e.burn_dps = 0.0
+			e.burn_n = mini(int(A.burn.max), e.burn_n + add)
+			e.burn_t = float(A.burn.time) * s_ail_dur
+			e.burn_dps = maxf(e.burn_dps, dps if dps > 0.0 else s_burn_dps)
+		AIL_SHOCK:
+			if e.burn_n >= int(R.leihuo.minBurn):
+				_leihuo(e)
+				if not e.alive:
+					return
+			e.shock_n = mini(int(A.shock.max), e.shock_n + n)
+			e.shock_t = float(A.shock.time) * s_ail_dur
+		AIL_SEAL:
+			if e.bind_t > 0.0:
+				return
+			e.seal_n += n
+			e.seal_t = float(A.seal.time) * s_ail_dur
+			if e.seal_n >= int(A.seal.max):
+				e.seal_n = 0
+				var bt := float(A.seal.bindTime)
+				if e.shock_n >= int(R.zhenlei.minShock):
+					bt *= float(R.zhenlei.bindMul)   # 镇雷：定身翻倍
+					_react(e, "zhenlei")
+				if e.elite:
+					bt *= 0.5
+				e.bind_t = bt
+				_react(e, "bind")
+	_ail_refresh(e)
+	_ail_collapse_check(e)
+
+
+## 重算种类数与承伤倍率（只在层数变化时调用）
+func _ail_refresh(e: SimEnemy) -> void:
+	var A: Dictionary = GameData.AIL
+	var k := 0
+	if e.burn_n > 0:
+		k += 1
+	if e.shock_n > 0:
+		k += 1
+	if e.seal_n > 0 or e.bind_t > 0.0:
+		k += 1
+	if e.marks > 0:
+		k += 1
+	e.ail_kinds = k
+	var m := 1.0 + float(e.shock_n) * float(A.shock.per)
+	if e.bind_t > 0.0:
+		m += float(A.seal.bindTaken)
+	var res: Array = A.resonance
+	m += float(res[mini(k, res.size() - 1)])
+	if k >= 2:
+		m += s_ail_res * float(k - 1)
+	e.ail_mul = m
+
+
+## 每只身上有异常的妖物每帧一次：只做计时，到期才重算
+func _ail_tick(e: SimEnemy, dt: float) -> void:
+	var ch := false
+	if e.collapse_cd > 0.0:
+		e.collapse_cd -= dt
+	if e.shock_n > 0:
+		e.shock_t -= dt
+		if e.shock_t <= 0.0:
+			e.shock_n = 0
+			ch = true
+	if e.seal_n > 0:
+		e.seal_t -= dt
+		if e.seal_t <= 0.0:
+			e.seal_n = 0
+			ch = true
+	if e.bind_t > 0.0:
+		e.bind_t -= dt
+		if e.bind_t <= 0.0:
+			ch = true
+	if e.burn_n > 0 and e.burn_t <= 0.0:
+		e.burn_n = 0
+		ch = true
+	if ch:
+		_ail_refresh(e)
+
+
+func _ail_stacks(e: SimEnemy) -> int:
+	return e.burn_n + e.shock_n + e.seal_n + e.marks + (int(GameData.AIL.seal.max) if e.bind_t > 0.0 else 0)
+
+
+## 雷火爆：感电落到灼烧≥N层的妖物，把它身上剩余的全部灼烧伤害一次引爆；溅射只给最近的 splash 只（扇出有上限）。
+## 反应只让一次命中更痛，不制造成串的新命中——否则一轮天雷 30 击 × 每击波及十几只，单帧上千次结算就是后期卡顿的来源。
+func _leihuo(e: SimEnemy) -> void:
+	var R: Dictionary = GameData.AIL.reactions.leihuo
+	var left := e.burn_dps * float(e.burn_n) * maxf(0.0, e.burn_t)
+	e.burn_n = 0
+	e.burn_t = 0.0
+	_react(e, "leihuo")
+	var dmg := left * float(R.mul)
+	var r := float(R.radius)
+	var n_spl := int(R.splash)
+	var near_l: Array = []
+	if n_spl > 0:
+		for o: SimEnemy in _near(e.x, e.y, r):
+			if o != e and (o.x - e.x) * (o.x - e.x) + (o.y - e.y) * (o.y - e.y) < r * r:
+				near_l.append(o)
+				if near_l.size() >= n_spl:
+					break
+	damage(e, dmg, "ail", O_AIL)
+	for o: SimEnemy in near_l:
+		damage(o, dmg * float(R.splashMul), "ail", O_AIL)
+
+
+func _ail_collapse_check(e: SimEnemy) -> void:
+	var C: Dictionary = GameData.AIL.collapse
+	if not e.alive or e.ail_kinds < int(C.minKinds) or e.collapse_cd > 0.0:
+		return
+	if _ail_stacks(e) < int(C.minStacks):
+		return
+	var pct := float(C.hpPct)
+	if e.boss or e.warden:
+		pct = float(C.bossPct)
+	elif e.elite:
+		pct = float(C.elitePct)
+	e.collapse_cd = float(C.cd)
+	var keep := float(C.keep)
+	e.burn_n = int(e.burn_n * keep)
+	e.shock_n = int(e.shock_n * keep)
+	e.seal_n = int(e.seal_n * keep)
+	e.marks = int(e.marks * keep)
+	_ail_refresh(e)
+	_react(e, "collapse")
+	damage(e, e.maxhp * pct, "ail", O_AIL)
+
+
+func _react(e: SimEnemy, id: String) -> void:
+	ail_log[id] = int(ail_log.get(id, 0)) + 1
+	if emit:
+		_ev("react", id, e.x, e.y - e.h * 0.6)
+
+
+## 卡面提示：该武器命中叠哪种异常（数值全部来自 ailments.json）
+func _ail_hint(id: String) -> String:
+	var A: Dictionary = GameData.AIL
+	match id:
+		"fu":
+			return "\n命中叠「符缚」：每层减速 %d%%，叠满 %d 层定身 %s 秒、承伤 +%d%%" % [int(round(float(A.seal.slowPer) * 100.0)), int(A.seal.max), Cards.num(float(A.seal.bindTime)), int(round(float(A.seal.bindTaken) * 100.0))]
+		"lei":
+			return "\n命中叠「感电」：每层承伤 +%d%%（最多 %d 层）；落在灼烧≥%d层的妖物上引发「雷火爆」" % [int(round(float(A.shock.per) * 100.0)), int(A.shock.max), int(A.reactions.leihuo.minBurn)]
+		"huanhuo":
+			return "\n命中叠「灼烧」：每层每秒 %s 伤害（最多 %d 层）" % [Cards.num(s_burn_dps), int(A.burn.max)]
+		"zhuohun":
+			return "\n灼烧可叠 %d 层；点燃符缚的妖物触发「焚符」直接 +%d 层" % [int(A.burn.max), int(A.reactions.fenfu.addBurn)]
+	return ""

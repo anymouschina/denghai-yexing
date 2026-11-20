@@ -29,7 +29,7 @@ var stay_t := 0.0
 var visited_until: Dictionary = {}
 
 const PRIORITY := {
-	"fu": 62.0, "huanhuo": 58.0, "lei": 60.0, "taomu": 52.0, "zhongfu": 48.0, "jishu": 47.0, "zhuohun": 46.0, "tianyou": 45.0,
+	"fu": 62.0, "huanhuo": 58.0, "lei": 60.0, "taomu": 52.0, "baixie": 44.0, "zhongfu": 48.0, "jishu": 47.0, "zhuohun": 46.0, "tianyou": 45.0,
 	"tiangang": 46.0, "leiyin": 44.0, "yupei": 42.0, "caolv": 34.0, "hundai": 28.0, "jingxin": 30.0, "tongqian": 20.0,
 }
 const RELIC_ORDER := ["talisman", "mirror", "coin", "shade", "bell", "horse"]

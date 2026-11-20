@@ -8,6 +8,7 @@ var touch_forced := false
 var bench := 0   # ?bench=N：压测模式（仅试玩桥开启时），把同屏妖物维持在 N 只，满级构筑，玩家不死
 var hide := ""   # ?hide=hud,bg,ground,fx,night,world：压测二分用，隐藏对应图层看绘制调用变化
 var _last := ""
+var autobot := false   # ?bot=1：真人代理机器人（tests 里同一个 Bot）代打整局——后期性能压测用真实对局而不是合成场景
 var autopick_after := 0   # 试玩模式：第 N 次升级之后的三选一自动选第 1 张（保证剧本里走位不被弹窗打断；第 1 次由剧本真实操作）
 
 
@@ -24,6 +25,7 @@ func _ready() -> void:
 	if enabled and bn != "":
 		bench = clampi(int(bn), 0, 2000)
 	if enabled:
+		autobot = q.contains("bot=1")
 		hide = str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('hide') || ''", true))
 	var ts := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('ts') || ''", true))
 	if enabled and ts != "":
@@ -43,3 +45,18 @@ func publish(state: Dictionary) -> void:
 	if json != _last:
 		_last = json
 		JavaScriptBridge.eval("globalThis.__tc_state = %s;" % json, true)
+
+
+var _poll := 0
+
+
+## ?bot=1 压测：外部脚本可写 globalThis.__tc_ts 改倍速（先快进到后期，再按 1× 采样）
+func _process(_d: float) -> void:
+	if not autobot:
+		return
+	_poll += 1
+	if _poll % 30 != 0:
+		return
+	var v := str(JavaScriptBridge.eval("String(globalThis.__tc_ts || '')", true))
+	if v != "":
+		time_scale = clampf(float(v), 0.5, 12.0)

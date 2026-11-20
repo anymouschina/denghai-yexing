@@ -34,6 +34,9 @@ var items: Array = []
 var font: Font
 var banner_cb: Callable
 var drop_ring := 0.0
+var _fl_by_uid: Dictionary = {}   # 伤害数字合并：同一只妖物 0.45 秒内的命中累加进同一个数字（Veloren sct_dmg_accum_duration 的做法）
+var _react_t: Dictionary = {}     # 反应字样限流：同名反应 0.3 秒内只出一次字
+const FL_MERGE := 0.45
 
 const SHEETS := {
 	"jiangshi_hop": {"tex": "res://assets/anim/jiangshi_hop.png", "w": 119, "h": 200, "n": 8},
@@ -204,26 +207,75 @@ func _push_fx_sprite(d: Dictionary) -> void:
 	fx_sprites.append(d)
 
 
-func _float(x: float, y: float, text: String, col: Color, size: int = 22) -> void:
+func _float(x: float, y: float, text: String, col: Color, size: int = 22) -> Dictionary:
 	if floaters.size() > 44:
 		floaters.pop_front()
-	floaters.append({"x": x, "y": y, "text": text, "col": col, "size": size, "life": 0.85})
+	var f := {"x": x, "y": y, "text": text, "col": col, "size": size, "life": 0.85, "t0": t_anim, "amt": 0.0}
+	floaters.append(f)
+	return f
+
+
+## 一次命中的表现。同一只妖物 0.45 秒内的后续命中只把数字累加进已有的飘字，不再新建飘字/粒子——
+## 后期每帧 40+ 次命中时，表现开销按“正在挨打的妖物数”而不是“命中次数”增长。
+func _on_dmg(e: SimEnemy, d: float, crit: bool, synergy: bool) -> void:
+	var f: Variant = _fl_by_uid.get(e.uid)
+	if f != null and float(f.life) > 0.0 and t_anim - float(f.t0) < FL_MERGE:
+		f.amt = float(f.amt) + d
+		f.crit = bool(f.get("crit", false)) or crit
+		f.text = ("%d!" % int(f.amt)) if f.crit else str(int(f.amt))
+		if crit:
+			f.col = Color("ffc977")
+			f.size = 32
+		return
+	var col := Color("ffc977") if crit else (Color("c9a6ff") if synergy else Color.WHITE)
+	if not crit and e.ail_kinds >= 2:
+		col = Color("e6c8ff")   # 异常共鸣中：数字带紫
+	var nf := _float(e.x + (randf() - 0.5) * 20.0, e.y - e.h * 0.75, ("%d!" % int(d)) if crit else str(int(d)), col, 32 if crit else 22)
+	nf.amt = d
+	nf.crit = crit
+	_fl_by_uid[e.uid] = nf
+	if _fl_by_uid.size() > 96:
+		_fl_by_uid.clear()
+	if crit:
+		Audio.play("crit")
+		hit_stop = maxf(hit_stop, 0.04)
+	else:
+		Audio.play("hit", 0.7)
+	burst(e.x, e.y - e.h * 0.5, 2, Color("ffe9a8"), 160.0, 0.25, 0.3)
+
+
+const REACT_FX := {
+	"leihuo": ["雷火爆", "ffd36a", 110.0],
+	"fenfu": ["焚符", "ff7a3c", 70.0],
+	"zhenlei": ["镇雷", "bfeaff", 80.0],
+	"bind": ["定身", "f2c14b", 54.0],
+	"collapse": ["百邪崩", "d9b8ff", 120.0],
+}
+
+
+func _on_react(id: String, x: float, y: float) -> void:
+	var fx: Array = REACT_FX.get(id, [])
+	if fx.is_empty():
+		return
+	var col := Color(String(fx[1]))
+	ring(x, y, float(fx[2]), col)
+	if t_anim - float(_react_t.get(id, -9.0)) < 0.3:
+		return
+	_react_t[id] = t_anim
+	_float(x, y - 24.0, String(fx[0]), col, 26)
+	if id == "leihuo" or id == "collapse":
+		burst(x, y, 12, col, 300.0, 0.45, 0.5)
+		Audio.play("boom", 0.7)
+		_shake(120, 0.003)
 
 
 func _consume_events() -> void:
 	for ev in sim.events:
 		match ev[0]:
 			"dmg":
-				var e: SimEnemy = ev[1]
-				var d: float = ev[2]
-				var crit: bool = ev[3]
-				_float(e.x + (randf() - 0.5) * 20.0, e.y - e.h * 0.75, ("%d!" % int(d)) if crit else str(int(d)), Color("ffc977") if crit else (Color("c9a6ff") if ev[4] else Color.WHITE), 32 if crit else 22)
-				if crit:
-					Audio.play("crit")
-					hit_stop = maxf(hit_stop, 0.04)
-				else:
-					Audio.play("hit", 0.7)
-				burst(e.x, e.y - e.h * 0.5, 2, Color("ffe9a8"), 160.0, 0.25, 0.3)
+				_on_dmg(ev[1], ev[2], ev[3], ev[4])
+			"react":
+				_on_react(String(ev[1]), float(ev[2]), float(ev[3]))
 			"kill":
 				var e2: SimEnemy = ev[1]
 				var big := e2.boss or e2.elite
@@ -585,10 +637,11 @@ func _draw() -> void:
 	b_enemy_front.flush(ci, T.enemy_atlas)
 	_marks_lines.resize(0)
 	for e2: SimEnemy in _vis_enemies:
-		if e2.mark_t > 0.0 or e2.marks > 0 or e2.elite or e2.boss:
+		if e2.mark_t > 0.0 or e2.marks > 0 or e2.elite or e2.boss or e2.ail_kinds > 0:
 			_draw_enemy_overlays(e2)
 	if _marks_lines.size() > 0:
 		draw_multiline(_marks_lines, Color(0.5, 0.92, 1.0), 3.0, false)
+	b_pips.flush(ci, T.white)
 	var t_p := Time.get_ticks_usec()
 	_draw_projectiles()
 	PerfStat.add("d_proj", t_p)
@@ -720,6 +773,8 @@ func _batch_enemy(e: SimEnemy, b: TriBatch) -> void:
 			col = Color(1.0, 0.3, 0.3) if int(e.timer * 14.0) % 2 == 0 else Color(1.0, 0.85, 0.85)
 	if e.warn_t > 0.0:
 		col = Color(1.0, 0.45, 0.45)
+	elif e.ail_kinds > 0 and st != "fuse" and st != "charge":
+		col = _ail_tint(e)
 	elif e.burn_t > 0.0 and st != "fuse" and st != "charge":
 		col = Color(1.0, 0.78, 0.6)
 	var ax: float = info[6]
@@ -729,6 +784,8 @@ func _batch_enemy(e: SimEnemy, b: TriBatch) -> void:
 	b.sprite(px, py, w, h, flip, info[5], col)
 	if e.flash > 0.0:
 		b_flash.sprite(px, py, w, h, flip, info[5], Color(1, 1, 1, 0.8))
+	if e.ail_kinds >= 2:
+		_ail_pips(e, e.x, py - 6.0)
 
 
 func _draw_enemy(e: SimEnemy) -> void:
@@ -746,7 +803,9 @@ func _draw_enemy(e: SimEnemy) -> void:
 	var h := hh * sy
 	var flip: bool = e.flip
 	var col := Color.WHITE
-	if e.burn_t > 0.0:
+	if e.ail_kinds > 0:
+		col = _ail_tint(e)
+	elif e.burn_t > 0.0:
 		col = Color(1.0, 0.78, 0.6)
 	if e.state == "charge" or e.warn_t > 0.0:
 		col = Color(1.0, 0.45, 0.45)
@@ -793,6 +852,8 @@ func _draw_enemy_overlays(e: SimEnemy) -> void:
 			_marks_lines.append(Vector2(px + 4, py - 7))
 	if e.elite or e.boss:
 		_draw_bar(e)
+	if e.ail_kinds > 0:
+		_ail_pips(e, e.x, e.y - e.h - (34.0 if not e.boss else 70.0) - e.lift)
 
 
 func _draw_warden_fx(e: SimEnemy) -> void:
@@ -1200,3 +1261,33 @@ func _draw_white(c: Node2D) -> void:
 		else:
 			c.draw_texture_rect(f[0], f[1], false, Color(1, 1, 1, 0.8))
 	flash_list.clear()
+
+
+# ----------------------------------------------------------------------
+# 异常显示：身上颜色取最“醒目”的一种（定身 > 感电 > 灼烧 > 符缚）；2 种以上在头顶画小色点（种类数 = 点数，共鸣一眼可见）
+# ----------------------------------------------------------------------
+const AIL_COL := [Color(1.0, 0.6, 0.24), Color(0.5, 0.84, 1.0), Color(0.95, 0.76, 0.3), Color(0.62, 0.91, 1.0)]
+var b_pips := TriBatch.new()
+
+
+func _ail_tint(e: SimEnemy) -> Color:
+	if e.bind_t > 0.0:
+		return Color(1.0, 0.92, 0.55)
+	if e.shock_n > 0:
+		return Color(0.72, 0.9, 1.0)
+	if e.burn_n > 0:
+		return Color(1.0, 0.74, 0.55)
+	if e.seal_n > 0:
+		return Color(1.0, 0.95, 0.75)
+	return Color.WHITE
+
+
+func _ail_pips(e: SimEnemy, x: float, y: float) -> void:
+	var on := [e.burn_n > 0, e.shock_n > 0, e.seal_n > 0 or e.bind_t > 0.0, e.marks > 0]
+	var n := e.ail_kinds
+	var x0 := x - (n - 1) * 5.0
+	var i := 0
+	for k in range(4):
+		if on[k]:
+			b_pips.full(x0 + i * 10.0 - 3.5, y - 3.5, 7.0, 7.0, AIL_COL[k])
+			i += 1

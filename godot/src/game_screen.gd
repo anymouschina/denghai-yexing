@@ -16,6 +16,7 @@ var night: CanvasLayer
 var embers: Array = []
 var ember_layer: Node2D
 var hit_stop := 0.0
+var bot: Bot = null
 
 
 var last_cp := 0
@@ -127,7 +128,11 @@ func _toast(msg: String) -> void:
 func _process(delta: float) -> void:
 	if sim == null:
 		return
-	if Playtest.enabled and Playtest.bench == 0 and not sim.choice.is_empty() and ((sim.choice.kind == "level" and sim.level > 2) or sim.choice.kind in ["chest", "swb", "fusion", "gift"]):
+	if bot == null and Playtest.autobot:
+		bot = Bot.new(Bot.Kind.PROXY, sim.seed_v, [0, 1])
+	if bot != null and not paused and (not sim.choice.is_empty() or sim.shop_open):
+		bot.act(sim, 0.0)   # 三选一 / 商店：机器人做选择；战斗中的操作在下面每个子步里做（与 tests 的驱动方式一致）
+	elif Playtest.enabled and Playtest.bench == 0 and not sim.choice.is_empty() and ((sim.choice.kind == "level" and sim.level > 2) or sim.choice.kind in ["chest", "swb", "fusion", "gift"]):
 		on_choose(0)
 	PerfStat.frame_done()
 	if toast != null and toast_t > 0.0:
@@ -167,7 +172,8 @@ func _process(delta: float) -> void:
 			mv = touch.move
 		else:
 			mv = Input.get_vector("move_left", "move_right", "move_up", "move_down")
-		sim.in_move = mv
+		if bot == null:
+			sim.in_move = mv
 		if Input.is_action_just_pressed("dash") or (touch_mode and touch.consume_dash()):
 			sim.in_dash = true
 		if Input.is_action_just_pressed("skill") or (touch_mode and touch.consume_skill()):
@@ -189,7 +195,10 @@ func _process(delta: float) -> void:
 		var t_sim := Time.get_ticks_usec()
 		for i in range(steps):
 			if dt > 0.0:
-				sim.step(dt * (ts / steps) if ts > 1.0 else dt)
+				var sub := dt * (ts / steps) if ts > 1.0 else dt
+				if bot != null:
+					bot.act(sim, sub)
+				sim.step(sub)
 		PerfStat.add("sim_step", t_sim)
 		if sim.phase == Sim.PH_BOSS and Audio.music_cur != "boss":
 			Audio.music("boss")
@@ -320,7 +329,7 @@ func _publish() -> void:
 			if bx * bx + by * by < 300.0 * 300.0:
 				bl.append([int(bx), int(by)])
 		snap["bul"] = bl.slice(0, 8)
-	if Playtest.bench > 0:
+	if Playtest.bench > 0 or Playtest.autobot:
 		var pm := {}
 		pm["draw_calls"] = int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
 		pm["objects"] = int(Performance.get_monitor(Performance.OBJECT_COUNT))
@@ -335,6 +344,8 @@ func _publish() -> void:
 		snap["bench_bul"] = sim.bullets.size()
 		snap["bench_ebul"] = sim.ebullets.size()
 		snap["bench_pk"] = sim.pickups.size()
+		snap["phase"] = sim.phase
+		snap["lv"] = sim.level
 	Playtest.publish(snap)
 
 

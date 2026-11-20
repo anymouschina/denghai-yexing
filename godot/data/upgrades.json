@@ -413,6 +413,32 @@
       "note": "灼烧与符印爆炸不受加成"
     },
     {
+      "id": "baixie",
+      "type": "passive",
+      "school": "gen",
+      "name": "百邪",
+      "icon": "baixie",
+      "max": 5,
+      "ail": true,
+      "per": {
+        "ailRes": 0.05,
+        "ailDur": 0.12
+      },
+      "lines": [
+        [
+          "ailRes",
+          "异常共鸣 每多一种 +{v}",
+          "pct"
+        ],
+        [
+          "ailDur",
+          "异常持续时间 +{v}",
+          "pct"
+        ]
+      ],
+      "note": "同一只妖物身上 2/3/4 种异常：承伤 +15%/+32%/+55%；3 种以上且层数攒满引爆「百邪崩」"
+    },
+    {
       "id": "jingxin",
       "type": "passive",
       "school": "gen",

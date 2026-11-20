@@ -704,6 +704,12 @@ func show_pause(on: bool) -> void:
 	if sim.gourds.size() < 7:
 		var gl := sim.gourd_guarantee_left()
 		guide.append("葫芦获取：葫芦灵藤 • 小BOSS/守关BOSS必掉 • 葫芦藤秘境第 %d 劫（门票 %d 铜钱）• 游商直购（%d 铜钱）• 牌坊许愿%s" % [sim.vine_runs + 1, sim.vine_ticket(), sim.gourd_price(), (" • 保底 %s 后" % UI.fmt_time(gl)) if gl >= 0.0 else ""])
+	if sim.ail_on:
+		var A: Dictionary = GameData.AIL
+		var res: Array = A.resonance
+		guide.append("异常：符咒叠「符缚」（叠满定身）• 雷法叠「感电」（每层承伤 +%d%%）• 灯火叠「灼烧」• 飞剑叠「剑痕」；同一只妖物 2/3/4 种异常承伤 +%d%%/+%d%%/+%d%%（百邪每级再 +%d%%/种）" % [int(round(float(A.shock.per) * 100.0)), int(round(float(res[2]) * 100.0)), int(round(float(res[3]) * 100.0)), int(round(float(res[4]) * 100.0)), int(round(float(GameData.UPS.baixie.per.ailRes) * 100.0))])
+		var lg: Dictionary = sim.ail_log
+		guide.append("反应：雷火爆（感电引爆灼烧）%d • 焚符（点燃符缚 +%d 层灼烧）%d • 镇雷（感电中定身翻倍）%d • 百邪崩（≥3 种且层数攒满）%d" % [int(lg.get("leihuo", 0)), int(A.reactions.fenfu.addBurn), int(lg.get("fenfu", 0)), int(lg.get("zhenlei", 0)), int(lg.get("collapse", 0))])
 	guide.append("地标：古井祭坛（献祭换遗物）• 破败牌坊（许愿）• 灯冢废墟（掘冢得宝箱）• 荒庙香炉（上香回血）")
 	if sim.mode != "classic":
 		var fcd := int(GameData.DG.farms.coinfarm.cd)
