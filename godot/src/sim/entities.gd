@@ -2,6 +2,22 @@ class_name SimEnemy
 extends RefCounted
 ## 妖物实体（纯数据，渲染层按需读取）
 
+const AI_CHASE := 0
+const AI_HOP := 1
+const AI_RANGED := 2
+const AI_BOMBER := 3
+const AI_SWORDWARDEN := 4
+const AI_SWORDLORD := 5
+const AI_SEDAN := 6
+const AI_LAMPS := 7
+const AI_BOSS := 8
+
+const ST_MOVE := 0
+const ST_CHARGE := 1
+const ST_FUSE := 2
+const ST_LUNGE := 3
+const ST_AIM := 4
+
 var uid := 0
 var type := ""
 var def: Dictionary
@@ -21,10 +37,19 @@ var xpv := 1
 var r := 18.0
 var h := 66.0
 var armor := 0.0
+var knock := 1.0
+var hop_period := 1.0
+var keep_dist := 0.0
+var trigger_dist := 0.0
+var fuse_dur := 0.0
+var blast_r := 0.0
 var kvx := 0.0
 var kvy := 0.0
 var ai := "chase"
+var ai_id := AI_CHASE
 var state := "move"
+var state_id := ST_MOVE
+var grid_idx := 0
 var timer := 0.0
 var hop := 0.0
 var shoot_t := 0.0
@@ -74,6 +99,39 @@ var bind_t := 0.0
 var ail_mul := 1.0
 var ail_kinds := 0
 var collapse_cd := 0.0
+
+
+static func ai_to_id(s: String) -> int:
+	match s:
+		"chase":
+			return AI_CHASE
+		"hop":
+			return AI_HOP
+		"ranged":
+			return AI_RANGED
+		"bomber":
+			return AI_BOMBER
+		"swordwarden":
+			return AI_SWORDWARDEN
+		"swordlord":
+			return AI_SWORDLORD
+		"sedan":
+			return AI_SEDAN
+		"lamps":
+			return AI_LAMPS
+		"boss":
+			return AI_BOSS
+	return AI_CHASE
+
+
+func set_ai(s: String) -> void:
+	ai = s
+	ai_id = ai_to_id(s)
+
+
+func set_state(s: String, sid: int) -> void:
+	state = s
+	state_id = sid
 
 
 func copy() -> SimEnemy:

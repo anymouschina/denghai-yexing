@@ -7,7 +7,8 @@ const BUCKET_SEC := 0.5
 const WINDOW_SEC := BUCKETS * BUCKET_SEC
 
 var _totals: Dictionary = {}
-var _rings: Dictionary = {}      # key -> PackedFloat32Array(BUCKETS)
+var _cur_bucket: Dictionary = {} # key -> float（当前 0.5s 桶累加，零 CoW 分配）
+var _rings: Dictionary = {}      # key -> Array[float](BUCKETS)（引用语义，永不触发 CoW 复制）
 var _cur_idx := 0
 var _acc_t := 0.0
 var breakdown: Dictionary = {}   # key -> {"total": float, "dps": float, "name": String}
@@ -15,6 +16,7 @@ var breakdown: Dictionary = {}   # key -> {"total": float, "dps": float, "name":
 
 func clear() -> void:
 	_totals.clear()
+	_cur_bucket.clear()
 	_rings.clear()
 	breakdown.clear()
 	_cur_idx = 0
@@ -25,42 +27,51 @@ func record(key: String, dmg: float) -> void:
 	if dmg <= 0.0:
 		return
 	_totals[key] = float(_totals.get(key, 0.0)) + dmg
-	var ring: Variant = _rings.get(key)
-	if ring == null:
-		var arr := PackedFloat32Array()
-		arr.resize(BUCKETS)
-		arr[_cur_idx] = dmg
-		_rings[key] = arr
-	else:
-		var a: PackedFloat32Array = ring
-		a[_cur_idx] += dmg
-		_rings[key] = a
+	_cur_bucket[key] = float(_cur_bucket.get(key, 0.0)) + dmg
+
+
+func _flush_cur_bucket() -> void:
+	if _cur_bucket.is_empty():
+		return
+	for k in _cur_bucket:
+		var dmg := float(_cur_bucket[k])
+		var ring: Variant = _rings.get(k)
+		if ring == null:
+			var arr: Array = []
+			arr.resize(BUCKETS)
+			arr.fill(0.0)
+			arr[_cur_idx] = dmg
+			_rings[k] = arr
+		else:
+			var a: Array = ring
+			a[_cur_idx] = float(a[_cur_idx]) + dmg
+	_cur_bucket.clear()
 
 
 func tick(dt: float, evo: Dictionary) -> void:
 	_acc_t += dt
 	if _acc_t < BUCKET_SEC:
 		return
+	_flush_cur_bucket()
 	var steps := mini(BUCKETS, int(_acc_t / BUCKET_SEC))
 	_acc_t -= float(steps) * BUCKET_SEC
 	for _s in range(steps):
 		_cur_idx = (_cur_idx + 1) % BUCKETS
 		for k in _rings:
-			var a: PackedFloat32Array = _rings[k]
+			var a: Array = _rings[k]
 			a[_cur_idx] = 0.0
-			_rings[k] = a
 	refresh(evo)
 
 
 func refresh(evo: Dictionary) -> void:
 	for k in _totals:
 		var tot := float(_totals[k])
-		var sum5 := 0.0
+		var sum5 := float(_cur_bucket.get(k, 0.0))
 		var ring: Variant = _rings.get(k)
 		if ring != null:
-			var a: PackedFloat32Array = ring
+			var a: Array = ring
 			for i in range(BUCKETS):
-				sum5 += a[i]
+				sum5 += float(a[i])
 		var entry: Variant = breakdown.get(k)
 		var nm := _label_for(k, evo)
 		if entry is Dictionary:

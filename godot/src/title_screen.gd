@@ -100,6 +100,8 @@ func _build_left() -> void:
 		bm.text = _mode_label())
 	col.add_child(bm)
 	beacon_btn = UI.button("", Vector2(320, 48), false, 21)
+	beacon_btn.add_theme_constant_override("icon_max_width", 32)
+	beacon_btn.add_theme_constant_override("h_separation", 8)
 	beacon_btn.pressed.connect(_cycle_beacon)
 	col.add_child(beacon_btn)
 	beacon_desc = UI.label("", 16, UI.GOLD, 4)
@@ -133,7 +135,7 @@ func _build_left() -> void:
 	else:
 		col.add_child(UI.label("WASD 移动 • 空格 冲刺 • Q / 右键 挑灯爆焰 • Esc 暂停 • M 静音", 17, Color("c9cdf0"), 4))
 		col.add_child(UI.label("攻击全自动 • 1 / 2 / 3 选卡 • E / J 飞剑 • R 小金刚合击", 17, Color("c9cdf0"), 4))
-	col.add_child(UI.label("v2.2 • 引魂灯签 • 双阴律 • 五派羁绊 • 百万血终局 BOSS", 15, Color("8d93c4"), 3))
+	col.add_child(UI.label("v2.3 • 引魂灯签 • 双阴律 • 五派羁绊 • 百万血终局 BOSS", 15, Color("8d93c4"), 3))
 
 
 func _logo(text: String, size: int, color: Color) -> Label:
@@ -226,11 +228,16 @@ func _refresh_beacon() -> void:
 	if beacons.is_empty() or beacon_btn == null:
 		return
 	var b: Dictionary = beacons[beacon_idx % beacons.size()]
+	var bid := String(b.get("id", "beacon_default"))
 	var bname := String(b.get("name", "安夜签"))
 	var danger := int(b.get("danger", 0))
 	var smul := float(b.get("soul_mul", 1.0))
 	var col := Color(String(b.get("color", "#ffc977")))
 	var d_txt := "险度+%d" % danger if danger > 0 else "标准"
+	var ic := UI.icon(bid, 32.0)
+	beacon_btn.icon = ic.texture
+	beacon_btn.expand_icon = ic.texture != null
+	ic.free()
 	beacon_btn.text = "灯签：%s（%s • 魂×%s）" % [bname, d_txt, String.num(smul, 2)]
 	beacon_btn.add_theme_stylebox_override("normal", UI.box(Color(0.1, 0.12, 0.26, 0.95), col, 14, 3))
 	if beacon_desc != null:

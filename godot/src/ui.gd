@@ -42,9 +42,40 @@ static func snap_size(size: int) -> int:
 	return 26
 
 
+## 控件文字字号收敛（与画布共享 16/20/26，另保留 34/48 标题档与超大 Logo 原字号），防止动态 512x512 字形图集分页爆炸
+static func snap_ui_size(size: int) -> int:
+	if size <= 17:
+		return 16
+	if size <= 22:
+		return 20
+	if size <= 30:
+		return 26
+	if size <= 40:
+		return 34
+	if size <= 56:
+		return 48
+	return size
+
+
+## 描边宽度收敛为 2 档（4/8，超大 Logo 保留原值），减少 (font_size, outline_size) 图集缓存组合数
+static func snap_outline(outline: int) -> int:
+	if outline <= 0:
+		return 0
+	if outline <= 6:
+		return 4
+	if outline <= 10:
+		return 8
+	return outline
+
+
 static func font() -> Font:
 	if _font == null:
-		_font = load("res://fonts/MaShanZheng-subset.ttf")
+		var primary: FontFile = load("res://fonts/MaShanZheng-subset.ttf")
+		if primary != null and ResourceLoader.exists("res://fonts/Fallback-subset.ttf"):
+			var fb: Font = load("res://fonts/Fallback-subset.ttf")
+			if fb != null:
+				primary.fallbacks = [fb]
+		_font = primary
 	return _font
 
 
@@ -52,7 +83,7 @@ static func theme() -> Theme:
 	if _theme == null:
 		_theme = Theme.new()
 		_theme.default_font = font()
-		_theme.default_font_size = 22
+		_theme.default_font_size = 20
 	return _theme
 
 
@@ -71,25 +102,26 @@ static func box(bg: Color, border: Color, radius: int = 12, bw: int = 3) -> Styl
 	return s
 
 
-static func label(text: String, size: int = 22, color: Color = PAPER, outline: int = 5) -> Label:
+static func label(text: String, size: int = 20, color: Color = PAPER, outline: int = 4) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_override("font", font())
-	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_font_size_override("font_size", snap_ui_size(size))
 	l.add_theme_color_override("font_color", color)
-	if outline > 0:
+	var snapped_outline := snap_outline(outline)
+	if snapped_outline > 0:
 		l.add_theme_color_override("font_outline_color", INK)
-		l.add_theme_constant_override("outline_size", outline)
+		l.add_theme_constant_override("outline_size", snapped_outline)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
 
 
-static func button(text: String, size: Vector2, primary: bool = false, font_size: int = 28) -> Button:
+static func button(text: String, size: Vector2, primary: bool = false, font_size: int = 26) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = size
 	b.add_theme_font_override("font", font())
-	b.add_theme_font_size_override("font_size", font_size)
+	b.add_theme_font_size_override("font_size", snap_ui_size(font_size))
 	b.add_theme_color_override("font_color", INK if primary else PAPER)
 	b.add_theme_color_override("font_hover_color", INK if primary else Color.WHITE)
 	b.add_theme_color_override("font_pressed_color", INK if primary else GOLD)
