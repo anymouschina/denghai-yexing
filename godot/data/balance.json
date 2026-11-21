@@ -48,7 +48,7 @@
  "debuffs": {
   "slowMul": 0.65,
   "slowMaxDur": 4.0,
-  "woundMaxDur": 6.0
+  "woundMaxDur": 6.5
  },
  "fu": {
   "range": 430,
@@ -123,7 +123,7 @@
  "lantern": {
   "start": 80.0,
   "max": 100.0,
-  "drainPerSec": 2.2,
+  "drainPerSec": 2.4,
   "killGain": 1.0,
   "oilPickupGain": 24.0,
   "lampRefillPerSec": 9.0,

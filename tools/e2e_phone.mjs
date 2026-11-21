@@ -117,6 +117,7 @@ while (Date.now() < deadline) {
     await tap(0.29, 0.5, '选第 1 张卡'); await sleep(700); continue;
   }
   if (sc2 === 'gift') { await stickMove(null); await sleep(300); if (!seen.gift) { await shot('gift-choice'); seen.gift = true; } await tap(0.29, 0.5, '选馈赠'); await sleep(700); continue; }
+  if (sc2 === 'shop') { await stickMove(null); await sleep(200); await escKey(); await sleep(400); continue; }
   if (sc2 === 'result') {
     await stickMove(null); await sleep(800); await shot('result-death'); seen.result = true; break;
   }

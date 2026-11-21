@@ -3,90 +3,151 @@
  "intervalMulPerMin": 0.72,
  "minInterval": 0.12,
  "batchPerMin": 3.0,
- "hpMulPerMin": 1.52,
+ "hpMulPerMin": 1.6,
  "maxEnemies": 320,
  "spawnDist": 790,
  "pools": [
   {
    "from": 0,
    "weights": {
-    "paperman": 6,
-    "foxfire": 2
+    "paperman": 5.5,
+    "foxfire": 2.2
    }
   },
   {
    "from": 30,
    "weights": {
-    "paperman": 5,
-    "foxfire": 2.5,
+    "paperman": 4.5,
+    "foxfire": 2.2,
     "wraith_blink": 1.4,
-    "frost_bride": 1.0
+    "frost_bride": 1.1,
+    "bone_archer": 1.2
    }
   },
   {
    "from": 60,
    "weights": {
-    "paperman": 5,
-    "foxfire": 3,
-    "wraith_blink": 1.8,
-    "frost_bride": 1.5,
-    "lantern": 1.0
+    "paperman": 4.0,
+    "foxfire": 2.4,
+    "shadow_hound": 1.6,
+    "wraith_blink": 1.6,
+    "frost_bride": 1.4,
+    "bone_archer": 1.4,
+    "lantern": 1.2,
+    "mirror_phantom": 1.2,
+    "venom_toad": 1.0
    }
   },
   {
    "from": 90,
    "weights": {
-    "paperman": 4.5,
-    "foxfire": 2.5,
-    "wraith_blink": 1.8,
-    "frost_bride": 1.6,
+    "paperman": 3.5,
+    "foxfire": 2.2,
+    "shadow_hound": 1.6,
+    "wraith_blink": 1.6,
+    "frost_bride": 1.5,
+    "bone_archer": 1.4,
+    "lantern": 1.2,
+    "mirror_phantom": 1.4,
+    "venom_toad": 1.2,
     "blood_leech": 1.5,
     "bone_charger": 1.3,
-    "jiangshi": 1.0
+    "jiangshi": 1.1,
+    "soul_reaper": 1.2
    }
   },
   {
    "from": 120,
    "weights": {
-    "paperman": 4,
-    "foxfire": 2.5,
-    "wraith_blink": 1.8,
-    "frost_bride": 1.6,
+    "paperman": 3.0,
+    "foxfire": 2.0,
+    "shadow_hound": 1.5,
+    "wraith_blink": 1.6,
+    "frost_bride": 1.5,
+    "bone_archer": 1.4,
+    "lantern": 1.2,
+    "mirror_phantom": 1.5,
+    "venom_toad": 1.3,
     "blood_leech": 1.6,
-    "bone_charger": 1.5,
-    "bell_mage": 1.2,
+    "bone_charger": 1.4,
     "jiangshi": 1.2,
-    "lantern": 1.2
+    "soul_reaper": 1.4,
+    "bell_mage": 1.2,
+    "curse_monk": 1.3,
+    "coffin_bearer": 1.1
    }
   },
   {
-   "from": 180,
-   "weights": {
-    "paperman": 3.5,
-    "foxfire": 2.5,
-    "jiangshi": 1.4,
-    "lantern": 1.4,
-    "firecracker": 1.5,
-    "wraith_blink": 1.8,
-    "frost_bride": 1.6,
-    "blood_leech": 1.7,
-    "bone_charger": 1.6,
-    "bell_mage": 1.4
-   }
-  },
-  {
-   "from": 300,
+   "from": 160,
    "weights": {
     "paperman": 2.5,
-    "foxfire": 2.5,
-    "jiangshi": 1.8,
-    "lantern": 1.6,
-    "firecracker": 2.0,
-    "wraith_blink": 2.2,
-    "frost_bride": 2.0,
-    "blood_leech": 2.2,
-    "bone_charger": 2.0,
-    "bell_mage": 1.8
+    "foxfire": 2.0,
+    "shadow_hound": 1.5,
+    "wraith_blink": 1.6,
+    "frost_bride": 1.5,
+    "bone_archer": 1.4,
+    "lantern": 1.3,
+    "mirror_phantom": 1.5,
+    "venom_toad": 1.4,
+    "blood_leech": 1.6,
+    "bone_charger": 1.5,
+    "jiangshi": 1.3,
+    "soul_reaper": 1.5,
+    "bell_mage": 1.3,
+    "curse_monk": 1.4,
+    "coffin_bearer": 1.3,
+    "firecracker": 1.5,
+    "paper_general": 1.2
+   }
+  },
+  {
+   "from": 210,
+   "weights": {
+    "paperman": 2.2,
+    "foxfire": 1.8,
+    "shadow_hound": 1.5,
+    "wraith_blink": 1.7,
+    "frost_bride": 1.5,
+    "bone_archer": 1.5,
+    "lantern": 1.3,
+    "mirror_phantom": 1.6,
+    "venom_toad": 1.5,
+    "blood_leech": 1.7,
+    "bone_charger": 1.6,
+    "jiangshi": 1.4,
+    "soul_reaper": 1.6,
+    "bell_mage": 1.4,
+    "curse_monk": 1.5,
+    "coffin_bearer": 1.5,
+    "firecracker": 1.6,
+    "paper_general": 1.4,
+    "corpse_flower": 1.3,
+    "flame_ox": 1.2
+   }
+  },
+  {
+   "from": 270,
+   "weights": {
+    "paperman": 1.8,
+    "foxfire": 1.8,
+    "shadow_hound": 1.6,
+    "wraith_blink": 2.0,
+    "frost_bride": 1.8,
+    "bone_archer": 1.7,
+    "lantern": 1.5,
+    "mirror_phantom": 1.9,
+    "venom_toad": 1.8,
+    "blood_leech": 2.0,
+    "bone_charger": 1.8,
+    "jiangshi": 1.6,
+    "soul_reaper": 2.0,
+    "bell_mage": 1.7,
+    "curse_monk": 1.9,
+    "coffin_bearer": 1.8,
+    "firecracker": 1.9,
+    "paper_general": 1.8,
+    "corpse_flower": 1.8,
+    "flame_ox": 1.8
    }
   }
  ],
@@ -103,12 +164,12 @@
   {
    "at": 30,
    "kind": "banner",
-   "text": "瞬影鬼与寒霜鬼新娘现身"
+   "text": "瞬影鬼、寒霜鬼新娘与白骨冥弓现身"
   },
   {
    "at": 90,
    "kind": "banner",
-   "text": "噬血煞与骨轿冲锋卒袭来"
+   "text": "噬血煞、骨轿冲锋卒与勾魂无常袭来"
   },
   {
    "at": 120,
@@ -117,14 +178,19 @@
    "text": "精英 • 跳尸王"
   },
   {
-   "at": 150,
+   "at": 160,
    "kind": "banner",
-   "text": "丧钟巫祝结阵降临"
+   "text": "抬棺鬼卒与纸甲阴将重甲压境"
   },
   {
-   "at": 240,
+   "at": 210,
    "kind": "banner",
-   "text": "十鬼百魅夜行潮"
+   "text": "尸香魔花与业火牛头破阵而出"
+  },
+  {
+   "at": 270,
+   "kind": "banner",
+   "text": "二十鬼魅百妖夜行潮"
   },
   {
    "at": 360,
@@ -151,7 +217,7 @@
   "hpQuad": 7.0,
   "hpPow": 24.0,
   "hpExp": 3.2,
-  "dmgLinear": 4.5,
+  "dmgLinear": 5.2,
   "dmgQuad": 4.5,
   "speedAdd": 0.42,
   "eliteHpBase": 3.8,

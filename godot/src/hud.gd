@@ -30,6 +30,7 @@ var icon_cache: Dictionary = {}
 var hint_t := 0.0
 var last_hp := 0.0
 var rift_banner_shown := false
+var _last_boss_phase := 1
 
 # HUD 脏检查与缓存（避免每帧 60Hz 全量文本重排与字符串拼接）
 var _redraw_t := 0.0
@@ -139,6 +140,7 @@ func setup(p_game: Node, p_sim: Sim, p_touch: bool) -> void:
 	root.add_child(banner)
 	refresh_inset()
 	get_viewport().size_changed.connect(refresh_inset)
+	_last_boss_phase = _boss_phase()
 
 
 func _load_ui_data() -> void:
@@ -256,6 +258,11 @@ func tick(delta: float) -> void:
 		hurt_flash = 0.3
 		_dirty = true
 	last_hp = sim.hp
+	var cur_bp := _boss_phase()
+	if cur_bp >= 2 and _last_boss_phase < 2 and sim.boss != null and sim.boss.alive:
+		show_banner("灯骸老祖 · 二阶段觉醒！", "#ff5a3a", true)
+		_dirty = true
+	_last_boss_phase = cur_bp
 	if banner != null and banner.visible:
 		if banner.modulate.a <= 0.001 and (banner_tw == null or not banner_tw.is_running()):
 			banner.visible = false
@@ -298,7 +305,7 @@ func tick(delta: float) -> void:
 			_request_hud_redraw()
 		return
 	_redraw_t += delta
-	var sig := sim.level + (sim.phase << 10) + (sim.seg << 14) + (sim.wicks << 18) + (sim.relics.size() << 24) + (sim.gourds.size() << 32)
+	var sig := sim.level + (sim.phase << 10) + (sim.seg << 14) + (sim.wicks << 18) + (sim.relics.size() << 24) + (sim.gourds.size() << 32) + (cur_bp << 40)
 	if sig != _last_state_sig:
 		_last_state_sig = sig
 		_dirty = true
@@ -325,6 +332,22 @@ func _sync_debuff_cache() -> bool:
 	_s_wound = ("重伤禁疗 %.1fs" % (float(wound_ds) / 10.0)) if wound_ds > 0 else ""
 	_s_slow = ("寒滞减速 %.1fs" % (float(slow_ds) / 10.0)) if slow_ds > 0 else ""
 	return true
+
+
+func _boss_phase() -> int:
+	var v: Variant = sim.get("boss_phase")
+	if v is bool:
+		return 2 if bool(v) else 1
+	return int(v) if v != null else 1
+
+
+func _fmt_hp(v: float) -> String:
+	var val := maxf(0.0, v)
+	if val >= 100_000_000.0:
+		return "%.2f亿" % (val / 100_000_000.0)
+	if val >= 10_000.0:
+		return "%.0f万" % (val / 10_000.0)
+	return "%d" % int(round(val))
 
 
 func modal_open() -> bool:
@@ -761,8 +784,22 @@ func _draw_hud_inner() -> void:
 			_text(Vector2(cx - 340, yb + 84), "无补给 • 无三选一 • 骨灯全熄 • 冲刺冷却×1.25 • 受击硬直×1.2", _fs(15), Color("ff9a8a"), 680.0, HORIZONTAL_ALIGNMENT_CENTER, false)
 	elif sim.boss != null and sim.boss.alive:
 		var b := sim.boss
-		_bar(Rect2(cx - 280, yb + 12, 560, 18), b.hp / maxf(1.0, b.maxhp), Color("b36bff"))
-		_text(Vector2(cx - 300, yb + 50), "灯骸老祖  %s / %s%s" % [UI.fmt_int(int(ceil(maxf(0.0, b.hp)))), UI.fmt_int(int(b.maxhp)), "  • 回光返照" if sim.boss_enraged else ""], _fs(20), Color("d9b8ff"), 600.0, HORIZONTAL_ALIGNMENT_CENTER)
+		var bp := _boss_phase()
+		var bar_rect := Rect2(cx - 280, yb + 12, 560, 18)
+		var k_hp := b.hp / maxf(1.0, b.maxhp)
+		var bar_col := Color("b36bff")
+		if bp >= 2:
+			var p2_pulse := 0.5 + 0.5 * sin(t * 7.0)
+			bar_col = Color(1.0, 0.24, 0.18).lerp(Color(1.0, 0.74, 0.22), 0.35 + 0.25 * p2_pulse)
+		_bar(bar_rect, k_hp, bar_col)
+		if bp >= 2:
+			_frame(bar_rect, Color(1.0, 0.78, 0.30, 0.92), 2.0)
+		else:
+			var mid_x := bar_rect.position.x + bar_rect.size.x * 0.5
+			_rect(Rect2(mid_x - 1.5, bar_rect.position.y - 2.0, 3.0, bar_rect.size.y + 4.0), Color(1.0, 0.84, 0.42, 0.85), true)
+		var boss_lbl := "灯骸老祖 · 二阶段" if bp >= 2 else "灯骸老祖"
+		var lbl_col := Color("ffcf70") if bp >= 2 else Color("d9b8ff")
+		_text(Vector2(cx - 300, yb + 50), "%s  %s / %s%s" % [boss_lbl, _fmt_hp(b.hp), _fmt_hp(b.maxhp), "  • 回光返照" if sim.boss_enraged else ""], _fs(20), lbl_col, 600.0, HORIZONTAL_ALIGNMENT_CENTER)
 	elif sim.phase == Sim.PH_BREAK:
 		_text(Vector2(cx - 420, yb + 22), "站定「启程」领三选一馈赠；站定「灯骸裂隙」则放弃它 • 游商用铜钱换遗物", _fs(17), UI.PAPER, 840.0, HORIZONTAL_ALIGNMENT_CENTER, false)
 	# 段间：指向裂隙的箭头（离得远时）+ 状态牌

@@ -1,0 +1,41 @@
+{
+ "when": "2026-11-21T06:36:23.614Z",
+ "results": [
+  {
+   "N": 300,
+   "throttle": 4,
+   "size": "1280x720",
+   "gpu": "1",
+   "frames": 1200,
+   "fps": 60,
+   "mean_ms": 16.67,
+   "p50_ms": 16.7,
+   "p95_ms": 16.7,
+   "p99_ms": 16.8,
+   "worst_ms": 16.8,
+   "over33_pct": 0,
+   "longtasks": 0,
+   "heap_mb_start": 24.3,
+   "heap_mb_end": 23.7,
+   "entities": {
+    "enemies": 267,
+    "bullets": 24,
+    "ebullets": 0,
+    "pickups": 78
+   },
+   "engine": {
+    "draw_calls": 76,
+    "nodes": 72,
+    "mem_mb": 0,
+    "tex_mb": 48.5,
+    "process_ms": 3
+   },
+   "parts": {
+    "hud_tick": {
+     "ms_per_frame": 0.027,
+     "calls_per_frame": 1
+    }
+   }
+  }
+ ]
+}
