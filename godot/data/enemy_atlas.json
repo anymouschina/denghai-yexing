@@ -58,5 +58,65 @@
   258,
   227,
   256
+ ],
+ "enemy_coffin_bearer": [
+  0,
+  516,
+  248,
+  256
+ ],
+ "enemy_soul_reaper": [
+  250,
+  516,
+  260,
+  256
+ ],
+ "enemy_venom_toad": [
+  512,
+  516,
+  300,
+  256
+ ],
+ "enemy_curse_monk": [
+  814,
+  516,
+  188,
+  256
+ ],
+ "enemy_shadow_hound": [
+  1004,
+  516,
+  262,
+  256
+ ],
+ "enemy_paper_general": [
+  0,
+  774,
+  255,
+  256
+ ],
+ "enemy_bone_archer": [
+  257,
+  774,
+  224,
+  256
+ ],
+ "enemy_corpse_flower": [
+  483,
+  774,
+  222,
+  256
+ ],
+ "enemy_mirror_phantom": [
+  707,
+  774,
+  301,
+  256
+ ],
+ "enemy_flame_ox": [
+  1010,
+  774,
+  235,
+  256
  ]
 }

@@ -771,10 +771,10 @@ func _test_d1() -> void:
 	var bb := bf.spawn_enemy("boss", 0.0, 0.0, {"boss": true})
 	ok(int(bb.maxhp) == int(GameData.EN.boss.hpByMode.full), "完整模式终局 Boss 按模式定血量")
 	ok(int(Sim.new(62, {"mode": "quick"}).spawn_enemy("boss", 0.0, 0.0, {"boss": true}).maxhp) == int(GameData.EN.boss.hpByMode.quick), "疾速模式 Boss 按模式定血量")
-	ok(int(Sim.new(62).spawn_enemy("boss", 0.0, 0.0, {"boss": true}).maxhp) < 200000, "经典口径 Boss 血量不变")
+	ok(int(Sim.new(62).spawn_enemy("boss", 0.0, 0.0, {"boss": true}).maxhp) == int(GameData.EN.boss.hp), "经典口径 Boss 按配置血量生成")
 	ok(UI.fmt_int(1000000) == "1,000,000", "血条数字千分位")
 	bf.px = bb.x - 200.0; bf.py = bb.y
-	bf.boss_phase = false
+	bf.boss_phase = 1
 	bb.atk_idx = 1   # p0 第 2 招 = 半壁灯海
 	bb.atk_t = 0.0
 	bf._boss_ai(bb, 0.01)
@@ -800,7 +800,7 @@ func _test_d1() -> void:
 	r2.t = r2.dur
 	bf._update_teles(0.0)
 	ok(bf.hp == hpb, "躲到另一半屏就不受伤")
-	bf.boss_phase = true
+	bf.boss_phase = 2
 	bf.teles.clear()
 	bb.atk_idx = 0   # p1 第 1 招 = 半壁灯海（连击）
 	bb.atk_t = 0.0

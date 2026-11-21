@@ -63,7 +63,8 @@ var spawn_t := 0.6
 var pack_t := 35.0
 var event_idx := 0
 var boss: SimEnemy = null
-var boss_phase := false
+var boss_phase: int = 1
+var boss_p2_t: float = 0.0
 var boss_t0 := -1.0
 var boss_time := -1.0
 var max_en := 220
@@ -424,6 +425,8 @@ func start_run(p_mode: String = "full", p_beacon_id: String = "beacon_default") 
 	extract_choice_open = false
 	player_slow_t = 0.0
 	player_wound_t = 0.0
+	boss_phase = 1
+	boss_p2_t = 0.0
 	_apply_beacon(p_beacon_id)
 	lantern_oil = float(LanternRules.lcfg().get("start", 80.0))
 	_recalc()
@@ -492,7 +495,8 @@ func choose_push_deeper() -> void:
 	teles.clear()
 	bullets.clear()
 	boss = null
-	boss_phase = false
+	boss_phase = 1
+	boss_p2_t = 0.0
 	boss_enraged = false
 	phase = PH_SEG
 	seg = 0
@@ -831,6 +835,8 @@ func step(dt: float) -> void:
 		player_slow_t = maxf(0.0, player_slow_t - dt)
 	if player_wound_t > 0.0:
 		player_wound_t = maxf(0.0, player_wound_t - dt)
+	if boss_p2_t > 0.0:
+		boss_p2_t = maxf(0.0, boss_p2_t - dt)
 	dps_tracker.tick(dt, evo)
 	match phase:
 		PH_SEG, PH_BOSS:
@@ -1310,6 +1316,7 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 		e.dmg_mul = (esc.y if use_esc else 1.0) * (depth_dmg if not is_warden else 1.0)
 	else:
 		e.hp = float(def.hp) * hp_mul * msc.x * bc_hp
+		e.armor = float(def.get("armor", 0.0))
 		e.dmg_mul = msc.y * depth_dmg
 	var base_spd := float(el.speed if e.elite else def.speed)
 	e.speed = base_spd * (0.9 + rng.randf() * 0.2) * (1.0 if (is_boss or is_warden) else msc.z * bc_spd)
@@ -1352,6 +1359,8 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 	e.maxhp = e.hp
 	if is_boss:
 		boss = e
+		boss_phase = 1
+		boss_p2_t = 0.0
 		boss_t0 = real_t
 	enemies.append(e)
 	if e.elite and not opts.get("warden", false):
@@ -1398,6 +1407,8 @@ func damage_fast(
 	kb: float = -1.0
 ) -> void:
 	if not e.alive:
+		return
+	if e.boss and boss_p2_t > 0.0:
 		return
 	var m := 1.0
 	if weapon != "burn" and weapon != "blast" and weapon != "ail":
@@ -2321,6 +2332,20 @@ func _update_enemies(dt: float) -> void:
 					e.squash = 1.25
 					if e.dash_t <= 0.0:
 						e.set_state("move", SimEnemy.ST_MOVE)
+						var sr := float(e.def.get("shockR", 0.0))
+						if sr > 0.0:
+							var sdmg := float(e.def.get("shockDmg", e.dmg)) * e.dmg_mul
+							_ev("shock", e.x, e.y, sr)
+							var sdx := px - e.x
+							var sdy := py - e.y
+							var spr := sr + float(GameData.BAL.player.radius)
+							if not over and sdx * sdx + sdy * sdy < spr * spr:
+								var was_vuln_s := invuln <= 0.0 and dash_inv <= 0.0
+								hurt_player(sdmg, e.x, e.y, e.type + ":shock")
+								if was_vuln_s and not over:
+									var swdur := float(e.def.get("woundDur", 0.0))
+									if swdur > 0.0:
+										apply_player_wound(swdur)
 				elif e.state_id == SimEnemy.ST_TELE:
 					e.timer -= dt
 					e.squash = 0.84
@@ -2366,18 +2391,26 @@ func _update_enemies(dt: float) -> void:
 						var ar := float(e.def.get("aoeR", 125.0))
 						var atele := float(e.def.get("aoeTele", 1.1))
 						var admg := float(e.def.get("aoeDmg", 26.0)) * e.dmg_mul
+						var a_slow := float(e.def.get("aoeSlowDur", 0.0))
+						var a_wound := float(e.def.get("aoeWoundDur", 0.0))
 						var asrc := e.type + ":aoe"
 						var acb := func() -> void:
 							_ev("shock", ax, ay, ar)
 							var dp := Vector2(px - ax, py - ay)
 							if dp.length() < ar + float(GameData.BAL.player.radius):
+								var was_vuln_a := not over and invuln <= 0.0 and dash_inv <= 0.0
 								hurt_player(admg, ax, ay, asrc)
 								if not over:
+									if was_vuln_a:
+										if a_slow > 0.0:
+											apply_player_slow(a_slow)
+										if a_wound > 0.0:
+											apply_player_wound(a_wound)
 									var kdir := dp.normalized() if dp.length() > 0.01 else Vector2.RIGHT
 									px += kdir.x * 28.0
 									py += kdir.y * 28.0
 									_clamp_player()
-						_add_tele(ax, ay, ar, atele, acb, null, "aoe_big")
+						_add_tele(ax, ay, ar, atele, acb, null, "aoe_big", 0.0, 0.0, a_slow, a_wound)
 						_ev("sfx", "warn")
 					else:
 						e.ability_t = 0.6 + rng.randf() * 0.6
@@ -2415,7 +2448,7 @@ func _update_enemies(dt: float) -> void:
 				_boss_ai(e, dt)
 				if e.warn_t > 0.0:
 					e.warn_t -= dt
-				var f := 0.0 if e.stagger_t > 0.0 else (0.2 if e.warn_t > 0.0 else 1.0)
+				var f := 0.0 if (e.stagger_t > 0.0 or boss_p2_t > 0.0) else (0.2 if e.warn_t > 0.0 else 1.0)
 				vx = ux * e.speed * f
 				vy = uy * e.speed * f
 				e.lift = sin(real_t * 1.6) * 10.0
@@ -2478,9 +2511,21 @@ func _update_enemies(dt: float) -> void:
 			hurt_player(e.dmg, e.x, e.y, ("warden" if e.warden else ("boss" if e.boss else e.type)) + ":contact")
 			if was_vuln and not over:
 				if e.ai_id == SimEnemy.AI_FROST:
-					apply_player_slow(float(e.def.get("slowDur", 3.0)))
+					var c_fs := float(e.def.get("slowDur", 3.0))
+					if c_fs > 0.0:
+						apply_player_slow(c_fs)
+					var c_fw := float(e.def.get("woundDur", 0.0))
+					if c_fw > 0.0:
+						apply_player_wound(c_fw)
 				elif e.ai_id == SimEnemy.AI_GRIEVOUS:
 					apply_player_wound(float(e.def.get("woundDur", 5.0)))
+				else:
+					var c_slow := float(e.def.get("slowDur", 0.0))
+					if c_slow > 0.0:
+						apply_player_slow(c_slow)
+					var c_wound := float(e.def.get("woundDur", 0.0))
+					if c_wound > 0.0:
+						apply_player_wound(c_wound)
 			e.contact_cd = 0.5
 			if not is_same(cur, enemies):
 				return
@@ -2663,16 +2708,32 @@ func _elite_ring(e: SimEnemy, dt: float) -> void:
 
 func _boss_ai(e: SimEnemy, dt: float) -> void:
 	var B: Dictionary = GameData.EN.boss
-	var ph := 1 if boss_phase else 0
+	var P2: Dictionary = B.get("phase2", {})
+	var p2_ratio := float(P2.get("hpRatio", 0.5))
+	if e.boss and boss_phase == 1 and e.hp > 0.0 and e.hp <= e.maxhp * p2_ratio:
+		boss_phase = 2
+		boss_p2_t = float(P2.get("transDur", 1.2))
+		ebullets.clear()
+		e.speed *= float(P2.get("speedMul", 1.28))
+		var p2_dmg_m := float(P2.get("dmgMul", 1.25))
+		e.dmg_mul *= p2_dmg_m
+		e.dmg *= p2_dmg_m
+		e.atk_t = minf(e.atk_t, 0.4)
+		_ev("boss_phase2", e.x, e.y)
+		add_trauma(0.75)
+		_ev("banner", "灯骸老祖 • 二阶段觉醒！" if mode != "classic" else "灯骸老祖 • 灯火尽燃", "#ff5a4a")
+		_ev("sfx", "roar")
+		return
+	if boss_p2_t > 0.0:
+		return
+	var p2_on := boss_phase >= 2
+	var ph := 1 if p2_on else 0
+	var p2_cd_mul := float(P2.get("cdMul", 0.72)) if p2_on else 1.0
+	var p2_dmg_mul := float(P2.get("dmgMul", 1.25)) if p2_on else 1.0
 	if e.stagger_t > 0.0:
 		e.stagger_t = maxf(0.0, e.stagger_t - dt)
 		if e.atk_t > 0.0:
 			return
-	if not boss_phase and e.hp < e.maxhp * 0.5:
-		boss_phase = true
-		_ev("banner", "灯骸老祖 • 灯火尽燃（半壁灯海 左右连击）" if mode != "classic" else "灯骸老祖 • 灯火尽燃", "#ff7a6a")
-		_ev("sfx", "roar")
-		e.speed *= 1.3
 	if mode != "classic" and not boss_enraged and e.hp < e.maxhp * float(B.enrage.at):
 		boss_enraged = true
 		_ev("banner", "灯骸老祖 • 回光返照（出招加快）", "#ff4a3a")
@@ -2681,7 +2742,7 @@ func _boss_ai(e: SimEnemy, dt: float) -> void:
 	if e.stagger_t <= 0.0 and e.warn_t <= 0.0:
 		e.ability_t -= dt
 		if e.ability_t <= 0.0:
-			var bcd := float(B.get("blinkCd", 7.5)) * (0.78 if boss_phase else 1.0)
+			var bcd := float(B.get("blinkCd", 7.5)) * (p2_cd_mul if p2_on else 1.0)
 			e.ability_t = bcd
 			var btele := float(B.get("blinkTele", 0.65))
 			var bp := _pick_flank_point(240.0, 320.0)
@@ -2696,16 +2757,23 @@ func _boss_ai(e: SimEnemy, dt: float) -> void:
 	e.atk_t -= dt
 	if e.atk_t > 0.0:
 		return
-	e.atk_t = B.cd[ph] * (float(B.enrage.cdMul) if boss_enraged else 1.0)
+	e.atk_t = float(B.cd[ph]) * p2_cd_mul * (float(B.enrage.cdMul) if boss_enraged else 1.0)
 	var move := _boss_next_move(e)
 	e.atk_idx += 1
 	if move == 3:
-		_boss_half(e, B, ph)
+		_boss_half(e, B, ph, p2_dmg_mul)
 	elif move == 4:
-		_boss_drop(e, B)
+		_boss_drop(e, B, p2_dmg_mul)
+	elif move == 5:
+		_boss_cross_beam(e, B)
+	elif move == 6:
+		_boss_triple_aoe(e, B)
+	elif move == 7:
+		_boss_frost_wound_spiral(e, B)
 	elif move == 0:
 		var n := int(B.ringCount[ph])
-		var rings := 2 if boss_phase else 1
+		var rings := 2 if p2_on else 1
+		var bdmg := float(B.bulletDmg) * p2_dmg_mul
 		e.warn_t = B.ringWarn
 		_ev("sfx", "warn")
 		for r in range(rings):
@@ -2717,21 +2785,22 @@ func _boss_ai(e: SimEnemy, dt: float) -> void:
 				var sp: float = B.ringSpeed * (1.0 if rr == 0 else 0.78)
 				for i in range(n):
 					var a := float(i) / n * TAU + rr * (PI / n) + real_t * 0.3
-					_spawn_ebullet(e.x, e.y - 120.0, cos(a) * sp, sin(a) * sp, B.bulletDmg, "boss:bullet", false, 0.0, 0.0, true)
+					_spawn_ebullet(e.x, e.y - 120.0, cos(a) * sp, sin(a) * sp, bdmg, "boss:bullet", false, 0.0, 0.0, true)
 			_add_tele(e.x, e.y, B.ringTeleR if r == 0 else 0.0, B.ringWarn + r * 0.32, cb, e)
 	elif move == 1:
 		var slam_r := maxf(float(B.slamR), 140.0)
+		var sdmg := float(B.slamDmg) * p2_dmg_mul
 		for i in range(int(B.slamCount[ph])):
 			var x := px + (0.0 if i == 0 else (rng.randf() - 0.5) * 360.0)
 			var y := py + (0.0 if i == 0 else (rng.randf() - 0.5) * 260.0)
 			var cb2 := func() -> void:
 				_ev("shock", x, y, slam_r)
 				if Vector2(px - x, py - y).length() < slam_r + 8.0:
-					hurt_player(B.slamDmg, x, y, "boss:slam")
+					hurt_player(sdmg, x, y, "boss:slam")
 			_add_tele(x, y, slam_r, B.slamWarn[ph] + i * 0.12, cb2, null, "aoe_big")
 		_ev("sfx", "warn")
 	elif enemies.size() < B.summonCap:
-		var cnt := int(B.summon) + (4 if boss_phase else 0) + int(GameData.DG.threat.bossSummonAdd) * _threat_tier()
+		var cnt := int(B.summon) + (4 if p2_on else 0) + int(GameData.DG.threat.bossSummonAdd) * _threat_tier()
 		var stypes_raw: Array = B.get("summonTypes", ["paperman", "foxfire", "wraith_blink", "frost_bride", "blood_leech", "bone_charger", "bell_mage"])
 		var stypes: Array = []
 		for st in stypes_raw:
@@ -2748,27 +2817,141 @@ func _boss_ai(e: SimEnemy, dt: float) -> void:
 			m.y = e.y + sin(a) * 100.0
 
 
-const BOSS_MOVES := {"ring": 0, "slam": 1, "summon": 2, "half": 3, "drop": 4}
+const BOSS_MOVES := {"ring": 0, "slam": 1, "summon": 2, "half": 3, "drop": 4, "cross": 5, "triple_aoe": 6, "spiral": 7}
+const BOSS_P2_CYCLE := [3, 5, 6, 7, 4, 5, 0, 6, 7, 2]
+const BOSS_CLASSIC_P2_CYCLE := [0, 5, 1, 6, 2, 7]
 
 
-## 经典口径保持原三招循环（平衡基线）；完整/疾速按 enemies.json boss.cycle 的技能表循环
+## 经典口径一阶段保持原三招循环，二阶段穿插三大二阶段专属技；完整/疾速按 enemies.json boss.cycle + 二阶段专属技循环
 func _boss_next_move(e: SimEnemy) -> int:
 	if mode == "classic":
+		if boss_phase >= 2:
+			return BOSS_CLASSIC_P2_CYCLE[e.atk_idx % BOSS_CLASSIC_P2_CYCLE.size()]
 		return e.atk_idx % 3
-	var cyc: Array = GameData.EN.boss.cycle["p1" if boss_phase else "p0"]
+	if boss_phase >= 2:
+		return BOSS_P2_CYCLE[e.atk_idx % BOSS_P2_CYCLE.size()]
+	var cyc: Array = GameData.EN.boss.cycle["p0"]
 	return int(BOSS_MOVES[String(cyc[e.atk_idx % cyc.size()])])
 
 
+## 二阶段专属技 1：十字冥光束（4 道放射状 charge 预警，交替 0° 与 45° 偏转，命中附加重伤）
+func _boss_cross_beam(e: SimEnemy, B: Dictionary) -> void:
+	var P2: Dictionary = B.get("phase2", {})
+	var cnt := maxi(1, int(P2.get("crossCount", 4)))
+	var clen := float(P2.get("crossLen", 520.0))
+	var cw := float(P2.get("crossW", 34.0))
+	var ctele := float(P2.get("crossTele", 0.85))
+	var cdmg := float(P2.get("crossDmg", 55.0))
+	var wdur := float(P2.get("crossWoundDur", B.get("woundDur", 4.0)))
+	var base_ang := 0.0 if (e.atk_idx & 1) == 0 else (PI * 0.25)
+	var bx := e.x
+	var by := e.y
+	e.warn_t = maxf(e.warn_t, ctele * 0.8)
+	_ev("sfx", "warn")
+	for i in range(cnt):
+		var ang := base_ang + float(i) / float(cnt) * TAU
+		var tx := bx + cos(ang) * clen
+		var ty := by + sin(ang) * clen
+		var is_first := i == 0
+		var bcb := func() -> void:
+			if not e.alive:
+				return
+			_ev("shock", bx + cos(ang) * (clen * 0.5), by + sin(ang) * (clen * 0.5), cw * 2.4)
+			if is_first:
+				add_trauma(0.18)
+			var a := Vector2(bx, by)
+			var b := Vector2(tx, ty)
+			var ab := b - a
+			var l2 := ab.length_squared()
+			var p := Vector2(px, py)
+			var proj := clampf((p - a).dot(ab) / maxf(0.001, l2), 0.0, 1.0)
+			if p.distance_to(a + ab * proj) < cw + float(GameData.BAL.player.radius):
+				var was_vuln := not over and invuln <= 0.0 and dash_inv <= 0.0
+				hurt_player(cdmg, bx, by, "boss:cross_beam")
+				if was_vuln and not over and wdur > 0.0:
+					apply_player_wound(wdur)
+		_add_tele(bx, by, cw, ctele, bcb, null, "charge", tx, ty, 0.0, wdur)
+
+
+## 二阶段专属技 2：三重冥阵齐轰（1 阵锁玩家 + 2 阵封锁玩家移动方向两侧，爆炸击退）
+func _boss_triple_aoe(e: SimEnemy, B: Dictionary) -> void:
+	var P2: Dictionary = B.get("phase2", {})
+	var cnt := maxi(1, int(P2.get("tripleAoeCount", 3)))
+	var ar := float(P2.get("tripleAoeR", 145.0))
+	var atele := float(P2.get("tripleAoeTele", 1.0))
+	var admg := float(P2.get("tripleAoeDmg", 52.0))
+	var mdir := vel.normalized() if vel.length_squared() > 1.0 else (face.normalized() if face.length_squared() > 0.01 else Vector2.RIGHT)
+	var perp := Vector2(-mdir.y, mdir.x)
+	var pts: Array[Vector2] = [Vector2(px, py)]
+	if cnt >= 2:
+		pts.append(Vector2(px, py) + mdir * (ar * 0.85) + perp * (ar * 1.15))
+	if cnt >= 3:
+		pts.append(Vector2(px, py) + mdir * (ar * 0.85) - perp * (ar * 1.15))
+	for extra in range(3, cnt):
+		var ea := float(extra) / float(cnt) * TAU
+		pts.append(Vector2(px + cos(ea) * ar * 1.4, py + sin(ea) * ar * 1.4))
+	_ev("sfx", "warn")
+	for pt in pts:
+		var ax := clampf(pt.x, MARGIN, W - MARGIN)
+		var ay := clampf(pt.y, MARGIN, H - MARGIN)
+		var acb := func() -> void:
+			if not e.alive:
+				return
+			_ev("shock", ax, ay, ar)
+			var dp := Vector2(px - ax, py - ay)
+			if dp.length() < ar + float(GameData.BAL.player.radius):
+				hurt_player(admg, ax, ay, "boss:triple_aoe")
+				if not over:
+					var kdir := dp.normalized() if dp.length() > 0.01 else Vector2.RIGHT
+					px += kdir.x * 42.0
+					py += kdir.y * 42.0
+					_clamp_player()
+		_add_tele(ax, ay, ar, atele, acb, null, "aoe_big")
+
+
+## 二阶段专属技 3：24 发寒霜/重伤交替螺旋弹幕
+func _boss_frost_wound_spiral(e: SimEnemy, B: Dictionary) -> void:
+	var P2: Dictionary = B.get("phase2", {})
+	var scnt := maxi(4, int(P2.get("spiralCount", 24)))
+	var sspd := float(P2.get("spiralSpeed", 235.0))
+	var sdmg := float(P2.get("spiralDmg", 26.0))
+	var s_slow := float(P2.get("spiralSlowDur", 2.5))
+	var s_wound := float(P2.get("spiralWoundDur", 3.5))
+	e.warn_t = maxf(e.warn_t, 0.45)
+	_ev("sfx", "warn")
+	var cb := func() -> void:
+		if not e.alive:
+			return
+		_ev("sfx", "eshot")
+		var base_a := real_t * 0.7
+		for i in range(scnt):
+			var a := base_a + float(i) / float(scnt) * TAU
+			var is_frost := (i & 1) == 0
+			_spawn_ebullet(
+				e.x,
+				e.y - 120.0,
+				cos(a) * sspd,
+				sin(a) * sspd,
+				sdmg,
+				"boss:spiral",
+				is_frost,
+				s_slow if is_frost else 0.0,
+				0.0 if is_frost else s_wound,
+				true
+			)
+	_add_tele(e.x, e.y, float(B.get("ringTeleR", 170.0)), 0.45, cb, e)
+
+
 ## 半壁灯海：以玩家为基准，选一侧铺满半个屏幕（玩家离安全边只有 off 像素）；二阶段在第一击落下时朝玩家躲去的一侧再补一击
-func _boss_half(e: SimEnemy, B: Dictionary, ph: int) -> void:
+func _boss_half(e: SimEnemy, B: Dictionary, ph: int, dmg_mul: float = 1.0) -> void:
 	var H2: Dictionary = B.half
 	var side := 1.0 if rng.randf() < 0.5 else -1.0
 	_ev("sfx", "warn")
 	_ev("banner", "半壁灯海 • 往%s躲！" % ("左" if side > 0.0 else "右"), "#ff9a6a")
-	_boss_half_wave(e, H2, side, float(H2.warn[ph]), boss_phase)
+	_boss_half_wave(e, H2, side, float(H2.warn[ph]), boss_phase >= 2, dmg_mul)
 
 
-func _boss_half_wave(e: SimEnemy, H2: Dictionary, side: float, warn: float, chain: bool) -> void:
+func _boss_half_wave(e: SimEnemy, H2: Dictionary, side: float, warn: float, chain: bool, dmg_mul: float = 1.0) -> void:
 	var w := float(H2.w)
 	var h := float(H2.h)
 	var cx := px + side * (w * 0.5 - float(H2.off))
@@ -2786,12 +2969,12 @@ func _boss_half_wave(e: SimEnemy, H2: Dictionary, side: float, warn: float, chai
 		var pr := float(GameData.BAL.player.radius)
 		if absf(px - cx) <= w * 0.5 + pr and absf(py - 30.0 - cy) <= h * 0.5 + pr:
 			var was_vuln := not over and invuln <= 0.0 and dash_inv <= 0.0
-			hurt_player(float(H2.dmg), cx, cy, "boss:half")
+			hurt_player(float(H2.dmg) * dmg_mul, cx, cy, "boss:half")
 			if was_vuln and not over:
 				apply_player_wound(float(H2.get("woundDur", GameData.EN.boss.get("woundDur", 4.0))))
 		if chain and e.alive and not over:
 			_ev("sfx", "warn")
-			_boss_half_wave(e, H2, -side, float(H2.gap), false)
+			_boss_half_wave(e, H2, -side, float(H2.gap), false, dmg_mul)
 		elif e.alive:
 			var sdur := float(GameData.EN.boss.get("stagger", {}).get("dur", 1.5))
 			e.stagger_t = maxf(e.stagger_t, sdur)
@@ -2800,7 +2983,7 @@ func _boss_half_wave(e: SimEnemy, H2: Dictionary, side: float, warn: float, chai
 
 
 ## 灯笼坠天：以玩家当前位置为圆心的巨型落点，需要整段跑出去或冲刺穿出
-func _boss_drop(e: SimEnemy, B: Dictionary) -> void:
+func _boss_drop(e: SimEnemy, B: Dictionary, dmg_mul: float = 1.0) -> void:
 	var D2: Dictionary = B.drop
 	var x := px
 	var y := py
@@ -2812,7 +2995,7 @@ func _boss_drop(e: SimEnemy, B: Dictionary) -> void:
 		_ev("shock", x, y, r)
 		if Vector2(px - x, py - y).length() < r + float(GameData.BAL.player.radius):
 			var was_vuln := not over and invuln <= 0.0 and dash_inv <= 0.0
-			hurt_player(float(D2.dmg), x, y, "boss:drop")
+			hurt_player(float(D2.dmg) * dmg_mul, x, y, "boss:drop")
 			if was_vuln and not over:
 				apply_player_wound(float(D2.get("woundDur", B.get("woundDur", 4.0))))
 		var sdur := float(B.get("stagger", {}).get("dur", 1.5))
@@ -2823,20 +3006,32 @@ func _boss_drop(e: SimEnemy, B: Dictionary) -> void:
 
 func _enemy_shoot(e: SimEnemy, ux: float, uy: float) -> void:
 	var s: Dictionary = e.el if e.elite else e.def
-	var n: int = int(e.el.fan) if e.elite else 1
+	var n: int = int(e.el.fan) if e.elite else maxi(1, int(s.get("spreadCount", 1)))
+	var spread: float = float(e.el.fanSpread) if e.elite else float(s.get("spreadAngle", 0.22))
+	var sdur := float(s.get("slowDur", 0.0))
+	var wdur := float(s.get("woundDur", 0.0))
+	var is_frost := sdur > 0.0
 	var base := atan2(uy, ux)
 	_ev("sfx", "eshot")
 	for i in range(n):
-		var a: float = base + (i - (n - 1) / 2.0) * (float(e.el.fanSpread) if e.elite else 0.0)
-		_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * s.bulletSpeed, sin(a) * s.bulletSpeed, float(s.bulletDmg) * e.dmg_mul, ("elite_" if e.elite else "") + e.type + ":bullet", false, 0.0, 0.0, e.elite)
+		var a: float = base + (i - (n - 1) / 2.0) * spread
+		_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * float(s.bulletSpeed), sin(a) * float(s.bulletSpeed), float(s.bulletDmg) * e.dmg_mul, ("elite_" if e.elite else "") + e.type + ":bullet", is_frost, sdur, wdur, e.elite)
 
 
 func _enemy_shoot_frost(e: SimEnemy, ux: float, uy: float) -> void:
 	var spd := float(e.def.get("bulletSpeed", 170.0))
 	var dmg := float(e.def.get("bulletDmg", 10.0)) * e.dmg_mul
 	var sdur := float(e.def.get("slowDur", 3.0))
+	var wdur := float(e.def.get("woundDur", 0.0))
+	var is_frost := sdur > 0.0
+	var cnt := maxi(1, int(e.def.get("spreadCount", 1)))
+	var spread := float(e.def.get("spreadAngle", 0.22))
+	var base := atan2(uy, ux)
+	var src := e.type + (":curse" if wdur > 0.0 and not is_frost else ":frost")
 	_ev("sfx", "eshot")
-	_spawn_ebullet(e.x, e.y - e.h * 0.5, ux * spd, uy * spd, dmg, e.type + ":frost", true, sdur, 0.0, false)
+	for i in range(cnt):
+		var a := base + (float(i) - float(cnt - 1) * 0.5) * spread
+		_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * spd, sin(a) * spd, dmg, src, is_frost, sdur, wdur, false)
 
 
 func _explode_bomber(e: SimEnemy) -> void:
@@ -2944,7 +3139,9 @@ func _add_tele(
 	follow: SimEnemy,
 	kind: String = "",
 	tx: float = 0.0,
-	ty: float = 0.0
+	ty: float = 0.0,
+	slow_dur: float = 0.0,
+	wound_dur: float = 0.0
 ) -> void:
 	var tl := SimTele.new()
 	tl.x = x
@@ -2956,6 +3153,8 @@ func _add_tele(
 	tl.kind = kind
 	tl.cb = cb
 	tl.follow = follow
+	tl.slow_dur = slow_dur
+	tl.wound_dur = wound_dur
 	teles.append(tl)
 
 
@@ -5403,6 +5602,8 @@ const O_AIL := {"noFlash": true, "noCrit": true, "pierce": true}
 ## 给妖物叠异常的唯一入口：先按反应表处理“新来的 × 已有的”，再叠层、重算倍率、检查百邪崩。
 func _ail_add(e: SimEnemy, kind: int, n: int, dps: float = -1.0) -> void:
 	if not e.alive:
+		return
+	if e.boss and boss_p2_t > 0.0:
 		return
 	var A: Dictionary = GameData.AIL
 	var R: Dictionary = A.reactions

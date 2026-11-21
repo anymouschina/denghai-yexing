@@ -1,0 +1,112 @@
+{
+ "when": "2026-11-21T06:35:11.859Z",
+ "row": {
+  "touch": false,
+  "at": 700,
+  "seed": 3,
+  "throttle": 4,
+  "frames": 1200,
+  "fps": 60,
+  "mean_ms": 16.67,
+  "p50_ms": 16.7,
+  "p95_ms": 16.7,
+  "p99_ms": 16.8,
+  "worst_ms": 16.8,
+  "over33_pct": 0,
+  "longtasks": 0,
+  "longtask_max_ms": 0,
+  "parts_ms_per_frame": {},
+  "samples": [
+   {
+    "clock": 131,
+    "en": 190,
+    "bul": 3,
+    "eb": 37,
+    "pk": 73,
+    "dc": 114,
+    "scene": "result"
+   },
+   {
+    "clock": 131,
+    "en": 190,
+    "bul": 3,
+    "eb": 37,
+    "pk": 73,
+    "dc": 114,
+    "scene": "result"
+   },
+   {
+    "clock": 131,
+    "en": 190,
+    "bul": 3,
+    "eb": 37,
+    "pk": 73,
+    "dc": 114,
+    "scene": "result"
+   },
+   {
+    "clock": 131,
+    "en": 190,
+    "bul": 3,
+    "eb": 37,
+    "pk": 73,
+    "dc": 114,
+    "scene": "result"
+   },
+   {
+    "clock": 131,
+    "en": 190,
+    "bul": 3,
+    "eb": 37,
+    "pk": 73,
+    "dc": 114,
+    "scene": "result"
+   },
+   {
+    "clock": 131,
+    "en": 190,
+    "bul": 3,
+    "eb": 37,
+    "pk": 73,
+    "dc": 114,
+    "scene": "result"
+   },
+   {
+    "clock": 131,
+    "en": 190,
+    "bul": 3,
+    "eb": 37,
+    "pk": 73,
+    "dc": 114,
+    "scene": "result"
+   },
+   {
+    "clock": 131,
+    "en": 190,
+    "bul": 3,
+    "eb": 37,
+    "pk": 73,
+    "dc": 114,
+    "scene": "result"
+   },
+   {
+    "clock": 131,
+    "en": 190,
+    "bul": 3,
+    "eb": 37,
+    "pk": 73,
+    "dc": 114,
+    "scene": "result"
+   },
+   {
+    "clock": 131,
+    "en": 190,
+    "bul": 3,
+    "eb": 37,
+    "pk": 73,
+    "dc": 114,
+    "scene": "result"
+   }
+  ]
+ }
+}

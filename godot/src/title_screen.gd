@@ -137,7 +137,7 @@ func _build_left() -> void:
 	else:
 		col.add_child(UI.label("WASD 移动 • 空格 冲刺 • Q / 右键 挑灯爆焰 • Esc 暂停 • M 静音", 16, Color("c9cdf0"), 4))
 		col.add_child(UI.label("攻击全自动 • 1 / 2 / 3 选卡 • E / J 飞剑 • R 小金刚合击", 16, Color("c9cdf0"), 4))
-	col.add_child(UI.label("v2.4 • 引魂灯签 • 双阴律 • 五派羁绊 • 百万血终局 BOSS", 15, Color("8d93c4"), 3))
+	col.add_child(UI.label("v2.5 • 引魂灯签 • 双阴律 • 五派羁绊 • 亿血二阶段 BOSS", 15, Color("8d93c4"), 3))
 
 
 func _logo(text: String, size: int, color: Color) -> Label:

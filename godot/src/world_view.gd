@@ -292,6 +292,13 @@ func _sim_int(prop: String, fallback: int) -> int:
 	return int(v) if v != null else fallback
 
 
+func _boss_phase() -> int:
+	var v: Variant = sim.get("boss_phase")
+	if v is bool:
+		return 2 if bool(v) else 1
+	return int(v) if v != null else 1
+
+
 func _swap_remove(arr: Array, idx: int) -> void:
 	var last := arr.size() - 1
 	if idx < last:
@@ -651,6 +658,19 @@ func _consume_events() -> void:
 			"boss_start":
 				Audio.music("boss")
 				_shake(700, 0.006)
+			"boss_phase2":
+				var p2x := float(ev[1]) if ev.size() > 1 else sim.px
+				var p2y := float(ev[2]) if ev.size() > 2 else sim.py
+				Audio.play_flare()
+				_trigger_hit_stop(0.035)
+				_shake(520.0, 0.011)
+				trauma = clampf(maxf(trauma, 0.9), 0.0, 1.0)
+				part_pool.burst_flare(p2x, p2y - 40.0, 64 if not low_perf else 28)
+				if rings.size() >= 62:
+					_swap_remove(rings, 0)
+				rings.append({"x": p2x, "y": p2y - 30.0, "r": 480.0, "life": 0.68, "max": 0.68, "col": Color(1.0, 0.22, 0.18)})
+				rings.append({"x": p2x, "y": p2y - 30.0, "r": 340.0, "life": 0.52, "max": 0.52, "col": Color(1.0, 0.80, 0.26)})
+				ring(p2x, p2y - 30.0, 200.0, Color(1.0, 0.45, 0.20))
 			"revive":
 				ring(sim.px, sim.py - 30.0, 320.0, Color("ffd36a"))
 				Audio.play("levelup")
@@ -862,6 +882,17 @@ func defer__draw_ground_add(c: Node2D) -> void:
 		b_glow_ground.full(mp.x - 160.0, mp.y - 110.0, 320.0, 220.0, Color(1.0, 0.7, 0.3, 0.45))
 		var gp := sim.break_pos("gate")
 		b_glow_ground.full(gp.x - 120.0, gp.y - 330.0, 240.0, 420.0, Color(1.0, 0.85, 0.5, 0.45 + sin(t_anim * 2.2) * 0.08))
+	# Boss 二阶段脚下赤金威压光池（合批进 b_glow_ground，0 额外 DC）
+	if sim.boss != null and sim.boss.alive and _boss_phase() >= 2:
+		var bx_p2 := sim.boss.x
+		var by_p2 := sim.boss.y
+		if _in_view_pad(bx_p2, by_p2, 260.0):
+			var p2_t := _sim_float("boss_p2_t", 0.0)
+			var pulse_p2 := 0.5 + 0.5 * sin(t_anim * (14.0 if p2_t > 0.0 else 5.2))
+			var gw_p2 := (340.0 + 48.0 * pulse_p2) * (1.25 if p2_t > 0.0 else 1.0)
+			var gh_p2 := gw_p2 * 0.62
+			var gcol_p2 := Color(1.0, 0.24 + 0.36 * pulse_p2, 0.14, (0.48 if p2_t > 0.0 else 0.30) + 0.14 * pulse_p2)
+			b_glow_ground.full(bx_p2 - gw_p2 * 0.5, by_p2 - gh_p2 * 0.55, gw_p2, gh_p2, gcol_p2)
 	b_glow_ground.flush(c.get_canvas_item(), g)
 
 
@@ -1385,6 +1416,10 @@ func _draw_enemy(e: SimEnemy) -> void:
 	var tx: Texture2D = info[0]
 	var hh: float = e.def.h * e.scale_mul * info[4]
 	var ww: float = hh * float(info[2]) / float(info[3])
+	var is_boss_p2 := e.boss and _boss_phase() >= 2
+	if is_boss_p2:
+		hh *= 1.18
+		ww *= 1.18
 	var sq := e.squash
 	var wob := 1.0
 	if e.ai != "hop":
@@ -1405,6 +1440,17 @@ func _draw_enemy(e: SimEnemy) -> void:
 		col = Color(1.0, 0.3, 0.3) if int(e.timer * 14.0) % 2 == 0 else Color(1.0, 0.85, 0.85)
 	if e.warden and e.stagger_t > 0.0:
 		col = Color(1.0, 0.95, 0.5) if int(t_anim * 12.0) % 2 == 0 else Color(1.0, 0.8, 0.3)
+	if is_boss_p2:
+		var p2_t := _sim_float("boss_p2_t", 0.0)
+		var p2_pulse := 0.5 + 0.5 * sin(t_anim * (16.0 if p2_t > 0.0 else 6.0))
+		var aura_r := e.r * (1.55 + 0.14 * p2_pulse)
+		var aura_pos := Vector2(e.x, e.y - 6.0)
+		b_world_white.ring(aura_pos, aura_r, 3.5, Color(1.0, 0.26 + 0.34 * p2_pulse, 0.16, 0.62 + 0.28 * p2_pulse), 32)
+		b_world_white.ring(aura_pos, aura_r * 0.78, 2.0, Color(1.0, 0.82, 0.28, 0.45 + 0.30 * p2_pulse), 28)
+		if p2_t > 0.0:
+			col = Color(1.0, 0.35 + 0.45 * p2_pulse, 0.22)
+		else:
+			col = col.lerp(Color(1.0, 0.72, 0.55), 0.18 + 0.10 * p2_pulse)
 	if e.warden:
 		_draw_warden_fx(e)
 	if e.ai == "sedan" and e.warn_t > 0.0:
@@ -1737,7 +1783,9 @@ func _draw_projectiles(c: Node2D) -> void:
 		if b.x < vx0 or b.x > vx1 or b.y < vy0 or b.y > vy1:
 			continue
 		var is_frost := bool(b.get("frost"))
-		b_ghostfire.rot(Vector2(b.x, b.y), t_anim * 6.0, ew, eh, Color(0.45, 0.92, 1.0) if is_frost else Color.WHITE)
+		var is_wound := b.wound_dur > 0.0
+		var bcol := Color(0.95, 0.22, 0.45) if is_wound else (Color(0.45, 0.92, 1.0) if is_frost else Color.WHITE)
+		b_ghostfire.rot(Vector2(b.x, b.y), t_anim * 6.0, ew, eh, bcol)
 	if sim.pet_on and sim.pet_dead_t <= 0.0:
 		var pp := sim.pet_pos
 		var pt: Texture2D = _tex("pet_huluwa")
@@ -1924,7 +1972,9 @@ func defer__draw_fx_add(c: Node2D) -> void:
 		if b.x < vx0 or b.x > vx1 or b.y < vy0 or b.y > vy1:
 			continue
 		var is_frost := bool(b.get("frost"))
-		b_glow_fx.full(b.x - 30.0, b.y - 30.0, 60.0, 60.0, Color(0.45, 0.92, 1.0, 0.72) if is_frost else Color(0.5, 1.0, 0.7, 0.55))
+		var is_wound := b.wound_dur > 0.0
+		var gcol := Color(0.95, 0.22, 0.45, 0.72) if is_wound else (Color(0.45, 0.92, 1.0, 0.72) if is_frost else Color(0.5, 1.0, 0.7, 0.55))
+		b_glow_fx.full(b.x - 30.0, b.y - 30.0, 60.0, 60.0, gcol)
 	for o in sim.orb_pos:
 		b_glow_fx.full(o.x - 44.0, o.y - 44.0, 88.0, 88.0, Color(1.0, 0.55, 0.2, 0.8))
 	if sim.pet_on and sim.pet_dead_t <= 0.0:

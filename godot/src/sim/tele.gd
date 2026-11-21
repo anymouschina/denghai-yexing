@@ -16,6 +16,8 @@ var kind := ""
 var follow: SimEnemy = null
 var cb: Callable = Callable()
 var color := 0
+var slow_dur := 0.0
+var wound_dur := 0.0
 
 
 func is_rect() -> bool:
