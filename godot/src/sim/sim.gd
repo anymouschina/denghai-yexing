@@ -24,6 +24,8 @@ const LANTERN_MID := 1
 const LANTERN_HIGH := 2
 const SCREEN_HALF_W := 720.0
 const SCREEN_HALF_H := 440.0
+const MAX_ACTIVE_TELES := 24
+const MAX_ACTIVE_EBULLETS := 90
 
 var rng := RandomNumberGenerator.new()
 var seed_v := 0
@@ -93,6 +95,8 @@ var face := Vector2.RIGHT
 var face_x := 1
 var moving := false
 var stun := 0.0
+var player_slow_t := 0.0
+var player_wound_t := 0.0
 var revive := 0
 var hurt_flash := 0.0
 var vel := Vector2.ZERO
@@ -156,6 +160,7 @@ var _q_leihuo: Array = []
 var _q_fallback: Array = []
 var _q_lei_cands: Array = []
 var _q_mark_hits: Array = []
+var _near_grid_enemies: Array = []
 var _pk_grid: Array = []
 var _pk_counts := PackedInt32Array([0, 0, 0, 0])
 
@@ -417,6 +422,8 @@ func start_run(p_mode: String = "full", p_beacon_id: String = "beacon_default") 
 	stretch = {"full": 1.5, "quick": 1.25}.get(mode, 1.0)
 	abyss_depth = 1
 	extract_choice_open = false
+	player_slow_t = 0.0
+	player_wound_t = 0.0
 	_apply_beacon(p_beacon_id)
 	lantern_oil = float(LanternRules.lcfg().get("start", 80.0))
 	_recalc()
@@ -475,10 +482,11 @@ func choose_push_deeper() -> void:
 	abyss_depth += 1
 	beacon_soul_mul *= (1.0 + float(eb.get("depthSoulMulStep", 0.45)))
 	_refresh_effective_level()
+	player_slow_t = 0.0
+	player_wound_t = 0.0
 	var heal_amt := maxhp * float(eb.get("pushHealPct", 0.40))
-	hp = minf(maxhp, hp + heal_amt)
+	heal_player(heal_amt, true)
 	LanternRules.add_oil(self, float(eb.get("pushOilRestore", 50.0)))
-	_ev("heal", heal_amt)
 	# 清理残留弹幕与预警，开启新一层夜行
 	ebullets.clear()
 	teles.clear()
@@ -498,6 +506,33 @@ func choose_push_deeper() -> void:
 	_ev("push_deeper", abyss_depth, beacon_soul_mul)
 	_ev("banner", "深入幽冥 第 %d 层 • 魂魄收益 ×%.2f • 生命与灯油已补足" % [abyss_depth, beacon_soul_mul], "#d9b8ff")
 	checkpoint()
+
+
+func apply_player_slow(dur: float) -> void:
+	if over or dur <= 0.0:
+		return
+	var max_d := float(GameData.BAL.get("debuffs", {}).get("slowMaxDur", 4.0))
+	player_slow_t = minf(max_d, maxf(player_slow_t, dur))
+	_ev("debuff", "slow", player_slow_t)
+
+
+func apply_player_wound(dur: float) -> void:
+	if over or dur <= 0.0:
+		return
+	var max_d := float(GameData.BAL.get("debuffs", {}).get("woundMaxDur", 6.0))
+	player_wound_t = minf(max_d, maxf(player_wound_t, dur))
+	_ev("debuff", "wound", player_wound_t)
+
+
+func heal_player(amount: float, emit_ev: bool = true) -> float:
+	if amount <= 0.0 or over or player_wound_t > 0.0:
+		return 0.0
+	var actual := minf(amount, maxf(0.0, maxhp - hp))
+	if actual > 0.0:
+		hp = minf(maxhp, hp + actual)
+		if emit_ev:
+			_ev("heal", actual)
+	return actual
 
 
 func _is_on_screen(x: float, y: float) -> bool:
@@ -628,9 +663,8 @@ func _on_kill_sets(e: SimEnemy) -> void:
 	if has_set("soul"):
 		set_kills += 1
 		if set_kills % 12 == 0:
-			hp = minf(maxhp, hp + 6.0)
+			heal_player(6.0, true)
 			combo_cd = maxf(0.0, combo_cd - 3.0)
-			_ev("heal", 6.0)
 
 
 func has_part(id: String) -> bool:
@@ -793,6 +827,10 @@ func step(dt: float) -> void:
 	if not choice.is_empty() or shop_open or extract_choice_open:
 		return
 	real_t += dt
+	if player_slow_t > 0.0:
+		player_slow_t = maxf(0.0, player_slow_t - dt)
+	if player_wound_t > 0.0:
+		player_wound_t = maxf(0.0, player_wound_t - dt)
 	dps_tracker.tick(dt, evo)
 	match phase:
 		PH_SEG, PH_BOSS:
@@ -881,7 +919,41 @@ func _step_combat(dt: float) -> void:
 
 
 func _rebuild_grid() -> void:
-	grid_sys.rebuild(enemies)
+	var near := _near_grid_enemies
+	near.clear()
+	var px0 := px
+	var py0 := py
+	var max_d2 := 840.0 * 840.0
+	for i in range(enemies.size()):
+		var e: SimEnemy = enemies[i]
+		if not e.alive:
+			continue
+		var dx := e.x - px0
+		var dy := e.y - py0
+		if dx * dx + dy * dy <= max_d2 or e.boss or e.elite:
+			near.append(e)
+		else:
+			e.grid_idx = -1
+	grid_sys.rebuild(near)
+
+
+func _reposition_straggler(e: SimEnemy) -> void:
+	var r_dist := 740.0 + rng.randf() * 100.0
+	var base_ang := atan2(vel.y, vel.x) if vel.length_squared() > 100.0 else (rng.randf() * TAU)
+	var spread := 1.4 if vel.length_squared() > 100.0 else TAU
+	var ang := base_ang + (rng.randf() - 0.5) * spread
+	var rx := clampf(px + cos(ang) * r_dist, MARGIN - 60.0, W - MARGIN + 60.0)
+	var ry := clampf(py + sin(ang) * r_dist, MARGIN - 60.0, H - MARGIN + 60.0)
+	if (rx - px) * (rx - px) + (ry - py) * (ry - py) < 520.0 * 520.0:
+		var sp := _spawn_point(-1.0, r_dist)
+		rx = sp.x
+		ry = sp.y
+	e.x = rx
+	e.y = ry
+	e.kvx = 0.0
+	e.kvy = 0.0
+	e.vx = 0.0
+	e.vy = 0.0
 
 
 func _near(x: float, y: float, r: float) -> Array:
@@ -923,7 +995,8 @@ func _clamp_player() -> void:
 func _update_player(dt: float) -> void:
 	var P: Dictionary = GameData.BAL.player
 	var T: Dictionary = GameData.BAL.touch
-	var eff_spd := s_speed * _low_speed_mul
+	var slow_mul := float(GameData.BAL.get("debuffs", {}).get("slowMul", 0.65))
+	var eff_spd := s_speed * _low_speed_mul * (slow_mul if player_slow_t > 0.0 else 1.0)
 	var mv := in_move
 	var ln := mv.length()
 	if ln > 1.0:
@@ -1026,6 +1099,8 @@ func hurt_player(dmg_in: float, fx: float, fy: float, src: String) -> void:
 		elif revive > 0:
 			revive -= 1
 			hp = round(maxhp * 0.5)
+			player_slow_t = 0.0
+			player_wound_t = 0.0
 			invuln = 2.0
 			_ev("revive")
 		else:
@@ -1052,7 +1127,7 @@ func _update_lamps(dt: float) -> void:
 		var dy: float = c.y + lp[1] - py
 		if dx * dx + dy * dy < L.radius * L.radius:
 			if hp < maxhp:
-				hp = minf(maxhp, hp + float(L.heal) * dt)
+				heal_player(float(L.heal) * dt, false)
 			LanternRules.add_oil(self, oil_rate * dt)
 			return
 
@@ -1257,6 +1332,23 @@ func spawn_enemy(type: String, angle: float = -1.0, dist: float = -1.0, opts: Di
 	e.slam_t = el.slamCd if e.elite and el.has("slamCd") else 0.0
 	e.atk_t = 2.5 if is_boss else 0.0
 	e.ring_t = el.ringCd * 0.6 if e.elite and el.has("ringCd") else 0.0
+	if is_boss:
+		e.ability_t = float(def.get("blinkCd", 7.5)) * 0.7
+	elif e.elite:
+		if el.has("dashCd"):
+			e.ability_t = float(el.get("dashCd", 4.2)) * (0.55 + rng.randf() * 0.35)
+		elif el.has("blinkCd"):
+			e.ability_t = float(el.get("blinkCd", 5.0)) * (0.5 + rng.randf() * 0.35)
+	else:
+		match e.ai_id:
+			SimEnemy.AI_BLINK:
+				e.ability_t = float(def.get("blinkCd", 3.6)) * (0.45 + rng.randf() * 0.85)
+			SimEnemy.AI_GRIEVOUS:
+				e.ability_t = float(def.get("dashCd", 3.2)) * (0.45 + rng.randf() * 0.85)
+			SimEnemy.AI_CHARGER:
+				e.ability_t = float(def.get("dashCd", 3.8)) * (0.45 + rng.randf() * 0.85)
+			SimEnemy.AI_AOE_MAGE:
+				e.ability_t = float(def.get("aoeCd", 4.5)) * (0.45 + rng.randf() * 0.85)
 	e.maxhp = e.hp
 	if is_boss:
 		boss = e
@@ -1399,7 +1491,7 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 	_on_kill_sets(e)
 	LanternRules.on_enemy_kill(self, e)
 	if has_part("part_huanhuo"):
-		hp = minf(maxhp, hp + 1.0)
+		heal_player(1.0, false)
 	if e.el.has("mini"):
 		_mini_drop(e)
 	if has_sword():
@@ -1918,8 +2010,9 @@ func _update_enemies(dt: float) -> void:
 	var ty := py - 20.0
 	var decay := pow(0.0015, dt)
 	var decay2 := decay * decay
-	var dt2 := dt * 2.0
-	var step_parity := _step_tick & 1
+	var decay4 := decay2 * decay2
+	var dt4 := dt * 4.0
+	var step_slot := _step_tick & 3
 	var touch_r: float = float(BAL.player.radius) + 6.0
 	var buckets := grid_sys._buckets
 	var cur := enemies   # 循环里玩家可能在副本中倒下 → _return_world 把 enemies 换成大地图妖物；那时不能再用本帧的副本名单覆盖回去
@@ -1969,30 +2062,37 @@ func _update_enemies(dt: float) -> void:
 				ch = true
 			if ch:
 				_ail_refresh(e)
-		# 屏外普通怪 LOD：跳过 8 邻域分离、动画数学(hop/lift/squash/flash/flip)、远程走位与发射；隔帧直线追击与超距回收
+		# 屏外普通怪 LOD：跳过 8 邻域分离、动画数学(hop/lift/squash/flash/flip)、远程走位与特殊技能；每 4 帧直线追击，超距(>980px)前移重铺到前进方向屏幕边缘
 		if not e.boss and not e.elite and (absf(ex - px) > SCREEN_HALF_W or absf(ey - py) > SCREEN_HALF_H):
-			if (e.uid & 1) == step_parity:
+			if e.state_id != SimEnemy.ST_MOVE:
+				e.set_state("move", SimEnemy.ST_MOVE)
+				e.dash_t = 0.0
+				e.timer = 0.0
+			if (e.uid & 3) == step_slot:
 				var odx := tx - ex
 				var ody := ty - ey
 				var od2 := odx * odx + ody * ody
-				if od2 > 2250000.0:
-					e.alive = false
-					continue
-				var odist := maxf(0.001, sqrt(od2))
-				var osp := e.speed
-				if e.seal_n > 0 or e.bind_t > 0.0:
-					var osf := 0.0 if e.bind_t > 0.0 else maxf(0.3, 1.0 - float(e.seal_n) * seal_slow_per)
-					osp *= osf
-				var ovx := (odx / odist) * osp
-				var ovy := (ody / odist) * osp
-				var okvx := e.kvx * decay2
-				var okvy := e.kvy * decay2
-				e.kvx = okvx
-				e.kvy = okvy
-				e.x = ex + (ovx + okvx) * dt2
-				e.y = ey + (ovy + okvy) * dt2
-				e.vx = ovx
-				e.vy = ovy
+				if od2 > 960400.0:
+					if phase == PH_RIFT:
+						e.alive = false
+						continue
+					_reposition_straggler(e)
+				else:
+					var odist := maxf(0.001, sqrt(od2))
+					var osp := e.speed
+					if e.seal_n > 0 or e.bind_t > 0.0:
+						var osf := 0.0 if e.bind_t > 0.0 else maxf(0.3, 1.0 - float(e.seal_n) * seal_slow_per)
+						osp *= osf
+					var ovx := (odx / odist) * osp
+					var ovy := (ody / odist) * osp
+					var okvx := e.kvx * decay4
+					var okvy := e.kvy * decay4
+					e.kvx = okvx
+					e.kvy = okvy
+					e.x = ex + (ovx + okvx) * dt4
+					e.y = ey + (ovy + okvy) * dt4
+					e.vx = ovx
+					e.vy = ovy
 			cur[w] = e
 			w += 1
 			continue
@@ -2013,23 +2113,59 @@ func _update_enemies(dt: float) -> void:
 				vx = ux * e.speed
 				vy = uy * e.speed
 			SimEnemy.AI_HOP:
-				e.hop += dt / e.hop_period
-				var ph := fmod(e.hop, 1.0)
-				if ph < 0.6:
-					var s := sin(ph / 0.6 * PI)
-					vx = ux * e.speed * 2.2 * s
-					vy = uy * e.speed * 2.2 * s
-					e.lift = s * 16.0
+				if e.elite and e.state_id == SimEnemy.ST_DASH:
+					e.dash_t -= dt
+					vx = e.dash_vx
+					vy = e.dash_vy
+					e.squash = 1.22
+					if e.dash_t <= 0.0:
+						e.set_state("move", SimEnemy.ST_MOVE)
+				elif e.elite and e.state_id == SimEnemy.ST_TELE:
+					e.timer -= dt
+					e.squash = 0.85
+					if e.timer <= 0.0:
+						e.set_state("dash", SimEnemy.ST_DASH)
+						e.dash_t = float(e.el.get("dashDur", 0.42))
 				else:
-					e.squash = 1.0 - sin((ph - 0.6) / 0.4 * PI) * 0.12
-				if e.elite:
-					_elite_slam(e, dt, dist)
-					if e.ember:
-						_warden_ember(e, dt)
+					e.hop += dt / e.hop_period
+					var ph := fmod(e.hop, 1.0)
+					if ph < 0.6:
+						var s := sin(ph / 0.6 * PI)
+						vx = ux * e.speed * 2.2 * s
+						vy = uy * e.speed * 2.2 * s
+						e.lift = s * 16.0
+					else:
+						e.squash = 1.0 - sin((ph - 0.6) / 0.4 * PI) * 0.12
+					if e.elite:
+						_elite_slam(e, dt, dist)
+						if e.el.has("dashCd") and e.warn_t <= 0.0:
+							e.ability_t -= dt
+							if e.ability_t <= 0.0 and dist > 120.0 and dist < 480.0:
+								var dspd := float(e.el.get("dashSpeed", 340.0))
+								var ddur := float(e.el.get("dashDur", 0.42))
+								var dtele := float(e.el.get("dashTele", 0.55))
+								e.dash_vx = ux * dspd
+								e.dash_vy = uy * dspd
+								e.set_state("tele", SimEnemy.ST_TELE)
+								e.timer = dtele
+								e.ability_t = float(e.el.get("dashCd", 4.2))
+								_add_tele(ex, ey, maxf(e.r, 26.0), dtele, Callable(), null, "charge", ex + ux * dspd * ddur, ey + uy * dspd * ddur)
+								_ev("sfx", "warn")
+						if e.ember:
+							_warden_ember(e, dt)
 			SimEnemy.AI_RANGED:
 				var keep := e.keep_dist
 				var sp := e.speed
-				if e.state_id == SimEnemy.ST_CHARGE:
+				if e.elite and e.state_id == SimEnemy.ST_TELE:
+					e.timer -= dt
+					e.squash = 0.85
+					if e.timer <= 0.0:
+						e.x = e.blink_tx
+						e.y = e.blink_ty
+						ex = e.x
+						ey = e.y
+						e.set_state("move", SimEnemy.ST_MOVE)
+				elif e.state_id == SimEnemy.ST_CHARGE:
 					e.timer -= dt
 					e.squash = 1.15
 					if e.timer <= 0.0:
@@ -2048,15 +2184,208 @@ func _update_enemies(dt: float) -> void:
 					e.shoot_t -= dt
 					if e.elite and e.el.has("ringCd"):
 						_elite_ring(e, dt)
-					if e.shoot_t <= 0.0 and dist < 620.0:
-						e.shoot_t = e.el.shootCd if e.elite else e.def.shootCd
-						e.set_state("charge", SimEnemy.ST_CHARGE)
-						e.timer = e.el.charge if e.elite else e.def.charge
+					if e.elite and e.el.has("blinkCd") and e.warn_t <= 0.0:
+						e.ability_t -= dt
+						if e.ability_t <= 0.0 and dist < 240.0:
+							var btele := float(e.el.get("blinkTele", 0.55))
+							var bp := _pick_flank_point(260.0, 340.0)
+							e.blink_tx = bp.x
+							e.blink_ty = bp.y
+							e.set_state("tele", SimEnemy.ST_TELE)
+							e.timer = btele
+							e.ability_t = float(e.el.get("blinkCd", 5.0))
+							_add_tele(bp.x, bp.y, maxf(e.r + 14.0, 38.0), btele, Callable(), null, "blink")
+							_ev("sfx", "warn")
+					if e.state_id == SimEnemy.ST_MOVE and e.shoot_t <= 0.0 and dist < 620.0:
+						if e.elite or ebullets.size() < MAX_ACTIVE_EBULLETS:
+							e.shoot_t = e.el.shootCd if e.elite else e.def.shootCd
+							e.set_state("charge", SimEnemy.ST_CHARGE)
+							e.timer = e.el.charge if e.elite else e.def.charge
+						else:
+							e.shoot_t = 0.4 + rng.randf() * 0.4
 				if e.warn_t > 0.0:
 					e.warn_t -= dt
 					vx *= 0.2
 					vy *= 0.2
 				e.lift = sin(real_t * 3.0 + e.phase) * 6.0
+			SimEnemy.AI_BLINK:
+				if e.state_id == SimEnemy.ST_DASH:
+					e.dash_t -= dt
+					vx = e.dash_vx
+					vy = e.dash_vy
+					e.squash = 1.18
+					if e.dash_t <= 0.0:
+						e.set_state("move", SimEnemy.ST_MOVE)
+				elif e.state_id == SimEnemy.ST_TELE:
+					e.timer -= dt
+					vx = ux * e.speed * 0.15
+					vy = uy * e.speed * 0.15
+					e.squash = 0.82
+					if e.timer <= 0.0:
+						e.x = e.blink_tx
+						e.y = e.blink_ty
+						ex = e.x
+						ey = e.y
+						var bdx := tx - ex
+						var bdy := ty - ey
+						var bd := maxf(0.001, sqrt(bdx * bdx + bdy * bdy))
+						var lspd := float(e.def.get("lungeSpeed", e.speed * 2.1))
+						e.dash_vx = (bdx / bd) * lspd
+						e.dash_vy = (bdy / bd) * lspd
+						e.dash_t = float(e.def.get("lungeDur", 0.28))
+						e.set_state("dash", SimEnemy.ST_DASH)
+				else:
+					vx = ux * e.speed
+					vy = uy * e.speed
+					e.ability_t -= dt
+					if e.ability_t <= 0.0 and dist > 110.0 and dist < 620.0:
+						if teles.size() < MAX_ACTIVE_TELES:
+							var bdist := float(e.def.get("blinkDist", 165.0))
+							var btele := float(e.def.get("blinkTele", 0.55))
+							var bp := _pick_flank_point(maxf(140.0, bdist - 25.0), minf(190.0, bdist + 25.0))
+							e.blink_tx = bp.x
+							e.blink_ty = bp.y
+							e.set_state("tele", SimEnemy.ST_TELE)
+							e.timer = btele
+							e.ability_t = float(e.def.get("blinkCd", 3.6)) * (0.85 + rng.randf() * 0.3)
+							_add_tele(bp.x, bp.y, maxf(e.r + 12.0, 32.0), btele, Callable(), null, "blink")
+						else:
+							e.ability_t = 0.5 + rng.randf() * 0.6
+				e.lift = sin(real_t * 3.4 + e.phase) * 5.0
+			SimEnemy.AI_FROST:
+				var fkeep := e.keep_dist if e.keep_dist > 0.0 else 260.0
+				var fsp := e.speed
+				if e.state_id == SimEnemy.ST_CHARGE:
+					e.timer -= dt
+					e.squash = 1.15
+					if e.timer <= 0.0:
+						_enemy_shoot_frost(e, ux, uy)
+						e.set_state("move", SimEnemy.ST_MOVE)
+				else:
+					if dist > fkeep + 40.0:
+						vx = ux * fsp
+						vy = uy * fsp
+					elif dist < fkeep - 40.0:
+						vx = -ux * fsp
+						vy = -uy * fsp
+					else:
+						vx = -uy * fsp * 0.5
+						vy = ux * fsp * 0.5
+					e.shoot_t -= dt
+					if e.shoot_t <= 0.0 and dist < 620.0:
+						if ebullets.size() < MAX_ACTIVE_EBULLETS:
+							e.shoot_t = float(e.def.get("shootCd", 3.4)) * (0.85 + rng.randf() * 0.3)
+							e.set_state("charge", SimEnemy.ST_CHARGE)
+							e.timer = float(e.def.get("charge", 0.7))
+						else:
+							e.shoot_t = 0.5 + rng.randf() * 0.5
+				e.lift = sin(real_t * 2.8 + e.phase) * 6.0
+			SimEnemy.AI_GRIEVOUS:
+				if e.state_id == SimEnemy.ST_DASH:
+					e.dash_t -= dt
+					vx = e.dash_vx
+					vy = e.dash_vy
+					e.squash = 1.2
+					if e.dash_t <= 0.0:
+						e.set_state("move", SimEnemy.ST_MOVE)
+				elif e.state_id == SimEnemy.ST_TELE:
+					e.timer -= dt
+					vx = ux * e.speed * 0.15
+					vy = uy * e.speed * 0.15
+					e.squash = 0.86
+					if e.timer <= 0.0:
+						e.set_state("dash", SimEnemy.ST_DASH)
+						e.dash_t = float(e.def.get("dashDur", 0.35))
+				else:
+					vx = ux * e.speed
+					vy = uy * e.speed
+					e.ability_t -= dt
+					if e.ability_t <= 0.0 and dist > 80.0 and dist < 440.0:
+						if teles.size() < MAX_ACTIVE_TELES:
+							var gspd := float(e.def.get("dashSpeed", 360.0))
+							var gdur := float(e.def.get("dashDur", 0.35))
+							var gtele := float(e.def.get("dashTele", 0.48))
+							e.dash_vx = ux * gspd
+							e.dash_vy = uy * gspd
+							e.set_state("tele", SimEnemy.ST_TELE)
+							e.timer = gtele
+							e.ability_t = float(e.def.get("dashCd", 3.2)) * (0.85 + rng.randf() * 0.3)
+							_add_tele(ex, ey, maxf(e.r, 18.0), gtele, Callable(), null, "charge", ex + ux * gspd * gdur, ey + uy * gspd * gdur)
+						else:
+							e.ability_t = 0.5 + rng.randf() * 0.6
+			SimEnemy.AI_CHARGER:
+				if e.state_id == SimEnemy.ST_DASH:
+					e.dash_t -= dt
+					vx = e.dash_vx
+					vy = e.dash_vy
+					e.squash = 1.25
+					if e.dash_t <= 0.0:
+						e.set_state("move", SimEnemy.ST_MOVE)
+				elif e.state_id == SimEnemy.ST_TELE:
+					e.timer -= dt
+					e.squash = 0.84
+					if e.timer <= 0.0:
+						e.set_state("dash", SimEnemy.ST_DASH)
+						e.dash_t = float(e.def.get("dashDur", 0.55))
+				else:
+					vx = ux * e.speed
+					vy = uy * e.speed
+					e.ability_t -= dt
+					if e.ability_t <= 0.0 and dist > 90.0 and dist < 520.0:
+						if teles.size() < MAX_ACTIVE_TELES:
+							var cspd := float(e.def.get("dashSpeed", 420.0))
+							var cdur := float(e.def.get("dashDur", 0.55))
+							var ctele := float(e.def.get("dashTele", 0.65))
+							e.dash_vx = ux * cspd
+							e.dash_vy = uy * cspd
+							e.set_state("tele", SimEnemy.ST_TELE)
+							e.timer = ctele
+							e.ability_t = float(e.def.get("dashCd", 3.8)) * (0.85 + rng.randf() * 0.3)
+							_add_tele(ex, ey, maxf(e.r, 22.0), ctele, Callable(), null, "charge", ex + ux * cspd * cdur, ey + uy * cspd * cdur)
+						else:
+							e.ability_t = 0.5 + rng.randf() * 0.6
+			SimEnemy.AI_AOE_MAGE:
+				var mkeep := e.keep_dist if e.keep_dist > 0.0 else 310.0
+				var msp := e.speed
+				if dist > mkeep + 40.0:
+					vx = ux * msp
+					vy = uy * msp
+				elif dist < mkeep - 40.0:
+					vx = -ux * msp
+					vy = -uy * msp
+				else:
+					vx = -uy * msp * 0.5
+					vy = ux * msp * 0.5
+				e.ability_t -= dt
+				if e.ability_t <= 0.0 and dist < 580.0:
+					if teles.size() < MAX_ACTIVE_TELES:
+						e.ability_t = float(e.def.get("aoeCd", 4.5)) * (0.85 + rng.randf() * 0.3)
+						e.warn_t = 0.45
+						var ax := px
+						var ay := py
+						var ar := float(e.def.get("aoeR", 125.0))
+						var atele := float(e.def.get("aoeTele", 1.1))
+						var admg := float(e.def.get("aoeDmg", 26.0)) * e.dmg_mul
+						var asrc := e.type + ":aoe"
+						var acb := func() -> void:
+							_ev("shock", ax, ay, ar)
+							var dp := Vector2(px - ax, py - ay)
+							if dp.length() < ar + float(GameData.BAL.player.radius):
+								hurt_player(admg, ax, ay, asrc)
+								if not over:
+									var kdir := dp.normalized() if dp.length() > 0.01 else Vector2.RIGHT
+									px += kdir.x * 28.0
+									py += kdir.y * 28.0
+									_clamp_player()
+						_add_tele(ax, ay, ar, atele, acb, null, "aoe_big")
+						_ev("sfx", "warn")
+					else:
+						e.ability_t = 0.6 + rng.randf() * 0.6
+				if e.warn_t > 0.0:
+					e.warn_t -= dt
+					vx *= 0.25
+					vy *= 0.25
+				e.lift = sin(real_t * 2.6 + e.phase) * 7.0
 			SimEnemy.AI_BOMBER:
 				if e.state_id == SimEnemy.ST_FUSE:
 					e.timer -= dt
@@ -2103,26 +2432,27 @@ func _update_enemies(dt: float) -> void:
 		e.kvy = kvy
 		var sx := 0.0
 		var sy := 0.0
-		var bucket: Array = buckets[e.grid_idx]
-		var bsz := bucket.size()
-		if bsz > 1:
-			var sep_n := 0
-			for bi in range(bsz):
-				var o: SimEnemy = bucket[bi]
-				if o == e:
-					continue
-				sep_n += 1
-				var ox := ex - o.x
-				var oy := ey - o.y
-				var d2 := ox * ox + oy * oy
-				var rr := er + o.r
-				if d2 < rr * rr and d2 > 0.01:
-					var d := sqrt(d2)
-					var fac := (rr - d) / (rr * d) * 90.0
-					sx += ox * fac
-					sy += oy * fac
-				if sep_n >= SpatialGrid.MAX_SEP_NEIGHBORS:
-					break
+		if e.grid_idx >= 0:
+			var bucket: Array = buckets[e.grid_idx]
+			var bsz := bucket.size()
+			if bsz > 1:
+				var sep_n := 0
+				for bi in range(bsz):
+					var o: SimEnemy = bucket[bi]
+					if o == e:
+						continue
+					sep_n += 1
+					var ox := ex - o.x
+					var oy := ey - o.y
+					var d2 := ox * ox + oy * oy
+					var rr := er + o.r
+					if d2 < rr * rr and d2 > 0.01:
+						var d := sqrt(d2)
+						var fac := (rr - d) / (rr * d) * 90.0
+						sx += ox * fac
+						sy += oy * fac
+					if sep_n >= SpatialGrid.MAX_SEP_NEIGHBORS:
+						break
 		e.x = ex + (vx + kvx + sx) * dt
 		e.y = ey + (vy + kvy + sy) * dt
 		e.vx = vx
@@ -2144,16 +2474,24 @@ func _update_enemies(dt: float) -> void:
 		# 接触伤害
 		e.contact_cd -= dt
 		if not over and e.contact_cd <= 0.0 and dist < e.r + touch_r:
+			var was_vuln := invuln <= 0.0 and dash_inv <= 0.0
 			hurt_player(e.dmg, e.x, e.y, ("warden" if e.warden else ("boss" if e.boss else e.type)) + ":contact")
+			if was_vuln and not over:
+				if e.ai_id == SimEnemy.AI_FROST:
+					apply_player_slow(float(e.def.get("slowDur", 3.0)))
+				elif e.ai_id == SimEnemy.AI_GRIEVOUS:
+					apply_player_wound(float(e.def.get("woundDur", 5.0)))
 			e.contact_cd = 0.5
 			if not is_same(cur, enemies):
 				return
-		# 离太远的普通妖物回收
+		# 离太远的普通妖物前移重铺到前进方向屏幕边缘
 		if not e.alive:
 			continue
-		if not e.boss and not e.elite and dist > 1500.0:
-			e.alive = false
-			continue
+		if not e.boss and not e.elite and dist > 980.0:
+			if phase == PH_RIFT:
+				e.alive = false
+				continue
+			_reposition_straggler(e)
 		cur[w] = e
 		w += 1
 	if is_same(cur, enemies):
@@ -2241,24 +2579,47 @@ func _swordwarden_ai(e: SimEnemy, dt: float, ux: float, uy: float, dist: float) 
 	return v
 
 
+func _pick_flank_point(min_d: float, max_d: float) -> Vector2:
+	var base_ang := rng.randf() * TAU
+	var d := min_d + rng.randf() * maxf(1.0, max_d - min_d)
+	var bx := px + cos(base_ang) * d
+	var by := py + sin(base_ang) * d
+	if phase == PH_RIFT:
+		var c := Vector2(W / 2.0, H / 2.0)
+		var v := Vector2(bx, by) - c
+		var R: float = float(GameData.DG.rift.arenaRadius) - 20.0
+		if v.length() > R:
+			v = v.normalized() * R
+			bx = c.x + v.x
+			by = c.y + v.y
+	else:
+		bx = clampf(bx, MARGIN, W - MARGIN)
+		by = clampf(by, MARGIN, H - MARGIN)
+	return Vector2(bx, by)
+
+
 func _elite_slam(e: SimEnemy, dt: float, dist: float) -> void:
 	e.slam_t -= dt
-	if e.slam_t <= 0.0 and dist < 420.0:
+	if e.slam_t <= 0.0 and dist < 440.0:
 		var cdm := 0.7 if e.quake else 1.0
 		var rm := 1.15 if e.quake else 1.0
 		e.slam_t = e.el.slamCd * cdm
 		var x := e.x
 		var y := e.y
-		var rad: float = e.el.slamR * rm
+		var rad: float = maxf(float(e.el.slamR) * rm, 165.0)
 		var dmg: float = float(e.el.slamDmg) * e.dmg_mul
+		var wdur: float = float(e.el.get("woundDur", 4.0))
 		var src := ("warden" if e.warden else "elite_" + e.type) + ":slam"
 		var cb := func() -> void:
 			if not e.alive:
 				return
 			_ev("shock", x, y, rad)
 			if Vector2(px - x, py - y).length() < rad + 10.0:
+				var was_vuln := not over and invuln <= 0.0 and dash_inv <= 0.0
 				hurt_player(dmg, x, y, src)
-		_add_tele(x, y, rad, e.el.slamWarn, cb, null)
+				if was_vuln and not over and wdur > 0.0:
+					apply_player_wound(wdur)
+		_add_tele(x, y, rad, e.el.slamWarn, cb, null, "aoe_big")
 
 
 func _warden_ember(e: SimEnemy, dt: float) -> void:
@@ -2287,15 +2648,17 @@ func _elite_ring(e: SimEnemy, dt: float) -> void:
 	e.ring_t = e.el.ringCd
 	e.warn_t = e.el.ringWarn
 	_ev("sfx", "warn")
+	var slow_dur := float(e.el.get("slowDur", 2.5))
 	var cb := func() -> void:
 		if not e.alive:
 			return
 		_ev("sfx", "eshot")
-		var n := int(e.el.ringCount)
+		var n := maxi(int(e.el.ringCount), 18)
 		for i in range(n):
 			var a := float(i) / n * TAU + real_t
-			_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * e.el.bulletSpeed * 0.8, sin(a) * e.el.bulletSpeed * 0.8, float(e.el.bulletDmg) * e.dmg_mul, "elite_lantern:bullet")
-	_add_tele(e.x, e.y, e.el.ringTeleR, e.el.ringWarn, cb, e)
+			var is_frost := (i & 1) == 0
+			_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * e.el.bulletSpeed * 0.8, sin(a) * e.el.bulletSpeed * 0.8, float(e.el.bulletDmg) * e.dmg_mul, "elite_lantern:bullet", is_frost, slow_dur if is_frost else 0.0, 0.0, true)
+	_add_tele(e.x, e.y, maxf(float(e.el.ringTeleR), 150.0), e.el.ringWarn, cb, e)
 
 
 func _boss_ai(e: SimEnemy, dt: float) -> void:
@@ -2314,6 +2677,22 @@ func _boss_ai(e: SimEnemy, dt: float) -> void:
 		boss_enraged = true
 		_ev("banner", "灯骸老祖 • 回光返照（出招加快）", "#ff4a3a")
 		_ev("sfx", "roar")
+	# Boss 周期闪现换位（仅在非硬直/非前摇期间触发）
+	if e.stagger_t <= 0.0 and e.warn_t <= 0.0:
+		e.ability_t -= dt
+		if e.ability_t <= 0.0:
+			var bcd := float(B.get("blinkCd", 7.5)) * (0.78 if boss_phase else 1.0)
+			e.ability_t = bcd
+			var btele := float(B.get("blinkTele", 0.65))
+			var bp := _pick_flank_point(240.0, 320.0)
+			var bcb := func() -> void:
+				if not e.alive:
+					return
+				e.x = bp.x
+				e.y = bp.y
+				_ev("shock", bp.x, bp.y, 90.0)
+			_add_tele(bp.x, bp.y, 75.0, btele, bcb, null, "blink")
+			_ev("sfx", "warn")
 	e.atk_t -= dt
 	if e.atk_t > 0.0:
 		return
@@ -2338,23 +2717,33 @@ func _boss_ai(e: SimEnemy, dt: float) -> void:
 				var sp: float = B.ringSpeed * (1.0 if rr == 0 else 0.78)
 				for i in range(n):
 					var a := float(i) / n * TAU + rr * (PI / n) + real_t * 0.3
-					_spawn_ebullet(e.x, e.y - 120.0, cos(a) * sp, sin(a) * sp, B.bulletDmg, "boss:bullet")
+					_spawn_ebullet(e.x, e.y - 120.0, cos(a) * sp, sin(a) * sp, B.bulletDmg, "boss:bullet", false, 0.0, 0.0, true)
 			_add_tele(e.x, e.y, B.ringTeleR if r == 0 else 0.0, B.ringWarn + r * 0.32, cb, e)
 	elif move == 1:
+		var slam_r := maxf(float(B.slamR), 140.0)
 		for i in range(int(B.slamCount[ph])):
 			var x := px + (0.0 if i == 0 else (rng.randf() - 0.5) * 360.0)
 			var y := py + (0.0 if i == 0 else (rng.randf() - 0.5) * 260.0)
 			var cb2 := func() -> void:
-				_ev("shock", x, y, B.slamR)
-				if Vector2(px - x, py - y).length() < B.slamR + 8.0:
+				_ev("shock", x, y, slam_r)
+				if Vector2(px - x, py - y).length() < slam_r + 8.0:
 					hurt_player(B.slamDmg, x, y, "boss:slam")
-			_add_tele(x, y, B.slamR, B.slamWarn[ph] + i * 0.12, cb2, null)
+			_add_tele(x, y, slam_r, B.slamWarn[ph] + i * 0.12, cb2, null, "aoe_big")
 		_ev("sfx", "warn")
 	elif enemies.size() < B.summonCap:
 		var cnt := int(B.summon) + (4 if boss_phase else 0) + int(GameData.DG.threat.bossSummonAdd) * _threat_tier()
+		var stypes_raw: Array = B.get("summonTypes", ["paperman", "foxfire", "wraith_blink", "frost_bride", "blood_leech", "bone_charger", "bell_mage"])
+		var stypes: Array = []
+		for st in stypes_raw:
+			var sk := String(st)
+			if GameData.EN.has(sk):
+				stypes.append(sk)
+		if stypes.is_empty():
+			stypes.append("paperman")
 		for i in range(cnt):
 			var a := float(i) / cnt * TAU
-			var m := spawn_enemy("paperman", 0.0, 0.0)
+			var stype: String = stypes[i % stypes.size()]
+			var m := spawn_enemy(stype, 0.0, 0.0)
 			m.x = e.x + cos(a) * 140.0
 			m.y = e.y + sin(a) * 100.0
 
@@ -2396,7 +2785,10 @@ func _boss_half_wave(e: SimEnemy, H2: Dictionary, side: float, warn: float, chai
 		_ev("sweep", cx, cy, w, h)
 		var pr := float(GameData.BAL.player.radius)
 		if absf(px - cx) <= w * 0.5 + pr and absf(py - 30.0 - cy) <= h * 0.5 + pr:
+			var was_vuln := not over and invuln <= 0.0 and dash_inv <= 0.0
 			hurt_player(float(H2.dmg), cx, cy, "boss:half")
+			if was_vuln and not over:
+				apply_player_wound(float(H2.get("woundDur", GameData.EN.boss.get("woundDur", 4.0))))
 		if chain and e.alive and not over:
 			_ev("sfx", "warn")
 			_boss_half_wave(e, H2, -side, float(H2.gap), false)
@@ -2419,11 +2811,14 @@ func _boss_drop(e: SimEnemy, B: Dictionary) -> void:
 			return
 		_ev("shock", x, y, r)
 		if Vector2(px - x, py - y).length() < r + float(GameData.BAL.player.radius):
+			var was_vuln := not over and invuln <= 0.0 and dash_inv <= 0.0
 			hurt_player(float(D2.dmg), x, y, "boss:drop")
+			if was_vuln and not over:
+				apply_player_wound(float(D2.get("woundDur", B.get("woundDur", 4.0))))
 		var sdur := float(B.get("stagger", {}).get("dur", 1.5))
 		e.stagger_t = maxf(e.stagger_t, sdur)
 		_ev("stagger", e.x, e.y)
-	_add_tele(x, y, r, float(D2.warn), cb, null)
+	_add_tele(x, y, r, float(D2.warn), cb, null, "aoe_big")
 
 
 func _enemy_shoot(e: SimEnemy, ux: float, uy: float) -> void:
@@ -2433,7 +2828,15 @@ func _enemy_shoot(e: SimEnemy, ux: float, uy: float) -> void:
 	_ev("sfx", "eshot")
 	for i in range(n):
 		var a: float = base + (i - (n - 1) / 2.0) * (float(e.el.fanSpread) if e.elite else 0.0)
-		_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * s.bulletSpeed, sin(a) * s.bulletSpeed, float(s.bulletDmg) * e.dmg_mul, ("elite_" if e.elite else "") + e.type + ":bullet")
+		_spawn_ebullet(e.x, e.y - e.h * 0.5, cos(a) * s.bulletSpeed, sin(a) * s.bulletSpeed, float(s.bulletDmg) * e.dmg_mul, ("elite_" if e.elite else "") + e.type + ":bullet", false, 0.0, 0.0, e.elite)
+
+
+func _enemy_shoot_frost(e: SimEnemy, ux: float, uy: float) -> void:
+	var spd := float(e.def.get("bulletSpeed", 170.0))
+	var dmg := float(e.def.get("bulletDmg", 10.0)) * e.dmg_mul
+	var sdur := float(e.def.get("slowDur", 3.0))
+	_ev("sfx", "eshot")
+	_spawn_ebullet(e.x, e.y - e.h * 0.5, ux * spd, uy * spd, dmg, e.type + ":frost", true, sdur, 0.0, false)
 
 
 func _explode_bomber(e: SimEnemy) -> void:
@@ -2462,9 +2865,23 @@ func _explode_bomber(e: SimEnemy) -> void:
 			damage_fast(o, bdmg, "blast", true, false, false, false, -1.0, true, odx, ody)
 
 
-func _spawn_ebullet(x: float, y: float, vx: float, vy: float, dmg: float, src: String) -> void:
-	if ebullets.size() >= 240:
-		ebullets.pop_front()
+func _spawn_ebullet(
+	x: float,
+	y: float,
+	vx: float,
+	vy: float,
+	dmg: float,
+	src: String,
+	frost: bool = false,
+	slow_dur: float = 0.0,
+	wound_dur: float = 0.0,
+	priority: bool = false
+) -> void:
+	if ebullets.size() >= MAX_ACTIVE_EBULLETS:
+		if priority:
+			ebullets.pop_front()
+		else:
+			return
 	var b := SimBullet.new()
 	b.x = x
 	b.y = y
@@ -2473,6 +2890,9 @@ func _spawn_ebullet(x: float, y: float, vx: float, vy: float, dmg: float, src: S
 	b.dmg = dmg
 	b.life = 5.0
 	b.mark = false
+	b.frost = frost
+	b.slow_dur = slow_dur
+	b.wound_dur = wound_dur
 	b.hits = {"src": src}
 	ebullets.append(b)
 
@@ -2496,7 +2916,15 @@ func _update_ebullets(dt: float) -> void:
 		var dx := b.x - px
 		var dy := b.y - pyc
 		if not over and dx * dx + dy * dy < 676.0:
+			var was_vuln := invuln <= 0.0 and dash_inv <= 0.0
+			var b_slow := b.slow_dur
+			var b_wound := b.wound_dur
 			hurt_player(b.dmg, b.x, b.y, b.hits.src)
+			if was_vuln and not over:
+				if b_slow > 0.0:
+					apply_player_slow(b_slow)
+				if b_wound > 0.0:
+					apply_player_wound(b_wound)
 			if not is_same(cur, ebullets) or cur.is_empty():
 				return
 			var last2 := cur.size() - 1
@@ -2507,12 +2935,25 @@ func _update_ebullets(dt: float) -> void:
 		i += 1
 
 
-func _add_tele(x: float, y: float, r: float, dur: float, cb: Callable, follow: SimEnemy) -> void:
+func _add_tele(
+	x: float,
+	y: float,
+	r: float,
+	dur: float,
+	cb: Callable,
+	follow: SimEnemy,
+	kind: String = "",
+	tx: float = 0.0,
+	ty: float = 0.0
+) -> void:
 	var tl := SimTele.new()
 	tl.x = x
 	tl.y = y
+	tl.tx = tx
+	tl.ty = ty
 	tl.r = r
 	tl.dur = dur
+	tl.kind = kind
 	tl.cb = cb
 	tl.follow = follow
 	teles.append(tl)
@@ -2775,9 +3216,7 @@ func _collect(k: SimPickup) -> void:
 		SimPickup.PK_OIL:
 			LanternRules.add_oil(self, float(LanternRules.lcfg().get("oilPickupGain", 28.0)))
 			if phase != PH_RIFT:
-				var h := minf(D.oilHeal, maxhp - hp)
-				hp += h
-				_ev("heal", h)
+				heal_player(float(D.oilHeal), true)
 		SimPickup.PK_CHEST:
 			_ev("sfx", "chest")
 			pending_chest += 1
@@ -2991,7 +3430,7 @@ func choose(i: int) -> void:
 			asc_hp_n += 1
 			hp += float(GameData.DG.ascend.hp)
 	elif c.kind == "heal":
-		hp += GameData.BAL.drops.fillerHeal
+		heal_player(float(GameData.BAL.drops.fillerHeal), false)
 	elif c.kind == "soul":
 		bonus_soul += int(GameData.BAL.soul.fillerSoul)
 	elif c.kind == "coin":
@@ -3316,10 +3755,8 @@ func _use_landmark(i: int) -> void:
 				spawn_enemy("paperman", -1.0, -1.0, {"pos": pp + Vector2(cos(a), sin(a)) * 240.0})
 			what = "灯冢惊魂 • 击败守冢精英得宝箱"
 		"incense":
-			var heal := maxhp * 0.4
-			hp = minf(maxhp, hp + heal)
-			_ev("heal", heal)
-			what = "上香 • 回复 %d 生命" % int(heal)
+			var heal := heal_player(maxhp * 0.4, true)
+			what = "上香 • 回复 %d 生命" % int(heal) if heal > 0.0 else "上香 • 重伤禁疗无法回血"
 	poi_log.append({"t": snappedf(clock, 0.1), "kind": k, "i": i, "res": what})
 	_ev("sfx", "chest")
 	_ev("banner", "%s • %s" % [pois[i].name, what], "#ffcf5a")
@@ -3967,7 +4404,7 @@ func fork() -> Sim:
 		if pr.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
 			var n: String = pr.name
 			# 妖物/掉落对象不能浅共享：duplicate(true) 不复制对象，克隆里打怪会改到真局面。大地图收起的妖物、收起的掉落不进克隆（试射只看当前场地）。
-			if n in ["rng", "enemies", "bullets", "ebullets", "pickups", "teles", "bolts", "trails", "grid", "grid_sys", "dps_tracker", "dps_breakdown", "_q_bullet", "_q_orb", "_q_trail", "_q_lei", "_q_mark", "_q_qi", "_q_qi_pick", "_q_wheel", "_q_sw_orbit", "_q_thrust", "_q_pet", "_q_pet_shot", "_q_pet_sub", "_q_bomber", "_q_flare", "_q_rule", "_q_corpse", "_q_aoe", "_q_sets", "_q_leihuo", "_q_fallback", "_q_lei_cands", "_q_mark_hits", "_pk_grid", "_pk_counts", "events", "lei_queue", "boss", "rift_warden", "guard_ref", "vine_boss", "world_stash", "arena_stash", "orb_pos", "choice"]:
+			if n in ["rng", "enemies", "bullets", "ebullets", "pickups", "teles", "bolts", "trails", "grid", "grid_sys", "dps_tracker", "dps_breakdown", "_q_bullet", "_q_orb", "_q_trail", "_q_lei", "_q_mark", "_q_qi", "_q_qi_pick", "_q_wheel", "_q_sw_orbit", "_q_thrust", "_q_pet", "_q_pet_shot", "_q_pet_sub", "_q_bomber", "_q_flare", "_q_rule", "_q_corpse", "_q_aoe", "_q_sets", "_q_leihuo", "_q_fallback", "_q_lei_cands", "_q_mark_hits", "_near_grid_enemies", "_pk_grid", "_pk_counts", "events", "lei_queue", "boss", "rift_warden", "guard_ref", "vine_boss", "world_stash", "arena_stash", "orb_pos", "choice"]:
 				continue
 			var v: Variant = get(n)
 			if v is Dictionary or v is Array:
@@ -4328,9 +4765,8 @@ func _pet_trigger_combo(G: Dictionary) -> void:
 			ebullets.pop_back()
 		bi2 -= 1
 	var heal_amt := maxhp * 0.15
-	hp = minf(maxhp, hp + heal_amt)
+	heal_player(heal_amt, true)
 	pet_hp = minf(pet_maxhp(), pet_hp + pet_maxhp() * 0.35)
-	_ev("heal", heal_amt)
 	_ev("pet_combo")
 
 

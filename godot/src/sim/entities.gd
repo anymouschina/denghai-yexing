@@ -11,12 +11,19 @@ const AI_SWORDLORD := 5
 const AI_SEDAN := 6
 const AI_LAMPS := 7
 const AI_BOSS := 8
+const AI_BLINK := 9
+const AI_FROST := 10
+const AI_GRIEVOUS := 11
+const AI_CHARGER := 12
+const AI_AOE_MAGE := 13
 
 const ST_MOVE := 0
 const ST_CHARGE := 1
 const ST_FUSE := 2
 const ST_LUNGE := 3
 const ST_AIM := 4
+const ST_TELE := 5
+const ST_DASH := 6
 
 var uid := 0
 var type := ""
@@ -99,6 +106,13 @@ var bind_t := 0.0
 var ail_mul := 1.0
 var ail_kinds := 0
 var collapse_cd := 0.0
+# v2.4 特殊机动与大范围技能状态（纯标量，零热路径分配）
+var ability_t := 0.0
+var dash_vx := 0.0
+var dash_vy := 0.0
+var dash_t := 0.0
+var blink_tx := 0.0
+var blink_ty := 0.0
 
 
 static func ai_to_id(s: String) -> int:
@@ -121,6 +135,16 @@ static func ai_to_id(s: String) -> int:
 			return AI_LAMPS
 		"boss":
 			return AI_BOSS
+		"blink":
+			return AI_BLINK
+		"frost":
+			return AI_FROST
+		"grievous":
+			return AI_GRIEVOUS
+		"charger":
+			return AI_CHARGER
+		"aoe_mage":
+			return AI_AOE_MAGE
 	return AI_CHASE
 
 

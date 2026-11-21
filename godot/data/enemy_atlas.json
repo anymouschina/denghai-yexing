@@ -28,5 +28,35 @@
   0,
   191,
   256
+ ],
+ "enemy_wraith_blink": [
+  0,
+  258,
+  296,
+  256
+ ],
+ "enemy_frost_bride": [
+  298,
+  258,
+  188,
+  256
+ ],
+ "enemy_blood_leech": [
+  488,
+  258,
+  260,
+  256
+ ],
+ "enemy_bone_charger": [
+  750,
+  258,
+  342,
+  256
+ ],
+ "enemy_bell_mage": [
+  1094,
+  258,
+  227,
+  256
  ]
 }

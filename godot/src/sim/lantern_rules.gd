@@ -136,9 +136,9 @@ static func step_lantern_and_rules(sim: Sim, dt: float) -> void:
 		var drain := float(L.get("drainPerSec", 1.6))
 		sim.lantern_oil = maxf(0.0, sim.lantern_oil - drain * dt)
 	sync_lantern_cache(sim)
-	# 生命自然回复（来自聚魂派羁绊 + 绿葫芦）
+	# 生命自然回复（来自聚魂派羁绊 + 绿葫芦；重伤禁疗期间阻断）
 	if sim.s_regen > 0.0 and sim.hp < sim.maxhp and sim.phase != Sim.PH_BREAK:
-		sim.hp = minf(sim.maxhp, sim.hp + sim.s_regen * dt)
+		sim.heal_player(sim.s_regen * dt, false)
 	# 擦灯闪避检测（冲刺无敌帧内穿过敌弹或预警区）
 	if sim.dash_inv > 0.0 and not sim._dash_grazed:
 		var grazed := false
@@ -247,11 +247,11 @@ static func on_enemy_kill(sim: Sim, e: SimEnemy) -> void:
 	if e.elite or e.boss:
 		sim.add_trauma(0.45 if e.boss else 0.28)
 		sim.hitstop_t = maxf(sim.hitstop_t, 0.06 if e.boss else 0.035)
-	# 阴律：残灯狂澜击杀回血
+	# 阴律：残灯狂澜击杀回血（重伤禁疗期间阻断）
 	if sim._has_rule_low_frenzy and sim._low_frenzy_dmg_add > 0.0:
 		var rp_f: Dictionary = GameData.RULE_BY_ID.get("rule_low_frenzy", {}).get("params", {})
 		var heal := float(rp_f.get("killHeal", 2.0))
-		sim.hp = minf(sim.maxhp, sim.hp + heal)
+		sim.heal_player(heal, false)
 	# 阴律：尸爆传火（严格递归上限 maxDepth = 1）
 	if sim._has_rule_corpse_flame and e.burn_t > 0.0:
 		var rp_c: Dictionary = GameData.RULE_BY_ID.get("rule_corpse_flame", {}).get("params", {})

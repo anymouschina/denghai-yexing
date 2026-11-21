@@ -342,6 +342,7 @@ func _init() -> void:
 	print("== 15/10 分钟模式 ==")
 	var mf := Sim.new(3, {"mode": "full"})
 	var mq := Sim.new(3, {"mode": "quick"})
+	mf.invuln = 99.0; mq.invuln = 99.0
 	for i in range(300):
 		mf.choice = {}; mq.choice = {}
 		mf.step(0.1); mq.step(0.1)
@@ -495,6 +496,7 @@ func _init() -> void:
 		lm.px = float(lm.pois[idx2].x); lm.py = float(lm.pois[idx2].y)
 		var st0: String = lm.poi_state(idx2)
 		for i in range(30):
+			lm.choice = {}
 			lm.step(0.05)
 			if lm.poi_log.size() > k:
 				break
