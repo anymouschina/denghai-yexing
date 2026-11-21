@@ -287,22 +287,33 @@ class ParticlePool extends RefCounted:
 			var hs := s * 0.5
 			batch.full(px[i] - hs, py[i] - hs, s, s, c)
 
-	## 直接写入 MultiMesh 2D 缓冲区（stride = 12 floats: 8 transform2d + 4 color），返回可见实例数
-	func fill_multimesh(buf: PackedFloat32Array) -> int:
+	## 直接写入 MultiMesh 2D 缓冲区（stride = 12 floats: 8 transform2d + 4 color），按相机视口裁剪并返回可见实例数
+	func fill_multimesh(buf: PackedFloat32Array, vx0: float = -1e9, vy0: float = -1e9, vx1: float = 1e9, vy1: float = 1e9, max_out: int = -1) -> int:
 		var cnt := count
+		var lim := buf.size() / 12
+		if max_out >= 0 and max_out < lim:
+			lim = max_out
 		var o := 0
+		var vis := 0
 		for i in range(cnt):
+			var x := px[i]
+			var y := py[i]
+			if x < vx0 or x > vx1 or y < vy0 or y > vy1:
+				continue
+			if vis >= lim:
+				break
 			var k := clampf(life[i] / max_life[i], 0.0, 1.0)
 			var s := 64.0 * size[i] * (0.4 + 0.6 * k)
 			var hs := s * 0.5
 			var c := col[i]
 			buf[o] = s
-			buf[o + 3] = px[i] - hs
+			buf[o + 3] = x - hs
 			buf[o + 5] = s
-			buf[o + 7] = py[i] - hs
+			buf[o + 7] = y - hs
 			buf[o + 8] = c.r
 			buf[o + 9] = c.g
 			buf[o + 10] = c.b
 			buf[o + 11] = k
 			o += 12
-		return cnt
+			vis += 1
+		return vis

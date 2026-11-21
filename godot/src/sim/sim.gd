@@ -22,12 +22,15 @@ const SW_CD := 5
 const LANTERN_LOW := 0
 const LANTERN_MID := 1
 const LANTERN_HIGH := 2
+const SCREEN_HALF_W := 720.0
+const SCREEN_HALF_H := 440.0
 
 var rng := RandomNumberGenerator.new()
 var seed_v := 0
 var emit := false
 var events: Array = []
 var touch := false
+var _step_tick := 0
 
 # ---- 输入（每步由外部写入；dash/skill 为边沿，step 消耗）----
 var in_move := Vector2.ZERO
@@ -497,6 +500,10 @@ func choose_push_deeper() -> void:
 	checkpoint()
 
 
+func _is_on_screen(x: float, y: float) -> bool:
+	return absf(x - px) <= SCREEN_HALF_W and absf(y - py) <= SCREEN_HALF_H
+
+
 func _ev(name: String, a: Variant = null, b: Variant = null, c: Variant = null, d: Variant = null) -> void:
 	if emit:
 		events.append([name, a, b, c, d])
@@ -603,7 +610,8 @@ func _on_kill_sets(e: SimEnemy) -> void:
 	if has_set("flame") and e.burn_t > 0.0:
 		var q: Array = _q_sets[mini(set_depth, 3)]
 		set_depth += 1
-		_ev("ring", e.x, e.y - 30.0, 100.0)
+		if e.boss or e.elite or _is_on_screen(e.x, e.y):
+			_ev("ring", e.x, e.y - 30.0, 100.0)
 		grid_sys.query_into(e.x, e.y, 130.0, q)
 		for i in range(q.size()):
 			var o: SimEnemy = q[i]
@@ -817,6 +825,7 @@ func step(dt: float) -> void:
 
 
 func _step_combat(dt: float) -> void:
+	_step_tick += 1
 	if phase != PH_RIFT and real_t >= float(GameData.DG.fusion.atRealSec):
 		_trigger_fusion()
 	if phase != PH_RIFT or mode != "classic" or FARM_KINDS.has(rift_kind):
@@ -1348,9 +1357,10 @@ func damage_fast(
 		var fac := kb_v * e.knock / l
 		e.kvx += kx * fac
 		e.kvy += ky * fac
-	if not no_flash:
+	var vis := e.boss or e.elite or _is_on_screen(e.x, e.y)
+	if not no_flash and vis:
 		e.flash = 0.08
-	if emit:
+	if emit and vis:
 		_ev("dmg", e, dmg, crit, synergy)
 	if weapon != "burn" and weapon != "huanhuo" and s_ignite > 0.0 and rng.randf() < s_ignite:
 		_ignite(e)
@@ -1396,7 +1406,8 @@ func _kill(e: SimEnemy, _weapon: String) -> void:
 		sw_kills += 1
 		_sw_check()
 	e.mark_t = 0.0
-	_ev("kill", e)
+	if e.boss or e.elite or _is_on_screen(e.x, e.y):
+		_ev("kill", e)
 	if e.warden:
 		return
 	if e.elite:
@@ -1691,7 +1702,8 @@ func _detonate_mark(e: SimEnemy) -> void:
 	e.mark_t = 0.0
 	var x := e.x
 	var y := e.y - e.h * 0.4
-	_ev("ring", x, y, mrad)
+	if e.boss or e.elite or _is_on_screen(x, y):
+		_ev("ring", x, y, mrad)
 	grid_sys.query_into(x, y + 40.0, mrad + 80.0, _q_mark)
 	var hits := _q_mark_hits
 	hits.clear()
@@ -1714,7 +1726,8 @@ func _thunder(tgt: SimEnemy, dmg: float, chain: int, hit_set: Dictionary, evl: b
 	if not tgt.alive or over:
 		return
 	var L: Dictionary = GameData.BAL.lei
-	_ev("thunder", tgt.x, tgt.y)
+	if tgt.boss or tgt.elite or _is_on_screen(tgt.x, tgt.y):
+		_ev("thunder", tgt.x, tgt.y)
 	hit_set[tgt.uid] = true
 	var was_burn := tgt.burn_t > 0.0
 	damage_fast(tgt, dmg, "lei", false, evl, false, false, -1.0, true, tgt.x - px, tgt.y - py, float(L.knock))
@@ -1904,6 +1917,9 @@ func _update_enemies(dt: float) -> void:
 	var tx := px
 	var ty := py - 20.0
 	var decay := pow(0.0015, dt)
+	var decay2 := decay * decay
+	var dt2 := dt * 2.0
+	var step_parity := _step_tick & 1
 	var touch_r: float = float(BAL.player.radius) + 6.0
 	var buckets := grid_sys._buckets
 	var cur := enemies   # 循环里玩家可能在副本中倒下 → _return_world 把 enemies 换成大地图妖物；那时不能再用本帧的副本名单覆盖回去
@@ -1916,18 +1932,6 @@ func _update_enemies(dt: float) -> void:
 			continue
 		var ex := e.x
 		var ey := e.y
-		var er := e.r
-		var dx := tx - ex
-		var dy := ty - ey
-		var dist := maxf(0.001, sqrt(dx * dx + dy * dy))
-		var ux := dx / dist
-		var uy := dy / dist
-		var vx := 0.0
-		var vy := 0.0
-		e.squash = 1.0
-		e.lift = 0.0
-		if e.flash > 0.0:
-			e.flash -= dt
 		if e.burn_t > 0.0:
 			e.burn_t -= dt
 			e.burn_tick -= dt
@@ -1965,6 +1969,45 @@ func _update_enemies(dt: float) -> void:
 				ch = true
 			if ch:
 				_ail_refresh(e)
+		# 屏外普通怪 LOD：跳过 8 邻域分离、动画数学(hop/lift/squash/flash/flip)、远程走位与发射；隔帧直线追击与超距回收
+		if not e.boss and not e.elite and (absf(ex - px) > SCREEN_HALF_W or absf(ey - py) > SCREEN_HALF_H):
+			if (e.uid & 1) == step_parity:
+				var odx := tx - ex
+				var ody := ty - ey
+				var od2 := odx * odx + ody * ody
+				if od2 > 2250000.0:
+					e.alive = false
+					continue
+				var odist := maxf(0.001, sqrt(od2))
+				var osp := e.speed
+				if e.seal_n > 0 or e.bind_t > 0.0:
+					var osf := 0.0 if e.bind_t > 0.0 else maxf(0.3, 1.0 - float(e.seal_n) * seal_slow_per)
+					osp *= osf
+				var ovx := (odx / odist) * osp
+				var ovy := (ody / odist) * osp
+				var okvx := e.kvx * decay2
+				var okvy := e.kvy * decay2
+				e.kvx = okvx
+				e.kvy = okvy
+				e.x = ex + (ovx + okvx) * dt2
+				e.y = ey + (ovy + okvy) * dt2
+				e.vx = ovx
+				e.vy = ovy
+			cur[w] = e
+			w += 1
+			continue
+		var er := e.r
+		var dx := tx - ex
+		var dy := ty - ey
+		var dist := maxf(0.001, sqrt(dx * dx + dy * dy))
+		var ux := dx / dist
+		var uy := dy / dist
+		var vx := 0.0
+		var vy := 0.0
+		e.squash = 1.0
+		e.lift = 0.0
+		if e.flash > 0.0:
+			e.flash -= dt
 		match e.ai_id:
 			SimEnemy.AI_CHASE:
 				vx = ux * e.speed
@@ -2396,7 +2439,8 @@ func _enemy_shoot(e: SimEnemy, ux: float, uy: float) -> void:
 func _explode_bomber(e: SimEnemy) -> void:
 	var d: Dictionary = e.def
 	var br := e.blast_r
-	_ev("boom", e.x, e.y - 20.0)
+	if _is_on_screen(e.x, e.y):
+		_ev("boom", e.x, e.y - 20.0)
 	var pdx := px - e.x
 	var pdy := py - e.y
 	var pr := br + 10.0
@@ -2651,6 +2695,8 @@ func _spawn_pickup(kind: String, x: float, y: float, val: int) -> void:
 
 
 func _update_pickups(dt: float) -> void:
+	if over:
+		return
 	var B: Dictionary = GameData.BAL.player
 	var D: Dictionary = GameData.BAL.drops
 	var tx := px
@@ -2662,60 +2708,57 @@ func _update_pickups(dt: float) -> void:
 	var light_spd := float(B.lightPullSpeed)
 	var mag_spd := float(B.magnetSpeed)
 	var mag_pop := float(D.magnetPop)
+	var far_x := maxf(760.0, maxf(pull_r, light_r))
+	var far_y := maxf(480.0, maxf(pull_r, light_r))
 	var i := pickups.size() - 1
 	while i >= 0:
 		var k: SimPickup = pickups[i]
 		var dx := tx - k.x
 		var dy := ty - k.y
-		var d2 := dx * dx + dy * dy
-		if not over:
-			if not k.mag:
-				if d2 < pull_r2:
-					k.mag = true
-					k.spd = -mag_pop
-					_pk_grid_remove(k)
-				elif k.kind_id == SimPickup.PK_SOUL and d2 < light_r2:
-					var dl := maxf(0.001, sqrt(d2))
-					k.x += dx / dl * light_spd * dt
-					k.y += dy / dl * light_spd * dt
-					if k.cell >= 0:
-						var nc := _pk_cell_of(k.x, k.y)
-						if nc != k.cell:
-							_pk_grid_remove(k)
-							k.cell = nc
-							(_pk_grid[nc] as Array).append(k)
-					if d2 < 484.0 and k.spd >= 0.0:
+		if not k.mag:
+			if absf(dx) > far_x or absf(dy) > far_y:
+				i -= 1
+				continue
+			var d2 := dx * dx + dy * dy
+			if d2 < pull_r2:
+				k.mag = true
+				k.spd = -mag_pop
+				_pk_grid_remove(k)
+			elif k.kind_id == SimPickup.PK_SOUL and d2 < light_r2:
+				var dl := maxf(0.001, sqrt(d2))
+				k.x += dx / dl * light_spd * dt
+				k.y += dy / dl * light_spd * dt
+				if k.cell >= 0:
+					var nc := _pk_cell_of(k.x, k.y)
+					if nc != k.cell:
 						_pk_grid_remove(k)
-						_pk_counts[k.kind_id] = maxi(0, _pk_counts[k.kind_id] - 1)
-						var last0 := pickups.size() - 1
-						if i != last0:
-							pickups[i] = pickups[last0]
-						pickups.pop_back()
-						_collect(k)
-						i -= 1
-						continue
-					k.bob += dt * 4.0
-					i -= 1
-					continue
-				else:
-					k.bob += dt * 4.0
-					i -= 1
-					continue
-			if k.mag:
-				var d := maxf(0.001, sqrt(d2))
-				k.spd = minf(mag_spd, k.spd + 1600.0 * dt)
-				k.x += dx / d * k.spd * dt
-				k.y += dy / d * k.spd * dt
-				if d < 22.0 and k.spd >= 0.0:
+						k.cell = nc
+						(_pk_grid[nc] as Array).append(k)
+				if d2 < 484.0 and k.spd >= 0.0:
+					_pk_grid_remove(k)
 					_pk_counts[k.kind_id] = maxi(0, _pk_counts[k.kind_id] - 1)
-					var last := pickups.size() - 1
-					if i != last:
-						pickups[i] = pickups[last]
+					var last0 := pickups.size() - 1
+					if i != last0:
+						pickups[i] = pickups[last0]
 					pickups.pop_back()
 					_collect(k)
-					i -= 1
-					continue
-		k.bob += dt * 4.0
+				i -= 1
+				continue
+			else:
+				i -= 1
+				continue
+		if k.mag:
+			var d := maxf(0.001, sqrt(dx * dx + dy * dy))
+			k.spd = minf(mag_spd, k.spd + 1600.0 * dt)
+			k.x += dx / d * k.spd * dt
+			k.y += dy / d * k.spd * dt
+			if d < 22.0 and k.spd >= 0.0:
+				_pk_counts[k.kind_id] = maxi(0, _pk_counts[k.kind_id] - 1)
+				var last := pickups.size() - 1
+				if i != last:
+					pickups[i] = pickups[last]
+				pickups.pop_back()
+				_collect(k)
 		i -= 1
 
 
@@ -4206,7 +4249,8 @@ func _pet_chain_thunder(tgt: SimEnemy, dmg: float) -> void:
 			if bolts.size() >= 48:
 				bolts.pop_front()
 			bolts.append({"x1": from_p.x, "y1": from_p.y, "x2": cur.x, "y2": cur.y - cur.h * 0.45, "life": 0.24, "seed": rng.randf()})
-		_ev("thunder", cur.x, cur.y)
+		if cur.boss or cur.elite or _is_on_screen(cur.x, cur.y):
+			_ev("thunder", cur.x, cur.y)
 		_pet_add_fx(1, cur.x, cur.y - cur.h * 0.4, 0.34, 85.0)
 		damage_fast(cur, d, "pet", false, false, false, false, -1.0, true, cur.x - pet_pos.x, cur.y - pet_pos.y, 80.0)
 		if ail_on and cur.alive:
@@ -4226,7 +4270,8 @@ func _pet_shockwave(tgt: SimEnemy, dmg: float) -> void:
 		pet_pos = center
 	var rad := 195.0
 	_pet_add_fx(2, pet_pos.x, pet_pos.y, 0.45, rad)
-	_ev("ring", pet_pos.x, pet_pos.y, rad)
+	if _is_on_screen(pet_pos.x, pet_pos.y):
+		_ev("ring", pet_pos.x, pet_pos.y, rad)
 	grid_sys.query_into(pet_pos.x, pet_pos.y, rad + 40.0, _q_pet_sub)
 	for j in range(_q_pet_sub.size()):
 		var e: SimEnemy = _q_pet_sub[j]
@@ -4426,7 +4471,8 @@ func _update_pet(dt: float) -> void:
 					if bolts.size() >= 48:
 						bolts.pop_front()
 					bolts.append({"x1": wt.x, "y1": wt.y - 420.0, "x2": wt.x, "y2": wt.y - wt.h * 0.4, "life": 0.28, "seed": rng.randf()})
-				_ev("thunder", wt.x, wt.y)
+				if wt.boss or wt.elite or _is_on_screen(wt.x, wt.y):
+					_ev("thunder", wt.x, wt.y)
 				_pet_add_fx(combo_waves % 3, wt.x, wt.y - wt.h * 0.35, 0.42, 150.0)
 				grid_sys.query_into(wt.x, wt.y, 170.0, _q_pet_sub)
 				for j in range(_q_pet_sub.size()):
@@ -5067,7 +5113,7 @@ func _ail_collapse_check(e: SimEnemy) -> void:
 
 func _react(e: SimEnemy, id: String) -> void:
 	ail_log[id] = int(ail_log.get(id, 0)) + 1
-	if emit:
+	if emit and (e.boss or e.elite or _is_on_screen(e.x, e.y)):
 		_ev("react", id, e.x, e.y - e.h * 0.6)
 
 

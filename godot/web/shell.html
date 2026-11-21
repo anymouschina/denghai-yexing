@@ -98,6 +98,24 @@ const engine = new Engine(GODOT_CONFIG);
   document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
   const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
   if (missing.length) { fail(new Error('当前浏览器缺少运行所需特性：\n' + missing.join('\n'))); return; }
+  // 限制 WebGL 像素比上限：桌面 <= 2.0、触屏手机 <= 1.5，兼顾 Retina 清晰度与填充率
+  try {
+    const rawDpr = Number(window.devicePixelRatio) || 1;
+    const dprDesc = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio')
+      || (window.Window && Object.getOwnPropertyDescriptor(window.Window.prototype, 'devicePixelRatio'));
+    const rawGet = dprDesc && typeof dprDesc.get === 'function' ? dprDesc.get : null;
+    const isTouch = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+      || ('ontouchstart' in window)
+      || (navigator.maxTouchPoints > 0);
+    const maxDpr = isTouch ? 1.5 : 2.0;
+    Object.defineProperty(window, 'devicePixelRatio', {
+      configurable: true,
+      get() {
+        const cur = rawGet ? Number(rawGet.call(window)) : rawDpr;
+        return Math.min(cur > 0 ? cur : rawDpr, maxDpr);
+      },
+    });
+  } catch (e) {}
   engine.startGame({
     onProgress: (cur, total) => {
       if (cur > 0 && total > 0) { prog.max = total; prog.value = cur; text.textContent = '灯火点燃中… ' + Math.round(cur / total * 100) + '%'; }
