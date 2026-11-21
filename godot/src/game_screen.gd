@@ -18,6 +18,8 @@ var ember_layer: Node2D
 var ember_batch := TriBatch.new()
 var ember_tex: Texture2D
 var hit_stop := 0.0
+var _hit_stop_frames := 0
+var _hit_stop_cd := 0.0
 var bot: Bot = null
 var flare_q := false
 var _was_running := true
@@ -217,10 +219,24 @@ func _process(delta: float) -> void:
 		if flare_q or (touch_mode and touch.consume_flare()):
 			flare_q = false
 			_trigger_flare()
+		if _hit_stop_cd > 0.0:
+			_hit_stop_cd = maxf(0.0, _hit_stop_cd - delta)
 		var dt := minf(delta, 0.05)
 		if view.hit_stop > 0.0:
-			view.hit_stop -= delta
-			dt = 0.0
+			view.hit_stop = minf(view.hit_stop, 0.04)
+			if _hit_stop_cd > 0.0 or _hit_stop_frames >= 2:
+				view.hit_stop = 0.0
+				_hit_stop_frames = 0
+			else:
+				view.hit_stop = maxf(0.0, view.hit_stop - dt)
+				_hit_stop_frames += 1
+				dt = 0.0
+				if view.hit_stop <= 0.0 or _hit_stop_frames >= 2:
+					view.hit_stop = 0.0
+					_hit_stop_frames = 0
+					_hit_stop_cd = 1.5
+		else:
+			_hit_stop_frames = 0
 		if sim.over:
 			dt = delta
 		if Playtest.bench > 0:

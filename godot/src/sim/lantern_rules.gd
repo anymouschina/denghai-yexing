@@ -241,7 +241,9 @@ static func on_enemy_kill(sim: Sim, e: SimEnemy) -> void:
 	# 连杀与 SNKRX 反馈
 	sim.kill_streak += 1
 	sim.kill_streak_t = 2.5
-	sim._ev("kill_streak", sim.kill_streak)
+	var vis := e.boss or e.elite or sim._is_on_screen(e.x, e.y)
+	if vis:
+		sim._ev("kill_streak", sim.kill_streak)
 	if e.elite or e.boss:
 		sim.add_trauma(0.45 if e.boss else 0.28)
 		sim.hitstop_t = maxf(sim.hitstop_t, 0.06 if e.boss else 0.035)
@@ -260,7 +262,8 @@ static func on_enemy_kill(sim: Sim, e: SimEnemy) -> void:
 			var cdmg := clampf(e.maxhp * float(rp_c.get("hpPct", 0.12)), float(rp_c.get("minDmg", 24.0)), float(rp_c.get("maxDmg", 420.0)))
 			var ex := e.x
 			var ey := e.y - 25.0
-			sim._ev("ring", ex, ey, rad)
+			if vis:
+				sim._ev("ring", ex, ey, rad)
 			var near := sim._q_corpse
 			sim.grid_sys.query_into(ex, ey, rad + 30.0, near)
 			for i in range(near.size()):

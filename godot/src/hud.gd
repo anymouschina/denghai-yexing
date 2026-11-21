@@ -6,7 +6,11 @@ extends CanvasLayer
 var game: Node
 var sim: Sim
 var root: Control
+var hud_vp: SubViewport
+var hud_rect: TextureRect
 var canvas: Control
+var _vp_last_phys := Vector2i.ZERO
+var _vp_last_log := Vector2i.ZERO
 var inset := Vector4.ZERO
 var touch_mode := false
 var font: Font
@@ -90,16 +94,35 @@ func setup(p_game: Node, p_sim: Sim, p_touch: bool) -> void:
 	font = UI.font()
 	layer = 10
 	_load_ui_data()
+	hud_vp = SubViewport.new()
+	hud_vp.name = "HudSubViewport"
+	hud_vp.transparent_bg = true
+	hud_vp.handle_input_locally = false
+	hud_vp.disable_3d = true
+	hud_vp.gui_disable_input = true
+	hud_vp.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
+	hud_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	hud_vp.size_2d_override_stretch = true
+	add_child(hud_vp)
+	canvas = Control.new()
+	canvas.name = "HudCanvas"
+	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
+	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.draw.connect(_draw_hud)
+	hud_vp.add_child(canvas)
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.theme = UI.theme()
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
-	canvas = Control.new()
-	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
-	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	canvas.draw.connect(_draw_hud)
-	root.add_child(canvas)
+	hud_rect = TextureRect.new()
+	hud_rect.name = "HudCanvasRect"
+	hud_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hud_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	hud_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	hud_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_rect.texture = hud_vp.get_texture()
+	root.add_child(hud_rect)
 	wick_tex = load("res://assets/icons/wick.png")
 	_build_hud_batch()
 	banner = UI.label("", 26, UI.GOLD, 6)
@@ -150,11 +173,46 @@ func force_redraw() -> void:
 	_dirty = true
 
 
+func _sync_hud_viewport() -> void:
+	if hud_vp == null:
+		return
+	var vp := get_viewport()
+	if vp == null:
+		return
+	var vw := vp.get_visible_rect().size
+	var log_sz := Vector2i(maxi(1, int(round(vw.x))), maxi(1, int(round(vw.y))))
+	var sc := vp.get_final_transform().get_scale()
+	var sx := clampf(absf(sc.x), 0.5, 2.0)
+	var sy := clampf(absf(sc.y), 0.5, 2.0)
+	var phys_sz := Vector2i(maxi(1, int(round(vw.x * sx))), maxi(1, int(round(vw.y * sy))))
+	if phys_sz != _vp_last_phys or log_sz != _vp_last_log:
+		_vp_last_phys = phys_sz
+		_vp_last_log = log_sz
+		hud_vp.size = phys_sz
+		hud_vp.size_2d_override = log_sz
+		if canvas != null:
+			canvas.position = Vector2.ZERO
+			canvas.size = Vector2(log_sz)
+		_dirty = true
+
+
+func _request_hud_redraw() -> void:
+	if not visible:
+		return
+	_sync_hud_viewport()
+	if hud_vp != null:
+		hud_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	if canvas != null:
+		canvas.queue_redraw()
+
+
 func refresh_inset() -> void:
 	inset = SafeArea.insets(get_viewport())
 	# 防止异常大值把界面挤没
 	inset = Vector4(minf(inset.x, 120), minf(inset.y, 60), minf(inset.z, 120), minf(inset.w, 60))
+	_sync_hud_viewport()
 	_dirty = true
+	_request_hud_redraw()
 
 
 func show_banner(text: String, color: String = "#ffc977", big: bool = false) -> void:
@@ -180,6 +238,7 @@ func show_banner(text: String, color: String = "#ffc977", big: bool = false) -> 
 
 func flash_hurt() -> void:
 	hurt_flash = 0.35
+	_dirty = true
 
 
 # ======================================================================
@@ -232,7 +291,7 @@ func tick(delta: float) -> void:
 	if mopen and hurt_flash <= 0.0 and prev_flash <= 0.0:
 		if _dirty:
 			_dirty = false
-			canvas.queue_redraw()
+			_request_hud_redraw()
 		return
 	_redraw_t += delta
 	var sig := sim.level + (sim.phase << 10) + (sim.seg << 14) + (sim.wicks << 18) + (sim.relics.size() << 24) + (sim.gourds.size() << 32)
@@ -243,7 +302,7 @@ func tick(delta: float) -> void:
 	if _dirty or _redraw_t >= interval:
 		_dirty = false
 		_redraw_t = 0.0
-		canvas.queue_redraw()
+		_request_hud_redraw()
 
 
 func modal_open() -> bool:
