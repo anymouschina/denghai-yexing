@@ -11,6 +11,7 @@ const FL_MERGE := 0.45
 const HIT_STOP_MAX := 0.035
 const HIT_STOP_COOLDOWN := 1.5
 const MM_BASE_CAP := 128
+const MM_MAX_CAP := 384
 const MM_SHRINK_IDLE_FRAMES := 180
 const MAX_TEXT_FLOATERS := 6
 const PICKUP_KINDS := ["soul", "coin", "oil", "chest"]
@@ -191,6 +192,11 @@ func setup(p_sim: Sim) -> void:
 	for et in GameData.EN:
 		var ed: Dictionary = GameData.EN[et]
 		var txk := String(ed.get("tex", ""))
+		if not _enemy_cache.has(txk):
+			if _enemy_cache.has(et):
+				txk = String(et)
+			elif _enemy_cache.has("enemy_" + String(et)):
+				txk = "enemy_" + String(et)
 		if _enemy_cache.has(txk):
 			var info: Array = _enemy_cache[txk]
 			var uv: Rect2 = info[5]
@@ -548,6 +554,14 @@ func _consume_events() -> void:
 				player_spring.impulse(-3.2)
 				Audio.play("hurt")
 				_float(sim.px, sim.py - 80.0, "-%d" % int(ev[1]), Color("ff6a5a"), 26)
+			"debuff":
+				var dk := String(ev[1])
+				if dk == "slow":
+					ring(sim.px, sim.py - 16.0, 52.0, Color(0.45, 0.92, 1.0))
+					_float(sim.px, sim.py - 96.0, "寒滞减速!", Color(0.45, 0.92, 1.0), 22)
+				elif dk == "wound":
+					ring(sim.px, sim.py - 16.0, 56.0, Color(0.85, 0.18, 0.48))
+					_float(sim.px, sim.py - 96.0, "重伤禁疗!", Color(1.0, 0.48, 0.72), 22)
 			"dash":
 				Audio.play("dash")
 				_shake(90, 0.002)
@@ -873,9 +887,12 @@ func _is_special(e: SimEnemy) -> bool:
 
 func _push_shadow(x: float, y: float, w: float, h: float, alpha: float) -> void:
 	if _mm_sh_n >= _mm_sh_cap:
-		_mm_sh_cap *= 2
+		if _mm_sh_cap >= MM_MAX_CAP:
+			return
+		_mm_sh_cap = mini(MM_MAX_CAP, _mm_sh_cap * 2)
 		mm_shadow.instance_count = _mm_sh_cap
 		_mm_sh_buf.resize(_mm_sh_cap * 12)
+		_mm_sh_idle = 0
 	var o := _mm_sh_n * 12
 	_mm_sh_buf[o] = w
 	_mm_sh_buf[o + 3] = x
@@ -890,7 +907,13 @@ func _get_enemy_info(e: SimEnemy) -> PackedFloat32Array:
 	if cached != null:
 		return cached
 	var d: Dictionary = e.def
-	var info: Array = _enemy_cache[d.tex]
+	var txk := String(d.get("tex", ""))
+	if not _enemy_cache.has(txk):
+		if _enemy_cache.has(e.type):
+			txk = e.type
+		elif _enemy_cache.has("enemy_" + e.type):
+			txk = "enemy_" + e.type
+	var info: Array = _enemy_cache[txk]
 	var uv: Rect2 = info[5]
 	var arr := PackedFloat32Array([
 		uv.position.x, uv.position.y, uv.size.x, uv.size.y,
@@ -949,14 +972,20 @@ func _draw() -> void:
 		if not vis_e and e.boss:
 			vis_e = ex >= vx0 - 120.0 and ex <= vx1 + 120.0 and ey >= vy0 - 120.0 and ey <= vy1 + 120.0
 		if vis_e:
-			var er := e.r
-			_push_shadow(ex - er * 1.3, ey - er * 0.3, er * 2.6, er * 0.6, 0.4)
 			if e.boss or e.elite or e.warden or e.ai == "swordlord" or e.ai == "sedan" or e.ai == "lamps":
+				var er := e.r
+				_push_shadow(ex - er * 1.3, ey - er * 0.3, er * 2.6, er * 0.6, 0.4)
 				_push(ey, 1, e)
 				_vis_enemies.append(e)
 			else:
 				_ekeys.append((int(ey * 4.0) + 40000) << 20 | _eobjs.size())
 				_eobjs.append(e)
+	var skip_fodder_sh := (_eobjs.size() + _vis_enemies.size()) > 120
+	for e_norm: SimEnemy in _eobjs:
+		if skip_fodder_sh and (e_norm.type == "paperman" or e_norm.type == "foxfire"):
+			continue
+		var er := e_norm.r
+		_push_shadow(e_norm.x - er * 1.3, e_norm.y - er * 0.3, er * 2.6, er * 0.6, 0.4)
 	_push(sim.py, 2, null)
 	if sim.phase == Sim.PH_SEG:
 		for i in range(sim.pois.size()):
@@ -1064,15 +1093,96 @@ func _draw_proj_layer(c: Node2D) -> void:
 
 func _batch_teles() -> void:
 	for tl: SimTele in sim.teles:
+		var kind_v: Variant = tl.get("kind")
+		var kind := String(kind_v) if kind_v != null else ""
+		var k := clampf(tl.t / maxf(0.01, tl.dur), 0.0, 1.0)
+		if kind == "blink":
+			var br := tl.r if tl.r > 0.0 else 42.0
+			if tl.x + br < _vx0 or tl.x - br > _vx1 or tl.y + br < _vy0 or tl.y - br > _vy1:
+				continue
+			var bcc := Vector2(tl.x, tl.y)
+			b_teles.circle(bcc, br * (0.35 + 0.65 * (1.0 - k * 0.5)), Color(0.68, 0.18, 0.88, 0.14 + 0.22 * k), 24)
+			b_teles.ring(bcc, br, 2.5, Color(0.82, 0.28, 1.0, 0.55 + 0.3 * k), 24)
+			var cr := maxf(6.0, br * (1.15 - 0.93 * k))
+			b_teles.ring(bcc, cr, 3.5, Color(1.0, 0.35, 0.92, 0.92), 24)
+			var ch := minf(br * 0.42, 18.0)
+			b_teles.line(Vector2(tl.x - ch, tl.y), Vector2(tl.x + ch, tl.y), 2.5, Color(1.0, 0.68, 1.0, 0.9))
+			b_teles.line(Vector2(tl.x, tl.y - ch), Vector2(tl.x, tl.y + ch), 2.5, Color(1.0, 0.68, 1.0, 0.9))
+			b_teles.circle(bcc, 5.0 + 3.0 * k, Color(1.0, 0.82, 1.0, 0.95), 10)
+			continue
+		if kind == "charge":
+			var p0 := Vector2(tl.x, tl.y)
+			var p1 := p0
+			var tx_v: Variant = tl.get("tx")
+			var ty_v: Variant = tl.get("ty")
+			if tx_v != null and ty_v != null and (absf(float(tx_v) - tl.x) > 0.5 or absf(float(ty_v) - tl.y) > 0.5):
+				p1 = Vector2(float(tx_v), float(ty_v))
+			else:
+				var ang_v: Variant = tl.get("ang")
+				var ang_c := float(ang_v) if ang_v != null else 0.0
+				var len_v: Variant = tl.get("length")
+				if len_v == null:
+					len_v = tl.get("len")
+				var clen := float(len_v) if (len_v != null and float(len_v) > 0.0) else (tl.rw if tl.rw > 0.0 else (tl.r if tl.r > 0.0 else 260.0))
+				p1 = p0 + Vector2(cos(ang_c), sin(ang_c)) * clen
+			var w_v: Variant = tl.get("w")
+			var bw := float(w_v) if (w_v != null and float(w_v) > 0.0) else (tl.rh if tl.rh > 0.0 else (tl.r * 2.0 if (tl.r > 0.0 and tl.r <= 80.0) else 42.0))
+			var hw := bw * 0.5
+			var minx := minf(p0.x, p1.x) - hw
+			var maxx := maxf(p0.x, p1.x) + hw
+			var miny := minf(p0.y, p1.y) - hw
+			var maxy := maxf(p0.y, p1.y) + hw
+			if maxx < _vx0 or minx > _vx1 or maxy < _vy0 or miny > _vy1:
+				continue
+			var dv := p1 - p0
+			var dlen := dv.length()
+			if dlen < 1.0:
+				continue
+			var dir := dv / dlen
+			var perp := Vector2(-dir.y, dir.x)
+			b_teles.line(p0, p1, bw, Color(0.95, 0.24, 0.14, 0.14 + 0.18 * k))
+			if k > 0.01:
+				b_teles.line(p0, p0.lerp(p1, k), bw * 0.86, Color(1.0, 0.42, 0.18, 0.28 + 0.34 * k))
+			var c0 := p0 + perp * hw
+			var c1 := p1 + perp * hw
+			var c2 := p1 - perp * hw
+			var c3 := p0 - perp * hw
+			var bcol := Color(1.0, 0.46, 0.24, 0.92)
+			b_teles.line(c0, c1, 3.0, bcol)
+			b_teles.line(c3, c2, 3.0, bcol)
+			b_teles.line(c0, c3, 3.0, bcol)
+			b_teles.line(c1, c2, 3.0, bcol)
+			b_teles.line(p0, p1, 2.5, Color(1.0, 0.78, 0.52, 0.75))
+			var tip_back := p1 - dir * minf(22.0, dlen * 0.35)
+			b_teles.line(p1, tip_back + perp * (hw * 0.55), 3.0, Color(1.0, 0.82, 0.55, 0.95))
+			b_teles.line(p1, tip_back - perp * (hw * 0.55), 3.0, Color(1.0, 0.82, 0.55, 0.95))
+			continue
+		if kind == "aoe_big":
+			var ar := tl.r if tl.r > 0.0 else 125.0
+			if tl.x + ar < _vx0 or tl.x - ar > _vx1 or tl.y + ar < _vy0 or tl.y - ar > _vy1:
+				continue
+			var acc := Vector2(tl.x, tl.y)
+			b_teles.circle(acc, ar, Color(0.82, 0.12, 0.16, 0.10 + 0.14 * k), 36)
+			if k > 0.02:
+				b_teles.circle(acc, ar * k, Color(1.0, 0.34, 0.18, 0.14 + 0.24 * k), 32)
+				b_teles.ring(acc, ar * k, 3.5, Color(1.0, 0.82, 0.36, 0.92), 32)
+			b_teles.ring(acc, ar, 4.5, Color(1.0, 0.28, 0.22, 0.92), 36)
+			b_teles.ring(acc, ar * 0.88, 2.0, Color(1.0, 0.78, 0.32, 0.58 + 0.28 * k), 32)
+			var r_in := ar * 0.84
+			var rcol := Color(1.0, 0.76, 0.32, 0.78)
+			b_teles.line(Vector2(tl.x - ar, tl.y), Vector2(tl.x - r_in, tl.y), 2.5, rcol)
+			b_teles.line(Vector2(tl.x + r_in, tl.y), Vector2(tl.x + ar, tl.y), 2.5, rcol)
+			b_teles.line(Vector2(tl.x, tl.y - ar), Vector2(tl.x, tl.y - r_in), 2.5, rcol)
+			b_teles.line(Vector2(tl.x, tl.y + r_in), Vector2(tl.x, tl.y + ar), 2.5, rcol)
+			continue
 		if tl.is_rect():
 			var rx := tl.x - tl.rw * 0.5
 			var ry := tl.y - tl.rh * 0.5
 			if rx + tl.rw < _vx0 or rx > _vx1 or ry + tl.rh < _vy0 or ry > _vy1:
 				continue
-			var kr := clampf(tl.t / maxf(0.01, tl.dur), 0.0, 1.0)
-			b_teles.full(rx, ry, tl.rw, tl.rh, Color(0.95, 0.25, 0.18, 0.10 + 0.22 * kr))
+			b_teles.full(rx, ry, tl.rw, tl.rh, Color(0.95, 0.25, 0.18, 0.10 + 0.22 * k))
 			b_teles.rect_frame(rx, ry, tl.rw, tl.rh, 4.0, Color(1.0, 0.45, 0.35, 0.9))
-			var inset := minf(tl.rw, tl.rh) * 0.5 * (1.0 - kr)
+			var inset := minf(tl.rw, tl.rh) * 0.5 * (1.0 - k)
 			var iw := tl.rw - inset * 2.0
 			var ih := tl.rh - inset * 2.0
 			if iw > 0.0 and ih > 0.0:
@@ -1082,7 +1192,6 @@ func _batch_teles() -> void:
 			continue
 		if tl.x + tl.r < _vx0 or tl.x - tl.r > _vx1 or tl.y + tl.r < _vy0 or tl.y - tl.r > _vy1:
 			continue
-		var k := clampf(tl.t / maxf(0.01, tl.dur), 0.0, 1.0)
 		var cc := Vector2(tl.x, tl.y)
 		b_teles.circle(cc, tl.r, Color(0.88, 0.27, 0.23, 0.12 + 0.18 * k), 28)
 		b_teles.ring(cc, tl.r, 3.0, Color(1.0, 0.45, 0.35, 0.8), 28)
@@ -1117,6 +1226,29 @@ func _draw_player() -> void:
 	var dst := Anchors.rect(0.0, -h * 0.92, w, h, "hero_run", sim.face_x < 0)
 	draw_texture_rect_region(tx, dst, src, col)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var slow_t := _sim_float("player_slow_t", 0.0)
+	var wound_t := _sim_float("player_wound_t", 0.0)
+	if slow_t > 0.0 or wound_t > 0.0:
+		var aura_c := Vector2(sim.px, sim.py - 10.0)
+		if slow_t > 0.0:
+			var sr := 34.0 + sin(t_anim * 7.0) * 2.5
+			b_world_white.ring(aura_c, sr, 3.0, Color(0.45, 0.92, 1.0, 0.78), 24)
+			b_world_white.ring(aura_c, sr - 6.0, 1.5, Color(0.75, 0.98, 1.0, 0.45), 20)
+		if wound_t > 0.0:
+			b_world_white.ring(aura_c, 36.0, 2.0, Color(0.55, 0.06, 0.24, 0.65), 24)
+			var wcol := Color(0.72, 0.10, 0.42, 0.88)
+			var teeth := 12
+			var step := TAU / float(teeth * 2)
+			var rot0 := t_anim * 2.2
+			var r_in := 36.0
+			var r_out := 46.0 + sin(t_anim * 10.0) * 2.0
+			var prev_p := aura_c + Vector2(cos(rot0), sin(rot0)) * r_out
+			for ti in range(1, teeth * 2 + 1):
+				var ang_t := rot0 + float(ti) * step
+				var rad_t := r_out if (ti % 2 == 0) else r_in
+				var cur_p := aura_c + Vector2(cos(ang_t), sin(ang_t)) * rad_t
+				b_world_white.line(prev_p, cur_p, 2.5, wcol)
+				prev_p = cur_p
 
 
 func _anchor_key(e: SimEnemy) -> String:
@@ -1200,9 +1332,12 @@ func _batch_enemy_mm(e: SimEnemy, is_back: bool) -> void:
 	var dv := ec[3]
 	if is_back:
 		if _mm_eb_n >= _mm_eb_cap:
-			_mm_eb_cap *= 2
+			if _mm_eb_cap >= MM_MAX_CAP:
+				return
+			_mm_eb_cap = mini(MM_MAX_CAP, _mm_eb_cap * 2)
 			mm_enemy_back.instance_count = _mm_eb_cap
 			_mm_eb_buf.resize(_mm_eb_cap * 16)
+			_mm_eb_idle = 0
 		var o := _mm_eb_n * 16
 		_mm_eb_buf[o] = w
 		_mm_eb_buf[o + 3] = px
@@ -1219,9 +1354,12 @@ func _batch_enemy_mm(e: SimEnemy, is_back: bool) -> void:
 		_mm_eb_n += 1
 	else:
 		if _mm_ef_n >= _mm_ef_cap:
-			_mm_ef_cap *= 2
+			if _mm_ef_cap >= MM_MAX_CAP:
+				return
+			_mm_ef_cap = mini(MM_MAX_CAP, _mm_ef_cap * 2)
 			mm_enemy_front.instance_count = _mm_ef_cap
 			_mm_ef_buf.resize(_mm_ef_cap * 16)
+			_mm_ef_idle = 0
 		var o := _mm_ef_n * 16
 		_mm_ef_buf[o] = w
 		_mm_ef_buf[o + 3] = px
@@ -1598,7 +1736,8 @@ func _draw_projectiles(c: Node2D) -> void:
 	for b: SimBullet in sim.ebullets:
 		if b.x < vx0 or b.x > vx1 or b.y < vy0 or b.y > vy1:
 			continue
-		b_ghostfire.rot(Vector2(b.x, b.y), t_anim * 6.0, ew, eh, Color.WHITE)
+		var is_frost := bool(b.get("frost"))
+		b_ghostfire.rot(Vector2(b.x, b.y), t_anim * 6.0, ew, eh, Color(0.45, 0.92, 1.0) if is_frost else Color.WHITE)
 	if sim.pet_on and sim.pet_dead_t <= 0.0:
 		var pp := sim.pet_pos
 		var pt: Texture2D = _tex("pet_huluwa")
@@ -1784,7 +1923,8 @@ func defer__draw_fx_add(c: Node2D) -> void:
 	for b: SimBullet in sim.ebullets:
 		if b.x < vx0 or b.x > vx1 or b.y < vy0 or b.y > vy1:
 			continue
-		b_glow_fx.full(b.x - 30.0, b.y - 30.0, 60.0, 60.0, Color(0.5, 1.0, 0.7, 0.55))
+		var is_frost := bool(b.get("frost"))
+		b_glow_fx.full(b.x - 30.0, b.y - 30.0, 60.0, 60.0, Color(0.45, 0.92, 1.0, 0.72) if is_frost else Color(0.5, 1.0, 0.7, 0.55))
 	for o in sim.orb_pos:
 		b_glow_fx.full(o.x - 44.0, o.y - 44.0, 88.0, 88.0, Color(1.0, 0.55, 0.2, 0.8))
 	if sim.pet_on and sim.pet_dead_t <= 0.0:

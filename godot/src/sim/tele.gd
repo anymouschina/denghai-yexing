@@ -5,11 +5,14 @@ extends RefCounted
 
 var x := 0.0
 var y := 0.0
+var tx := 0.0
+var ty := 0.0
 var r := 0.0
 var rw := 0.0
 var rh := 0.0
 var t := 0.0
 var dur := 0.5
+var kind := ""
 var follow: SimEnemy = null
 var cb: Callable = Callable()
 var color := 0
@@ -23,6 +26,15 @@ func is_rect() -> bool:
 func is_inside(p: Vector2, pad: float = 0.0) -> bool:
 	if rw > 0.0:
 		return absf(p.x - x) <= rw * 0.5 + pad and absf(p.y - y) <= rh * 0.5 + pad
+	if kind == "charge":
+		var a := Vector2(x, y)
+		var b := Vector2(tx, ty)
+		var ab := b - a
+		var l2 := ab.length_squared()
+		if l2 <= 0.001:
+			return p.distance_to(a) < r + pad
+		var proj := clampf((p - a).dot(ab) / l2, 0.0, 1.0)
+		return p.distance_to(a + ab * proj) < r + pad
 	if r <= 0.0:
 		return false
 	return p.distance_to(Vector2(x, y)) < r + pad

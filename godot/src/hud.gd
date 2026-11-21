@@ -51,6 +51,10 @@ var _c_flare_ds := -99
 var _s_oil := ""
 var _s_lstate := ""
 var _s_flare := ""
+var _c_wound_ds := 0
+var _c_slow_ds := 0
+var _s_wound := ""
+var _s_slow := ""
 var _c_kills := -1
 var _s_kills := ""
 var _c_soul := -1
@@ -298,11 +302,29 @@ func tick(delta: float) -> void:
 	if sig != _last_state_sig:
 		_last_state_sig = sig
 		_dirty = true
+	if _sync_debuff_cache():
+		_dirty = true
 	var interval := 0.04 if (hurt_flash > 0.0 or prev_flash > 0.0) else 0.10
 	if _dirty or _redraw_t >= interval:
 		_dirty = false
 		_redraw_t = 0.0
 		_request_hud_redraw()
+
+
+func _sync_debuff_cache() -> bool:
+	var wound_v: Variant = sim.get("player_wound_t")
+	var wound_t: float = float(wound_v) if wound_v != null else 0.0
+	var slow_v: Variant = sim.get("player_slow_t")
+	var slow_t: float = float(slow_v) if slow_v != null else 0.0
+	var wound_ds := int(ceil(wound_t * 10.0)) if wound_t > 0.0 else 0
+	var slow_ds := int(ceil(slow_t * 10.0)) if slow_t > 0.0 else 0
+	if wound_ds == _c_wound_ds and slow_ds == _c_slow_ds:
+		return false
+	_c_wound_ds = wound_ds
+	_c_slow_ds = slow_ds
+	_s_wound = ("重伤禁疗 %.1fs" % (float(wound_ds) / 10.0)) if wound_ds > 0 else ""
+	_s_slow = ("寒滞减速 %.1fs" % (float(slow_ds) / 10.0)) if slow_ds > 0 else ""
+	return true
 
 
 func modal_open() -> bool:
@@ -493,7 +515,12 @@ func _draw_hud_inner() -> void:
 		_c_depth = depth
 		_s_lv = ("Lv %d • 阿烛 • 幽冥第%d层" % [sim.level, depth]) if depth > 1 else ("Lv %d • 阿烛" % sim.level)
 	_text(Vector2(bx, T + 20 * k), _s_lv, _fs(22), UI.GHOST)
-	_bar(Rect2(bx, T + 26 * k, barw, 22 * k), sim.hp / maxf(1.0, sim.maxhp), Color("e0463a") if sim.hp > sim.maxhp * 0.3 else Color("ff3a2a"))
+	_sync_debuff_cache()
+	var hp_rect := Rect2(bx, T + 26 * k, barw, 22 * k)
+	var hp_col := Color(0.58, 0.10, 0.34) if _c_wound_ds > 0 else (Color("e0463a") if sim.hp > sim.maxhp * 0.3 else Color("ff3a2a"))
+	_bar(hp_rect, sim.hp / maxf(1.0, sim.maxhp), hp_col)
+	if _c_wound_ds > 0:
+		_frame(hp_rect, Color("d83a7a"), 2.0)
 	var hp_i := int(ceil(sim.hp))
 	var mhp_i := int(sim.maxhp)
 	if hp_i != _c_hp or mhp_i != _c_maxhp:
@@ -501,6 +528,20 @@ func _draw_hud_inner() -> void:
 		_c_maxhp = mhp_i
 		_s_hp = "%d / %d" % [hp_i, mhp_i]
 	_text(Vector2(bx + 8, T + 44 * k), _s_hp, _fs(18), UI.PAPER, -1.0, HORIZONTAL_ALIGNMENT_LEFT, false)
+	if _c_wound_ds > 0 or _c_slow_ds > 0:
+		var db_x := bx + barw + 10.0
+		var db_w := 116.0 * k
+		var db_h := 22.0 * k
+		var db_y := T + 26.0 * k
+		if _c_wound_ds > 0:
+			_rect(Rect2(db_x, db_y, db_w, db_h), Color(0.24, 0.04, 0.16, 0.94))
+			_frame(Rect2(db_x, db_y, db_w, db_h), Color("d83a7a"), 1.5)
+			_text(Vector2(db_x, db_y + 16.0 * k), _s_wound, _fs(15), Color("ff8cc6"), db_w, HORIZONTAL_ALIGNMENT_CENTER, false)
+			db_y -= 24.0 * k
+		if _c_slow_ds > 0:
+			_rect(Rect2(db_x, db_y, db_w, db_h), Color(0.04, 0.16, 0.24, 0.94))
+			_frame(Rect2(db_x, db_y, db_w, db_h), Color(0.45, 0.92, 1.0), 1.5)
+			_text(Vector2(db_x, db_y + 16.0 * k), _s_slow, _fs(15), Color(0.72, 0.96, 1.0), db_w, HORIZONTAL_ALIGNMENT_CENTER, false)
 	# 灯油槽 + 盛灯/残灯状态 + [Q] 挑灯爆焰指示
 	var oil_v: Variant = sim.get("lantern_oil")
 	var oil: float = float(oil_v) if oil_v != null else 80.0

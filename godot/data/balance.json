@@ -45,6 +45,11 @@
   "stun": 0.06,
   "stunSlow": 0.55
  },
+ "debuffs": {
+  "slowMul": 0.65,
+  "slowMaxDur": 4.0,
+  "woundMaxDur": 6.0
+ },
  "fu": {
   "range": 430,
   "speed": 540,

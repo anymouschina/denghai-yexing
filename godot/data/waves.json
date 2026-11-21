@@ -1,77 +1,114 @@
 {
- "baseInterval": 0.96,
- "intervalMulPerMin": 0.73,
- "minInterval": 0.18,
- "batchPerMin": 1.15,
+ "baseInterval": 0.38,
+ "intervalMulPerMin": 0.72,
+ "minInterval": 0.12,
+ "batchPerMin": 3.0,
  "hpMulPerMin": 1.52,
- "maxEnemies": 260,
+ "maxEnemies": 320,
  "spawnDist": 790,
  "pools": [
   {
    "from": 0,
    "weights": {
-    "paperman": 1
+    "paperman": 6,
+    "foxfire": 2
+   }
+  },
+  {
+   "from": 30,
+   "weights": {
+    "paperman": 5,
+    "foxfire": 2.5,
+    "wraith_blink": 1.4,
+    "frost_bride": 1.0
    }
   },
   {
    "from": 60,
    "weights": {
     "paperman": 5,
-    "foxfire": 1
+    "foxfire": 3,
+    "wraith_blink": 1.8,
+    "frost_bride": 1.5,
+    "lantern": 1.0
    }
   },
   {
-   "from": 150,
+   "from": 90,
    "weights": {
-    "paperman": 5,
-    "foxfire": 2,
-    "jiangshi": 1
+    "paperman": 4.5,
+    "foxfire": 2.5,
+    "wraith_blink": 1.8,
+    "frost_bride": 1.6,
+    "blood_leech": 1.5,
+    "bone_charger": 1.3,
+    "jiangshi": 1.0
+   }
+  },
+  {
+   "from": 120,
+   "weights": {
+    "paperman": 4,
+    "foxfire": 2.5,
+    "wraith_blink": 1.8,
+    "frost_bride": 1.6,
+    "blood_leech": 1.6,
+    "bone_charger": 1.5,
+    "bell_mage": 1.2,
+    "jiangshi": 1.2,
+    "lantern": 1.2
    }
   },
   {
    "from": 180,
    "weights": {
-    "paperman": 5,
-    "foxfire": 2,
-    "jiangshi": 1,
-    "lantern": 1.2
-   }
-  },
-  {
-   "from": 240,
-   "weights": {
-    "paperman": 4,
-    "foxfire": 2,
+    "paperman": 3.5,
+    "foxfire": 2.5,
     "jiangshi": 1.4,
     "lantern": 1.4,
-    "firecracker": 1.5
+    "firecracker": 1.5,
+    "wraith_blink": 1.8,
+    "frost_bride": 1.6,
+    "blood_leech": 1.7,
+    "bone_charger": 1.6,
+    "bell_mage": 1.4
    }
   },
   {
-   "from": 360,
+   "from": 300,
    "weights": {
-    "paperman": 3,
-    "foxfire": 3,
-    "jiangshi": 2,
+    "paperman": 2.5,
+    "foxfire": 2.5,
+    "jiangshi": 1.8,
     "lantern": 1.6,
-    "firecracker": 2
+    "firecracker": 2.0,
+    "wraith_blink": 2.2,
+    "frost_bride": 2.0,
+    "blood_leech": 2.2,
+    "bone_charger": 2.0,
+    "bell_mage": 1.8
    }
   }
  ],
  "packs": {
   "type": "foxfire",
-  "from": 35,
-  "every": 10,
+  "from": 25,
+  "every": 8,
   "size": [
-   6,
-   10
+   12,
+   20
   ]
  },
  "events": [
   {
-   "at": 60,
+   "at": 30,
    "kind": "banner",
-   "text": "狐火成群出没"
+   "text": "瞬影鬼与寒霜鬼新娘现身"
+  },
+  {
+   "at": 90,
+   "kind": "banner",
+   "text": "噬血煞与骨轿冲锋卒袭来"
   },
   {
    "at": 120,
@@ -80,14 +117,14 @@
    "text": "精英 • 跳尸王"
   },
   {
-   "at": 180,
+   "at": 150,
    "kind": "banner",
-   "text": "破灯笼妖飘来了"
+   "text": "丧钟巫祝结阵降临"
   },
   {
    "at": 240,
    "kind": "banner",
-   "text": "爆竹鬼引信已燃"
+   "text": "十鬼百魅夜行潮"
   },
   {
    "at": 360,
@@ -101,12 +138,12 @@
    "text": "灯骸老祖 降临"
   }
  ],
- "bossTrickle": 2.0,
+ "bossTrickle": 0.8,
  "late": {
   "from": 150,
   "hpPerMin": 1.46,
-  "batchPerMin": 1.05,
-  "intervalMulPerMin": 0.94
+  "batchPerMin": 3.8,
+  "intervalMulPerMin": 0.9
  },
  "modeScale": {
   "_doc": "非经典模式（完整/疾速）中后期怪物数值补偿，匹配淬火/突破/葫芦/遗物成长曲线；经典口径不启用",
@@ -119,7 +156,13 @@
   "speedAdd": 0.42,
   "eliteHpBase": 3.8,
   "eliteHpQuad": 18.0,
-  "eliteDmgLinear": 4.0, "guardSec": 28.0, "guardLead": 25.0, "modeK": {"full": 1.0, "quick": 0.15}
+  "eliteDmgLinear": 4.0,
+  "guardSec": 28.0,
+  "guardLead": 25.0,
+  "modeK": {
+   "full": 1.0,
+   "quick": 0.15
+  }
  },
  "opening": {
   "firstDraftSec": 12.0,

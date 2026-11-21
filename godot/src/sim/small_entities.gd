@@ -12,3 +12,6 @@ var pierce := 1
 var hits: Dictionary = {}
 var mark := false
 var ang := 0.0
+var frost := false
+var slow_dur := 0.0
+var wound_dur := 0.0
