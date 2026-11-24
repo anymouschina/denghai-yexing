@@ -1,0 +1,258 @@
+{
+  "tick": 0.03333333333333333,
+  "world": { "w": 7000, "h": 4000, "main": 4000, "cx": 2000, "cy": 2000 },
+  "lanes": {
+    "N": [[2000, 90], [1860, 640], [2120, 1200], [1990, 1640], [2000, 1880]],
+    "E": [[3910, 2000], [3360, 1870], [2800, 2120], [2360, 1990], [2120, 2000]],
+    "W": [[90, 2000], [640, 2130], [1200, 1880], [1640, 2010], [1880, 2000]]
+  },
+  "laneOrder": ["N", "E", "W"],
+  "laneNames": { "N": "北", "E": "东", "W": "西", "S": "南" },
+  "revivePoint": { "x": 2000, "y": 2340, "r": 130, "healPct": 0.08, "name": "续命泉·复活点" },
+  "homeAnchor": { "x": 2000, "y": 2140, "r": 80 },
+  "recall": { "channelTime": 2.0, "scrollChannelTime": 0.8, "cd": 25, "cancelCd": 2, "arriveInvuln": 0.6, "cancelOnMove": true, "cancelOnStun": true, "cancelOnDamage": false },
+  "blink": { "range": 320, "cd": 10, "invuln": 0.25, "scrollRange": 460, "scrollInvuln": 0.45 },
+  "groundDrops": { "pickupRange": 110, "normalChance": 0.08, "eliteCount": 1, "bossCount": 2, "maxItems": 60, "autoPickup": true, "autoPickupDelay": 0.35, "autoPickupInterval": 0.2, "bagFullHintCd": 8 },
+  "realmSize": 1100,
+  "realmGap": 230,
+  "wallThick": 36,
+  "hiddenRealm": { "rect": [4400, 1300, 5600, 2700], "entry": [2260, 1800], "exit": [4520, 2000], "arrive": [4640, 2000], "back": [2260, 1900] },
+  "extraRealms": [
+    {
+      "id": "xiangyu",
+      "name": "霸王秘境 · 项羽",
+      "beast": "xiangyu",
+      "portal": true,
+      "color": 15222840,
+      "rect": [4400, 2850, 5600, 3950],
+      "entry": [2260, 2240],
+      "exit": [4520, 3400],
+      "arrive": [4660, 3400],
+      "back": [2180, 2240]
+    },
+    {
+      "id": "xingtian",
+      "name": "战神秘境 · 刑天",
+      "beast": "xingtian",
+      "portal": true,
+      "color": 12073215,
+      "rect": [5750, 2850, 6950, 3950],
+      "entry": [1740, 1800],
+      "exit": [5870, 3400],
+      "arrive": [6010, 3400],
+      "back": [1820, 1800]
+    }
+  ],
+  "banditCamp": {
+    "id": "lvda_camp",
+    "name": "左上强盗营寨",
+    "x": 1400,
+    "y": 480,
+    "r": 260,
+    "respawnSec": 45,
+    "minions": [
+      { "type": "bandit", "count": 4, "hpMul": 4.5, "atkMul": 3.0 }
+    ],
+    "enemyTowers": [
+      { "id": "nw_tower_1", "name": "强盗箭塔·左哨", "x": 1310, "y": 820, "hp": 6000, "atk": 85, "def": 40, "range": 380, "cd": 1.05, "r": 34, "h": 118, "copper": 180, "xp": 140 },
+      { "id": "nw_tower_2", "name": "强盗箭塔·右哨", "x": 1610, "y": 880, "hp": 6000, "atk": 85, "def": 40, "range": 380, "cd": 1.05, "r": 34, "h": 118, "copper": 180, "xp": 140 }
+    ],
+    "boss": {
+      "id": "lvda",
+      "name": "强盗头目·吕达",
+      "tex": "g_boss_hanba",
+      "sheetKey": "boss_lvda",
+      "hp": 16000,
+      "atk": 135,
+      "def": 55,
+      "spd": 135,
+      "range": 78,
+      "cd": 1.0,
+      "r": 36,
+      "h": 156,
+      "copper": 260,
+      "xp": 220,
+      "aggro": 460,
+      "leash": 540,
+      "moves": [
+        { "id": "cleave", "name": "狂刀斩", "type": "slam", "cd": 6.5, "warn": 0.6, "r": 125, "coef": 1.6, "range": 320 },
+        { "id": "whirl", "name": "旋风掠夺", "type": "nova", "cd": 10, "warn": 0.75, "r": 175, "coef": 2.0, "ult": true, "range": 220 }
+      ]
+    },
+    "reward": {
+      "tierMul": 1.4,
+      "copper": 420,
+      "xp": 300,
+      "equipCount": 2,
+      "minQ": 2,
+      "bonusTomes": 1,
+      "waveBase": 6,
+      "itemCount": 1
+    }
+  },
+  "hunterCamp": {
+    "id": "hunter_camp",
+    "name": "西南猎人营地",
+    "npcName": "老猎人·陈老汉",
+    "x": 1420,
+    "y": 3480,
+    "r": 270,
+    "packSize": 5,
+    "respawnSec": 18,
+    "questNeed": 6,
+    "mobType": "wolf",
+    "mobName": "苍原野狼",
+    "alphaName": "银背狼王",
+    "reward": {
+      "copper": 160,
+      "copperPerWave": 10,
+      "tomePool": ["tome_atk", "tome_hp", "tome_def"],
+      "equipCount": 1,
+      "minQ": 1
+    }
+  },
+  "bossRoom": {
+    "id": "boss_room",
+    "name": "镇夜·BOSS房",
+    "rect": [5750, 100, 6950, 1150],
+    "entry": [2260, 2360],
+    "exit": [5870, 625],
+    "arrive": [6020, 625],
+    "back": [2160, 2360],
+    "portalR": 76,
+    "respawnSec": 20,
+    "color": 16736858,
+    "tiers": {
+      "low": {
+        "id": "low", "name": "初阶BOSS", "bossName": "黑风鬼将", "tex": "g_boss_hanba",
+        "tierMul": 1.2, "hp": 18000, "atk": 145, "def": 55, "spd": 118, "range": 74, "cd": 1.1, "r": 38, "h": 158,
+        "copper": 300, "xp": 260, "minQ": 2, "equipCount": 2, "bonusTomes": 0, "tome": "tome_atk", "waveBase": 6,
+        "moves": [
+          { "id": "slam", "name": "鬼将重劈", "type": "slam", "cd": 6.5, "warn": 0.6, "r": 125, "coef": 1.6, "range": 340 },
+          { "id": "nova", "name": "黑风震", "type": "nova", "cd": 10, "warn": 0.8, "r": 185, "coef": 2.0, "ult": true, "range": 240 }
+        ]
+      },
+      "mid": {
+        "id": "mid", "name": "中阶BOSS", "bossName": "血煞妖王", "tex": "g_boss_yedi",
+        "tierMul": 2.8, "hp": 75000, "atk": 350, "def": 110, "spd": 128, "range": 80, "cd": 1.0, "r": 42, "h": 172,
+        "copper": 800, "xp": 750, "minQ": 3, "equipCount": 3, "bonusTomes": 1, "tome": "tome_hp", "waveBase": 14,
+        "moves": [
+          { "id": "pounce", "name": "血影扑杀", "type": "pounce", "cd": 6.5, "warn": 0.6, "r": 135, "coef": 1.85, "range": 480 },
+          { "id": "nova", "name": "血煞爆裂", "type": "nova", "cd": 10, "warn": 0.8, "r": 215, "coef": 2.2, "ult": true, "range": 250 }
+        ]
+      },
+      "high": {
+        "id": "high", "name": "高阶BOSS", "bossName": "太古魔尊", "tex": "g_boss_yedi",
+        "tierMul": 5.5, "hp": 280000, "atk": 720, "def": 185, "spd": 136, "range": 88, "cd": 0.9, "r": 46, "h": 188,
+        "copper": 2000, "xp": 1900, "minQ": 4, "equipCount": 4, "bonusTomes": 2, "tome": "tome_omni", "waveBase": 24,
+        "moves": [
+          { "id": "pounce", "name": "魔尊降世", "type": "pounce", "cd": 6.0, "warn": 0.6, "r": 150, "coef": 2.0, "range": 520 },
+          { "id": "nova", "name": "灭世魔环", "type": "nova", "cd": 9.5, "warn": 0.8, "r": 245, "coef": 2.4, "ult": true, "range": 270 }
+        ]
+      }
+    }
+  },
+  "mirrorChallenge": {
+    "id": "mirror_challenge",
+    "name": "心魔镜像试炼",
+    "tiers": [
+      { "id": "m2",  "name": "二倍镜像", "mul": 2,  "powerBonus": 5000,  "reward": { "atk": 110, "maxHp": 1200, "def": 24, "skillDmg": 0.12 }, "copper": 220 },
+      { "id": "m5",  "name": "五倍镜像", "mul": 5,  "powerBonus": 10000, "reward": { "atk": 220, "maxHp": 2400, "def": 46, "skillDmg": 0.18 }, "copper": 380 },
+      { "id": "m10", "name": "十倍镜像 · 破境飞升", "mul": 10, "powerBonus": 15000, "reward": { "atk": 320, "maxHp": 3600, "def": 68, "skillDmg": 0.25 }, "copper": 600 }
+    ]
+  },
+  "trainingRoom": {
+    "id": "training",
+    "name": "剑阁·练功房",
+    "rect": [4400, 100, 5600, 1150],
+    "entry": [1740, 2240],
+    "exit": [4520, 625],
+    "arrive": [4680, 625],
+    "back": [1850, 2240],
+    "portalR": 76,
+    "color": 5241482,
+    "tiers": {
+      "low":  { "id": "low",  "name": "初阶练功", "mob": "paperman",     "mobName": "演武木人", "maxAlive": 6, "spawnInterval": 1.35, "hpMul": 0.95, "atkMul": 0.35, "copper": 12, "xp": 7,  "softCapLv": 6,  "equipChance": 0.16, "minQ": 0, "waveBase": 3 },
+      "mid":  { "id": "mid",  "name": "中阶演武", "mob": "jiangshi",     "mobName": "铜甲演武兵", "maxAlive": 6, "spawnInterval": 1.45, "hpMul": 2.1,  "atkMul": 0.65, "copper": 24, "xp": 14, "softCapLv": 14, "equipChance": 0.25, "minQ": 1, "waveBase": 10 },
+      "high": { "id": "high", "name": "高阶试炼", "mob": "hunbing",      "mobName": "金甲试炼魁", "maxAlive": 6, "spawnInterval": 1.55, "hpMul": 3.2,  "atkMul": 0.9,  "copper": 44, "xp": 26, "softCapLv": 22, "equipChance": 0.36, "minQ": 2, "waveBase": 18 },
+      "temper": { "id": "temper", "name": "挨打房", "mob": "paperman", "mobName": "练体箭傀", "ranged": true, "range": 380, "cd": 0.32, "bulletSpeed": 560, "maxAlive": 8, "spawnInterval": 0.65, "hpMul": 2.2, "atkMul": 0.08, "copper": 6, "xp": 3, "softCapLv": 6, "equipChance": 0.05, "minQ": 0, "waveBase": 1 }
+    }
+  },
+  "temper": {
+    "hitThrottle": 0.06,
+    "xpPerHit": 4,
+    "xpPerWave": 0.35,
+    "perHits": 10,
+    "perStack": { "maxHp": 12, "def": 1, "atk": 2 },
+    "ultPerHit": 2,
+    "milestones": [
+      { "hits": 30, "name": "皮糙肉厚", "maxHp": 300, "def": 8, "dmgCut": 0.05, "copper": 100 },
+      { "hits": 100, "name": "铜皮铁骨", "maxHp": 900, "def": 18, "dmgCut": 0.08, "thorns": 0.15 },
+      { "hits": 250, "name": "金钟罩体", "maxHp": 2200, "def": 35, "dmgCut": 0.12, "thorns": 0.28, "hitHealPct": 0.015, "hitHealCd": 0.5 },
+      { "hits": 500, "name": "金刚不坏", "maxHp": 5000, "def": 65, "dmgCut": 0.15, "thorns": 0.45, "novaEvery": 15 },
+      { "hits": 1000, "name": "万劫不灭体", "maxHp": 12000, "def": 120, "dmgCut": 0.20, "thorns": 0.65, "novaEvery": 10 }
+    ]
+  },
+  "nanhua": {
+    "name": "南华仙人",
+    "x": 2260,
+    "y": 2140,
+    "r": 80,
+    "enhanceMax": 15,
+    "baseCost": 80,
+    "costPerLv": 65,
+    "mainPerLv": 0.15,
+    "subPerLv": 0.10,
+    "ascendTiers": [
+      { "lv": 10, "name": "一重渡劫·筑基", "cost": 300, "atk": 60, "maxHp": 700, "def": 16, "skillDmg": 0.10 },
+      { "lv": 20, "name": "二重渡劫·金丹", "cost": 800, "atk": 140, "maxHp": 1600, "def": 34, "skillDmg": 0.16 },
+      { "lv": 30, "name": "三重渡劫·元婴", "cost": 1800, "atk": 280, "maxHp": 3400, "def": 68, "skillDmg": 0.24 },
+      { "lv": 40, "name": "四重渡劫·飞升", "cost": 3500, "atk": 520, "maxHp": 6800, "def": 120, "skillDmg": 0.35 }
+    ]
+  },
+  "foundationRing": [[330, 175], [330, -175], [640, 210], [640, -210], [980, 200]],
+  "kongming": { "x": 2000, "y": 1990, "hp": 2400, "def": 10, "atk": 22, "range": 320, "cd": 1.25, "r": 46, "alertCd": 3, "alertRange": 600 },
+  "respawn": { "heroBase": 8, "heroPerWave": 0.4, "beast": 20 },
+  "party": { "maxMercs": 6, "leash": 1100 },
+  "hero": { "hpPerLv": 0.06, "atkPerLv": 0.05, "defPerLv": 0.04, "maxLv": 50, "awakenLv": 30, "xpBase": 30, "xpGrowth": 1.16, "ultEnergy": 100, "ultPerDmg": 0.02, "ultPerKill": 1.2, "skillMaxLv": 5, "ultMaxLv": 3, "ultReqLv": [6, 12, 18], "skillDmgPerLv": 0.2, "skillCdCutPerLv": 0.05, "awakenBonus": { "atk": 300, "maxHp": 2500, "def": 60, "skillDmg": 0.35 } },
+  "bossEscalations": [
+    {
+      "id": "simayi_hunbing_10",
+      "triggerBoss": "laozu",
+      "commander": "司马懿",
+      "unitType": "hunbing",
+      "unitName": "司马懿·魂兵",
+      "count": 12,
+      "lanes": ["N", "E", "W"],
+      "hpMul": 2.8,
+      "atkMul": 2.2,
+      "tint": "0x80e8ff",
+      "banner": "司马懿震怒：竟敢斩我先锋！派出《魂兵》三路总攻剑阁！"
+    },
+    {
+      "id": "simayi_hunbing_20",
+      "triggerBoss": "hanba",
+      "commander": "司马懿",
+      "unitType": "hunbing",
+      "unitName": "司马懿·精锐魂兵",
+      "count": 18,
+      "lanes": ["N", "E", "W"],
+      "hpMul": 4.5,
+      "atkMul": 3.2,
+      "tint": "0xb07cff",
+      "banner": "司马懿大怒：全军压上！《魂兵》精锐三路合围！"
+    }
+  ],
+  "start": { "copper": 150 },
+  "enemyCap": 850,
+  "projCap": 700,
+  "aimIdle": 3.0,
+  "waves": {
+    "storyLast": 30, "interval": 48, "bossInterval": 70, "spawnDur": 35, "firstDelay": 8,
+    "earlyBonusPerSec": 2, "hpGrowth": 1.23, "atkGrowth": 1.13, "armorPerWave": 2.2,
+    "countBase": 200, "countPerWave": 44,
+    "swarmHpMul": 0.056, "swarmAtkMul": 0.0135, "swarmCopperMul": 0.08, "swarmXpMul": 0.08,
+    "lanesAt": [[1, 1], [4, 2], [8, 3]],
+    "clearBonusBase": 20, "clearBonusPerWave": 5, "stipendBase": 30, "stipendPerWave": 8
+  }
+}

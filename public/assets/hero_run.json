@@ -1,0 +1,23 @@
+{
+  "image": "hero_run.png",
+  "frameWidth": 152,
+  "frameHeight": 192,
+  "frames": 12,
+  "columns": 6,
+  "rows": 2,
+  "times": [
+    1.25,
+    1.477,
+    1.705,
+    1.932,
+    2.159,
+    2.386,
+    2.614,
+    2.841,
+    3.068,
+    3.295,
+    3.523,
+    3.75
+  ],
+  "sourceDuration": 4.458
+}

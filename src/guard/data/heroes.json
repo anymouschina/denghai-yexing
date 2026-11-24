@@ -1,0 +1,50 @@
+{
+  "azhu": {
+    "name": "阿烛", "role": "远程术士", "tex": "hero_run", "frame": 0, "scale": 0.44, "h": 84, "r": 18,
+    "portrait": "hero", "hp": 520, "atk": 26, "def": 6, "spd": 230,
+    "basic": { "type": "proj", "range": 440, "cd": 0.42, "coef": 1.0, "speed": 620, "tex": "proj_talisman", "life": 0.9 },
+    "skills": {
+      "q": { "name": "三连符", "icon": "icon_fu", "cd": 5, "desc": "扇形掷出 5 张符箓", "coef": 1.4, "n": 5, "spread": 0.6, "speed": 700, "range": 520, "pierce": 1 },
+      "e": { "name": "掌心雷", "icon": "icon_lei", "cd": 7, "desc": "指定点落雷，范围伤害", "coef": 3.2, "r": 120, "range": 620, "stun": 0.6 },
+      "r": { "name": "狐火环", "icon": "icon_huanhuo", "cd": 12, "desc": "环绕火球 5 秒", "coef": 0.55, "r": 140, "dur": 5, "tick": 0.3 },
+      "f": { "name": "灯影步", "icon": "icon_jingxin", "cd": 8, "desc": "向前闪现并短暂无敌", "dist": 280, "invuln": 0.8, "coef": 1.2, "r": 100 },
+      "u": { "name": "万符朝宗", "icon": "icon_evo_wanfu", "desc": "身周符雨 4 秒", "coef": 1.3, "r": 280, "dur": 4, "tick": 0.2, "hits": 4 }
+    }
+  },
+  "huoqing": {
+    "name": "霍青", "role": "近战枪客", "tex": "g_hero_huoqing", "scale": 0.5, "h": 110, "r": 22,
+    "portrait": "g_hero_huoqing", "hp": 820, "atk": 38, "def": 22, "spd": 225,
+    "basic": { "type": "melee", "range": 125, "arc": 2.1, "cd": 0.48, "coef": 1.0 },
+    "skills": {
+      "q": { "name": "突刺", "icon": "g_sk_hq_q", "cd": 6, "desc": "向前冲锋，贯穿伤害", "coef": 2.4, "dist": 320, "dur": 0.3, "hitR": 70 },
+      "e": { "name": "横扫千军", "icon": "g_sk_hq_e", "cd": 8, "desc": "360° 回旋扫击", "coef": 2.0, "r": 180, "knock": 40 },
+      "r": { "name": "铁壁", "icon": "g_sk_hq_r", "cd": 14, "desc": "减伤 50% 并嘲讽周围妖物", "dmgCut": 0.5, "dur": 4, "tauntR": 340, "tauntT": 3 },
+      "f": { "name": "挑枪", "icon": "g_sk_hq_f", "cd": 9, "desc": "锥形挑飞，眩晕", "coef": 1.8, "r": 200, "arc": 1.5, "stun": 1.2, "knock": 70 },
+      "u": { "name": "七进七出", "icon": "g_sk_hq_u", "desc": "七段穿刺冲锋", "coef": 2.6, "hits": 7, "seg": 0.16, "range": 460, "hitR": 80 }
+    }
+  },
+  "yunque": {
+    "name": "云鹊", "role": "远程射手", "tex": "g_hero_yunque", "scale": 0.48, "h": 104, "r": 18,
+    "portrait": "g_hero_yunque", "hp": 480, "atk": 30, "def": 5, "spd": 235,
+    "basic": { "type": "proj", "range": 560, "cd": 0.6, "coef": 1.0, "speed": 820, "tex": "g_arrow", "pierce": 1, "life": 0.8 },
+    "skills": {
+      "q": { "name": "散射", "icon": "g_sk_yq_q", "cd": 5, "desc": "扇形射出 7 箭", "coef": 1.1, "n": 7, "spread": 0.8, "speed": 860, "range": 560, "pierce": 1 },
+      "e": { "name": "穿云箭", "icon": "g_sk_yq_e", "cd": 8, "desc": "长直线贯穿重箭", "coef": 4.2, "speed": 1300, "range": 1200, "r": 28 },
+      "r": { "name": "缚灵陷阱", "icon": "g_sk_yq_r", "cd": 11, "desc": "布下陷阱，定身并伤害", "coef": 2.5, "r": 120, "root": 2.5, "range": 520, "dur": 15 },
+      "f": { "name": "燕返", "icon": "g_sk_yq_f", "cd": 7, "desc": "向后跃开", "dist": 260, "dur": 0.22, "invuln": 0.35, "coef": 1.3, "n": 3 },
+      "u": { "name": "箭雨", "icon": "g_sk_yq_u", "desc": "大范围持续箭雨", "coef": 0.7, "r": 250, "dur": 4, "tick": 0.25, "range": 720, "slow": 0.3 }
+    }
+  },
+  "xuanshuang": {
+    "name": "玄霜", "role": "辅助治疗", "tex": "g_hero_xuanshuang", "scale": 0.48, "h": 104, "r": 18,
+    "portrait": "g_hero_xuanshuang", "hp": 560, "atk": 26, "def": 7, "spd": 225,
+    "basic": { "type": "proj", "range": 420, "cd": 0.44, "coef": 1.0, "speed": 560, "tex": "proj_ghostfire", "tint": 10479615, "slow": 0.25, "slowT": 1.5, "life": 0.9 },
+    "skills": {
+      "q": { "name": "寒霜环", "icon": "g_sk_xs_q", "cd": 6, "desc": "范围减速并伤害", "coef": 2.0, "r": 160, "range": 460, "slow": 0.5, "slowT": 2.5 },
+      "e": { "name": "回春铃", "icon": "g_sk_xs_e", "cd": 10, "desc": "治疗周围友军与孔明", "coef": 5, "pct": 0.06, "r": 440, "kmMul": 0.7 },
+      "r": { "name": "冰墙", "icon": "g_sk_xs_r", "cd": 14, "desc": "竖起冰墙阻挡妖物", "range": 420, "seg": 3, "segR": 60, "gap": 105, "dur": 6 },
+      "f": { "name": "清心铃", "icon": "g_sk_xs_f", "cd": 12, "desc": "周围友军加速", "r": 420, "spd": 0.3, "aspd": 0.3, "dur": 5 },
+      "u": { "name": "冰封千里", "icon": "g_sk_xs_u", "desc": "大范围冻结并伤害", "coef": 4.0, "r": 460, "freeze": 2.5 }
+    }
+  }
+}

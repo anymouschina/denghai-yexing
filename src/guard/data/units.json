@@ -1,0 +1,52 @@
+{
+  "kongming": { "name": "孔明", "tex": "g_kongming", "scale": 0.5, "h": 120, "r": 46, "portrait": "g_kongming" },
+  "mercs": {
+    "dao": { "name": "乡勇刀盾", "tex": "g_merc_dao", "scale": 0.4, "h": 80, "r": 18, "cost": 80, "upCost": [90, 150], "hp": 420, "atk": 18, "def": 14, "spd": 205,
+             "basic": { "type": "melee", "range": 80, "arc": 1.8, "cd": 0.9, "coef": 1.0 },
+             "skills": { "q": { "name": "盾击", "icon": "g_merc_dao", "cd": 8, "desc": "盾击眩晕前方妖物" } } },
+    "nu": { "name": "连弩手", "tex": "g_merc_nu", "scale": 0.4, "h": 80, "r": 16, "cost": 100, "upCost": [110, 180], "hp": 260, "atk": 20, "def": 4, "spd": 205,
+            "basic": { "type": "proj", "range": 480, "cd": 0.9, "coef": 1.0, "speed": 760, "tex": "g_arrow", "life": 0.75 },
+            "skills": { "q": { "name": "连弩齐发", "icon": "g_merc_nu", "cd": 9, "desc": "连射 6 箭" } } },
+    "tong": { "name": "道童", "tex": "g_merc_tong", "scale": 0.4, "h": 80, "r": 16, "cost": 130, "upCost": [140, 220], "hp": 240, "atk": 16, "def": 4, "spd": 205,
+              "basic": { "type": "proj", "range": 380, "cd": 1.2, "coef": 1.0, "speed": 480, "tex": "proj_flame", "splash": 70, "life": 0.9 },
+              "skills": { "q": { "name": "八卦镜", "icon": "g_merc_tong", "cd": 12, "desc": "治疗周围友军" } } }
+  },
+  "beasts": {
+    "baihu": { "name": "白虎", "tex": "g_beast_baihu", "scale": 0.5, "h": 140, "r": 34, "hp": 1500, "atk": 50, "def": 18, "spd": 250,
+               "basic": { "type": "melee", "range": 120, "arc": 1.9, "cd": 0.7, "coef": 1.0 },
+               "skills": { "q": { "name": "虎扑", "icon": "g_beast_baihu", "cd": 7, "desc": "扑向目标点" }, "e": { "name": "啸风", "icon": "g_beast_baihu", "cd": 12, "desc": "风刃环绕" } } },
+    "zhuque": { "name": "朱雀", "tex": "g_beast_zhuque", "scale": 0.5, "h": 150, "r": 30, "hp": 1050, "atk": 42, "def": 8, "spd": 240, "flying": true,
+                "basic": { "type": "proj", "range": 460, "cd": 0.75, "coef": 1.0, "speed": 600, "tex": "proj_flame", "splash": 60, "life": 0.85 },
+                "skills": { "q": { "name": "离火吐息", "icon": "g_beast_zhuque", "cd": 7, "desc": "锥形火焰" }, "e": { "name": "焚天", "icon": "g_beast_zhuque", "cd": 14, "desc": "指定点火雨" } } },
+    "xuanwu": { "name": "玄武", "tex": "g_beast_xuanwu", "scale": 0.5, "h": 140, "r": 40, "hp": 2600, "atk": 30, "def": 34, "spd": 190,
+                "basic": { "type": "melee", "range": 110, "arc": 2.2, "cd": 1.0, "coef": 1.0 },
+                "skills": { "q": { "name": "龟甲阵", "icon": "g_beast_xuanwu", "cd": 15, "desc": "周围友军获得护盾" }, "e": { "name": "蛇缠", "icon": "g_beast_xuanwu", "cd": 10, "desc": "嘲讽并减速周围妖物" } } },
+    "qinglong": { "name": "青龙", "tex": "g_beast_qinglong", "scale": 0.5, "h": 150, "r": 32, "hp": 1150, "atk": 46, "def": 10, "spd": 240, "flying": true,
+                  "basic": { "type": "chain", "range": 420, "cd": 0.9, "coef": 1.0, "jumps": 3, "jumpR": 180 },
+                  "skills": { "q": { "name": "惊雷", "icon": "g_beast_qinglong", "cd": 8, "desc": "指定点雷暴" }, "e": { "name": "龙吟", "icon": "g_beast_qinglong", "cd": 14, "desc": "全屏连锁闪电" } } },
+    "qilin": { "name": "麒麟", "tex": "g_beast_qilin", "scale": 0.5, "h": 150, "r": 32, "hp": 1700, "atk": 46, "def": 16, "spd": 245,
+               "basic": { "type": "proj", "range": 440, "cd": 0.7, "coef": 1.0, "speed": 640, "tex": "proj_ghostfire", "tint": 16765546, "life": 0.8 },
+               "skills": { "q": { "name": "祥瑞", "icon": "g_beast_qilin", "cd": 12, "desc": "大范围治疗含孔明" }, "e": { "name": "麟角冲", "icon": "g_beast_qilin", "cd": 9, "desc": "冲锋击退" } } },
+    "xiangyu": { "name": "霸王·项羽", "tex": "g_boss_hanba", "scale": 0.55, "h": 160, "r": 38, "hp": 2600, "atk": 72, "def": 26, "spd": 255,
+                 "basic": { "type": "melee", "range": 130, "arc": 2.2, "cd": 0.72, "coef": 1.15 },
+                 "skills": { "q": { "name": "霸王举鼎", "icon": "g_eq_legend_fangtian_halberd", "cd": 8, "desc": "重砸周围造成大范围高伤并眩晕" }, "e": { "name": "破釜沉舟", "icon": "g_eq_baihu_w", "cd": 11, "desc": "狂怒突进重击并短时提升攻速与攻击" } } },
+    "xingtian": { "name": "战神·刑天", "tex": "g_boss_yedi", "scale": 0.55, "h": 165, "r": 40, "hp": 3200, "atk": 78, "def": 34, "spd": 240,
+                  "basic": { "type": "melee", "range": 135, "arc": 2.4, "cd": 0.75, "coef": 1.2 },
+                  "skills": { "q": { "name": "干戚旋风", "icon": "g_eq_legend_xuanwu_armor", "cd": 9, "desc": "持斧旋转持续劈砍周围妖物" }, "e": { "name": "战意不灭", "icon": "g_eq_xuanwu_a", "cd": 14, "desc": "回复生命并进入战神狂暴，大幅提升攻防" } } }
+  },
+  "summons": {
+    "guanyu": {
+      "name": "武圣·关羽",
+      "tex": "g_hero_huoqing",
+      "scale": 0.56,
+      "h": 124,
+      "r": 26,
+      "hp": 2200,
+      "atk": 95,
+      "def": 32,
+      "spd": 260,
+      "tint": 6283448,
+      "basic": { "type": "melee", "range": 135, "arc": 2.3, "cd": 0.65, "coef": 1.3 }
+    }
+  }
+}

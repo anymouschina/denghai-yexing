@@ -1,0 +1,22 @@
+{
+  "every": 2,
+  "maxActive": 2,
+  "first": "build_arrow",
+  "rewardCopperPerWave": 6,
+  "buffs": {
+    "km_ward": { "name": "八卦护体", "sec": 96, "mods": [{ "stat": "def", "add": 25 }, { "stat": "regen", "add": 6 }] },
+    "km_fan":  { "name": "羽扇生风", "sec": 96, "mods": [{ "stat": "atk", "mul": 0.6 }, { "stat": "aspd", "mul": 0.3 }] }
+  },
+  "templates": {
+    "build_arrow": { "type": "buildType", "build": "arrow", "need": 1, "waves": 3, "name": "筑箭楼", "desc": "在任意地基建一座箭楼", "reward": { "copper": 60, "item": true } },
+    "build":       { "type": "build", "need": [2, 3], "waves": 3, "name": "固守营垒", "desc": "建造 {need} 座建筑", "reward": { "copper": 80 }, "weight": 3 },
+    "upgrade":     { "type": "upgrade", "need": [1, 2], "waves": 3, "name": "精修工事", "desc": "升级 {need} 次建筑", "reward": { "copper": 90 }, "weight": 2, "needBuildings": 1 },
+    "hire":        { "type": "hire", "need": [1, 2], "waves": 3, "name": "招募义勇", "desc": "雇佣 {need} 名守卫", "reward": { "copper": 70, "buff": "km_ward" }, "weight": 2 },
+    "kill":        { "type": "kill", "need": [12, 20], "waves": 2, "name": "斩妖", "desc": "击杀 {need} 只{enemyName}", "reward": { "copper": 80, "item": true }, "weight": 4 },
+    "kmGuard":     { "type": "kmGuard", "pct": 0.1, "waves": 1, "name": "护灯无损", "desc": "本波孔明掉血不超过 {pctText}", "reward": { "copper": 60, "buff": "km_fan" }, "weight": 2, "minWave": 2 },
+    "realmEnter":  { "type": "realmEnter", "need": 1, "waves": 4, "name": "探秘境", "desc": "进入任意一座神兽秘境", "reward": { "copper": 100 }, "weight": 3, "minWave": 4, "needRealms": true },
+    "realmClear":  { "type": "realmClear", "need": 1, "waves": 5, "name": "伏神兽", "desc": "清空一座秘境", "reward": { "copper": 150, "item": true }, "weight": 3, "needBeast": true },
+    "equipKm":     { "type": "equipKm", "need": 1, "waves": 3, "name": "为丞相披甲", "desc": "给孔明穿上一件装备", "reward": { "copper": 60, "item": true }, "weight": 3, "minWave": 3, "needInv": true },
+    "set":         { "type": "set", "need": 1, "waves": 5, "name": "凑成套装", "desc": "任意单位激活一个套装效果", "reward": { "copper": 120, "item": true }, "weight": 2, "minWave": 6, "needSets": true }
+  }
+}

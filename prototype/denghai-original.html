@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>《灯骸夜行》游戏原型</title>
+<style>
+  :root {
+    --ink: #141a33;        /* 墨蓝·夜 */
+    --ink-2: #1f2a52;      /* 墨蓝·中 */
+    --violet: #3b2a5c;     /* 暗紫 */
+    --violet-2: #5a3f86;   /* 暗紫·亮 */
+    --lantern: #ff9a3c;    /* 灯笼暖橙 */
+    --lantern-2: #ffc977;  /* 灯芯金 */
+    --paper: #f3e6c8;      /* 符纸米白 */
+    --blood: #e0463a;      /* 朱砂红 */
+    --ghost: #7fe3ff;      /* 鬼火青 */
+    --line: #0b0d18;       /* 描边黑 */
+    --title-font: "STKaiti", "KaiTi", "Kaiti SC", "BiauKai", serif;
+    --ui-font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    --num-font: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(ellipse at top, #222a52 0%, #0d1024 70%); color: var(--paper); font-family: var(--ui-font); min-height: 100vh; }
+  header { display: flex; align-items: center; gap: 24px; padding: 16px 28px; border-bottom: 1px solid #2c335c; flex-wrap: wrap; }
+  header h1 { font-family: var(--title-font); font-size: 26px; color: var(--lantern-2); letter-spacing: 4px; text-shadow: 0 0 12px rgba(255,154,60,.5); }
+  header h1 small { font-family: var(--ui-font); font-size: 13px; color: #9aa3cf; letter-spacing: 0; margin-left: 10px; }
+  nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tab { font: inherit; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 999px; border: 1.5px solid #3a4378; background: #1a2045; color: #c9cdf0; cursor: pointer; transition: background-color 80ms, border-color 80ms, transform 80ms; }
+  .tab:hover { border-color: var(--lantern); color: #fff; }
+  .tab:active { background: #10142e; transform: translateY(1px) scale(0.97); transition-duration: 0s; }
+  .tab[aria-selected="true"] { background: var(--lantern); border-color: var(--lantern); color: var(--ink); }
+  .tab[aria-selected="true"]:active { background: #e07f22; }
+  main { padding: 24px 28px 48px; max-width: 1400px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.on { display: block; animation: fade .3s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .caption { color: #9aa3cf; font-size: 14px; margin-bottom: 14px; line-height: 1.6; }
+  .caption b { color: var(--lantern-2); }
+
+  /* ---------- 16:9 游戏画面框（1280×720 设计，等比缩放） ---------- */
+  .viewport { width: 100%; aspect-ratio: 16 / 9; position: relative; overflow: hidden; border-radius: 10px; border: 2px solid #2c335c; box-shadow: 0 20px 60px rgba(0,0,0,.5); background: #000; }
+  .stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; overflow: hidden; }
+
+  /* ---------- 美术设定 ---------- */
+  .sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+  .card { background: linear-gradient(160deg, #222a55, #1a1838); border: 1.5px solid #343c70; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; }
+  .card .pic { height: 200px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: radial-gradient(circle at 50% 60%, rgba(255,154,60,.18), transparent 65%), #151a36; border-radius: 8px; margin-bottom: 10px; }
+  .card .pic img { width: 92%; height: 92%; object-fit: contain; filter: drop-shadow(0 6px 6px rgba(0,0,0,.5)); }
+  .card h3 { font-family: var(--title-font); font-size: 20px; color: var(--lantern-2); }
+  .card .tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--violet); color: #e3d6ff; margin: 6px 0; align-self: flex-start; }
+  .card p { font-size: 13px; color: #b9bee3; line-height: 1.6; }
+  .card.wide { grid-column: span 2; }
+  .card.wide .pic { height: 260px; }
+  .card.wide .pic img { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
+  .card.boss { grid-column: span 2; }
+  .card.boss .pic { height: 300px; background: radial-gradient(circle at 50% 55%, rgba(120,80,200,.35), transparent 65%), #151a36; }
+  @media (max-width: 640px) { .card.wide, .card.boss { grid-column: span 1; } }
+
+  /* ---------- 标题页 ---------- */
+  .title-bg { position: absolute; inset: 0; background: url(assets/title_keyart.jpg) center / cover; }
+  .title-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(10,12,30,.92) 0%, rgba(10,12,30,.65) 38%, rgba(10,12,30,0) 62%); }
+  .logo { position: absolute; left: 80px; top: 92px; }
+  .logo .cn { font-family: var(--title-font); font-size: 112px; line-height: 1; color: var(--paper); letter-spacing: 12px;
+    -webkit-text-stroke: 3px var(--line); paint-order: stroke fill; text-shadow: 0 0 24px rgba(255,154,60,.65), 0 6px 0 var(--line); }
+  .logo .cn em { font-style: normal; color: var(--lantern); }
+  .logo .sub { margin-top: 14px; font-size: 20px; color: #c9c3e8; letter-spacing: 8px; }
+  .menu { position: absolute; left: 80px; top: 330px; display: flex; flex-direction: column; gap: 14px; width: 300px; }
+  .gbtn { font-family: var(--title-font); font-size: 28px; letter-spacing: 6px; padding: 12px 0; text-align: center; border-radius: 10px; cursor: pointer;
+    border: 3px solid var(--line); background: linear-gradient(#2a2f62, #1c1f45); color: var(--paper); box-shadow: 0 5px 0 var(--line);
+    transition: transform 80ms, background-color 80ms, box-shadow 80ms; }
+  .gbtn:hover { transform: scale(1.04); border-color: var(--lantern); }
+  .gbtn:active { transform: translateY(4px) scale(0.98); box-shadow: 0 1px 0 var(--line); background: #15183a; transition-duration: 0s; }
+  .gbtn.primary { background: linear-gradient(#ffb15a, #e8721f); color: var(--ink); text-shadow: 0 1px 0 rgba(255,255,255,.4); }
+  .gbtn.primary:active { background: #c95f14; }
+  .hint { position: absolute; left: 80px; bottom: 36px; font-size: 16px; color: #aeb3d8; line-height: 1.9; }
+  .key { display: inline-block; min-width: 28px; padding: 0 8px; margin: 0 2px; border: 2px solid #59609a; border-bottom-width: 4px; border-radius: 6px; text-align: center; font-family: var(--num-font); font-size: 14px; color: var(--paper); background: #1a1f45; }
+  .best { position: absolute; right: 36px; bottom: 30px; font-size: 15px; color: #d8d2f5; background: rgba(15,17,40,.75); border: 2px solid var(--line); border-radius: 10px; padding: 10px 16px; line-height: 1.7; }
+  .best .num { font-family: var(--num-font); font-variant-numeric: tabular-nums; color: var(--lantern-2); }
+  .press { position: absolute; left: 80px; top: 572px; font-size: 15px; color: var(--lantern-2); animation: blink 1.6s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+
+  /* ---------- 对局 HUD ---------- */
+  .field { position: absolute; inset: -40px; background: url(assets/field.jpg) center / cover; }
+  .night { position: absolute; inset: 0; background: radial-gradient(circle at 640px 380px, rgba(255,170,80,.22) 0, rgba(255,150,60,.08) 180px, rgba(8,10,28,.55) 420px, rgba(5,6,18,.82) 760px); }
+  .ent { position: absolute; transform: translate(-50%, -100%); }
+  .ent img { display: block; filter: drop-shadow(0 0 0 #000); }
+  .ent::before { content: ""; position: absolute; left: 50%; bottom: -6px; width: 70%; height: 14px; transform: translateX(-50%); border-radius: 50%; background: rgba(0,0,0,.45); z-index: -1; }
+  .ent.flip img { transform: scaleX(-1); }
+  .ent.hit img { filter: brightness(0) invert(1); }
+  .ent.elite img { filter: drop-shadow(0 0 4px #ff4d4d) drop-shadow(0 0 10px #ff4d4d); }
+  .halo { position: absolute; width: 360px; height: 360px; left: 640px; top: 380px; transform: translate(-50%, -50%); border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,190,110,.25), rgba(255,154,60,.06) 55%, transparent 70%); }
+  .talisman { position: absolute; width: 16px; height: 30px; background: linear-gradient(#ffe48a, #f2c14b); border: 2px solid var(--line); border-radius: 2px; box-shadow: 0 0 10px rgba(255,220,120,.9); }
+  .talisman::after { content: ""; position: absolute; left: 4px; top: 5px; width: 4px; height: 16px; background: var(--blood); border-radius: 2px; }
+  .orb { position: absolute; width: 30px; height: 30px; border-radius: 50%; transform: translate(-50%, -50%);
+    background: radial-gradient(circle at 40% 40%, #fff3c4, #ffae45 45%, #ff6a1a 75%); border: 2px solid var(--line); box-shadow: 0 0 18px 6px rgba(255,140,40,.55); }
+  .ebullet { position: absolute; width: 18px; height: 18px; border-radius: 50%; transform: translate(-50%, -50%); background: radial-gradient(circle, #ffd6ff, #c33cff 60%); border: 2px solid var(--line); box-shadow: 0 0 12px rgba(200,60,255,.9); }
+  .bolt { position: absolute; height: 4px; background: #d9f6ff; box-shadow: 0 0 8px 3px #6fd6ff; transform-origin: 0 50%; border-radius: 2px; }
+  .gem { position: absolute; width: 14px; height: 14px; transform: rotate(45deg); background: linear-gradient(135deg, #b7f7ff, #3cc8ff); border: 2px solid var(--line); box-shadow: 0 0 8px rgba(80,210,255,.8); }
+  .coin { position: absolute; width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff2a8, #f0b62c); border: 2px solid var(--line); }
+  .warn { position: absolute; border-radius: 50%; border: 3px dashed rgba(255,70,60,.95); background: rgba(255,60,50,.22); transform: translate(-50%, -50%); }
+  .dmg { position: absolute; font-family: var(--num-font); font-weight: 800; font-size: 22px; color: #fff; -webkit-text-stroke: 3px var(--line); paint-order: stroke fill; transform: translate(-50%, -50%); }
+  .dmg.crit { font-size: 32px; color: var(--lantern-2); }
+  .dmg.burn { font-size: 18px; color: var(--lantern); }
+
+  .xpbar { position: absolute; left: 0; top: 0; width: 1280px; height: 18px; background: #0d1028; border-bottom: 3px solid var(--line); }
+  .xpbar i { position: absolute; inset: 0 auto 0 0; width: 64%; background: linear-gradient(#a6efff, #2fb5e8); box-shadow: 0 0 12px rgba(80,210,255,.7); }
+  .xpbar span { position: absolute; right: 12px; top: 0; font-size: 12px; line-height: 18px; font-weight: 700; color: #fff; -webkit-text-stroke: 2px var(--line); paint-order: stroke fill; }
+  .hud-tl { position: absolute; left: 20px; top: 32px; display: flex; gap: 12px; align-items: center; }
+  .portrait { width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--line); background: url(assets/hero.png) 50% 6% / 150% auto no-repeat, radial-gradient(#3b4aa0, #1a1f45); box-shadow: 0 0 0 3px var(--lantern); }
+  .bars { display: flex; flex-direction: column; gap: 6px; }
+  .hp { width: 240px; height: 20px; border: 3px solid var(--line); border-radius: 6px; background: #3a1220; position: relative; overflow: hidden; }
+  .hp i { position: absolute; inset: 0 auto 0 0; width: 72%; background: linear-gradient(#ff7a6a, #d42f3a); }
+  .hp span { position: absolute; inset: 0; text-align: center; font-size: 12px; font-weight: 700; line-height: 14px; font-family: var(--num-font); font-variant-numeric: tabular-nums; }
+  .lv { font-size: 15px; font-weight: 700; color: var(--lantern-2); -webkit-text-stroke: 3px var(--line); paint-order: stroke fill; }
+  .timer { position: absolute; left: 50%; top: 30px; transform: translateX(-50%); text-align: center; }
+  .timer .t { font-family: var(--num-font); font-variant-numeric: tabular-nums; font-size: 40px; font-weight: 800; color: var(--paper); -webkit-text-stroke: 5px var(--line); paint-order: stroke fill; }
+  .timer .w { font-size: 14px; color: #ff8a7a; font-weight: 700; -webkit-text-stroke: 3px var(--line); paint-order: stroke fill; }
+  .hud-tr { position: absolute; right: 20px; top: 34px; text-align: right; font-size: 18px; font-weight: 700; line-height: 1.6; -webkit-text-stroke: 4px var(--line); paint-order: stroke fill; }
+  .hud-tr .num { font-family: var(--num-font); font-variant-numeric: tabular-nums; color: var(--lantern-2); }
+  .slots { position: absolute; left: 20px; top: 112px; display: flex; flex-direction: column; gap: 6px; }
+  .slot-row { display: flex; gap: 6px; }
+  .seal { width: 40px; height: 40px; border-radius: 8px; border: 3px solid var(--line); display: grid; place-items: center; font-family: var(--title-font); font-size: 20px; font-weight: 700; color: var(--ink); position: relative; }
+  .seal b { position: absolute; right: -4px; bottom: -6px; font-family: var(--num-font); font-size: 11px; color: #fff; background: var(--line); border-radius: 4px; padding: 0 3px; }
+  .s-fu { background: linear-gradient(#ffe48a, #e8b93c); }
+  .s-huo { background: linear-gradient(#ffb15a, #e8721f); }
+  .s-lei { background: linear-gradient(#bdf1ff, #4fb9e6); }
+  .s-p { background: linear-gradient(#cdb8ff, #8064c6); }
+  .dash { position: absolute; left: 640px; top: 652px; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; font-size: 14px; font-weight: 700; -webkit-text-stroke: 3px var(--line); paint-order: stroke fill; }
+  .dash .ring { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--line); background: conic-gradient(var(--ghost) 0 70%, #1b2148 70% 100%); display: grid; place-items: center; -webkit-text-stroke: 0; color: var(--ink); font-size: 12px; }
+  .mini-hp { position: absolute; width: 60px; height: 8px; border: 2px solid var(--line); border-radius: 4px; background: #3a1220; transform: translateX(-50%); }
+  .mini-hp i { position: absolute; inset: 0 auto 0 0; width: 72%; background: #ff5b55; }
+  .elite-tag { position: absolute; transform: translateX(-50%); font-size: 13px; font-weight: 800; color: #ff7a6a; -webkit-text-stroke: 3px var(--line); paint-order: stroke fill; white-space: nowrap; }
+
+  /* 升级三选一 */
+  .dim { position: absolute; inset: 0; background: rgba(6,7,20,.72); }
+  .lvl-title { position: absolute; left: 0; right: 0; top: 96px; text-align: center; font-family: var(--title-font); font-size: 52px; color: var(--lantern-2); letter-spacing: 10px; -webkit-text-stroke: 3px var(--line); paint-order: stroke fill; text-shadow: 0 0 22px rgba(255,154,60,.6); }
+  .lvl-sub { position: absolute; left: 0; right: 0; top: 168px; text-align: center; color: #aeb3d8; font-size: 16px; }
+  .cards { position: absolute; left: 640px; top: 410px; transform: translate(-50%, -50%); display: flex; gap: 28px; }
+  .ucard { width: 300px; height: 380px; border-radius: 14px; border: 4px solid var(--line); padding: 20px 18px; text-align: center; position: relative; cursor: pointer;
+    background: linear-gradient(170deg, #2b3166, #1a1c40); box-shadow: 0 8px 0 var(--line); transition: transform 80ms; }
+  .ucard:hover { transform: translateY(-6px) scale(1.03); }
+  .ucard:active { transform: translateY(2px) scale(.98); transition-duration: 0s; }
+  .ucard .rar { position: absolute; left: 0; right: 0; top: 0; height: 30px; border-radius: 10px 10px 0 0; font-size: 13px; font-weight: 800; line-height: 30px; color: var(--ink); }
+  .ucard.blue { box-shadow: 0 8px 0 var(--line), 0 0 0 3px #4fa3ff inset; } .ucard.blue .rar { background: #6fb6ff; }
+  .ucard.purple { box-shadow: 0 8px 0 var(--line), 0 0 0 3px #b36bff inset; } .ucard.purple .rar { background: #c08cff; }
+  .ucard.gold { box-shadow: 0 8px 0 var(--line), 0 0 0 3px #ffc24a inset, 0 0 36px rgba(255,190,70,.55); } .ucard.gold .rar { background: linear-gradient(90deg, #ffd56a, #ff9a3c); }
+  .ucard .ic { margin: 36px auto 12px; width: 84px; height: 84px; font-size: 42px; border-radius: 16px; }
+  .ucard h4 { font-family: var(--title-font); font-size: 28px; color: var(--paper); letter-spacing: 3px; }
+  .ucard .lvtxt { font-size: 13px; color: var(--lantern-2); margin: 4px 0 10px; }
+  .ucard p { font-size: 15px; line-height: 1.7; color: #d6d9f5; }
+  .ucard p em { font-style: normal; color: var(--lantern-2); font-weight: 700; }
+  .ucard .k { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); }
+  .reroll { position: absolute; left: 640px; top: 632px; transform: translateX(-50%); font-size: 18px; padding: 8px 26px; letter-spacing: 3px; }
+
+  /* ---------- 结算 ---------- */
+  .result-bg { position: absolute; inset: 0; background: url(assets/field.jpg) center / cover; filter: blur(3px) brightness(.45) saturate(.8); transform: scale(1.05); }
+  .result { position: absolute; left: 640px; top: 360px; transform: translate(-50%, -50%); width: 900px; padding: 30px 40px 34px; border-radius: 18px; border: 4px solid var(--line);
+    background: linear-gradient(170deg, rgba(36,40,86,.96), rgba(26,22,58,.96)); box-shadow: 0 10px 0 var(--line), 0 0 60px rgba(255,154,60,.18); }
+  .result h2 { font-family: var(--title-font); font-size: 60px; text-align: center; letter-spacing: 14px; color: var(--paper); -webkit-text-stroke: 3px var(--line); paint-order: stroke fill; }
+  .result h2.win { color: var(--lantern-2); text-shadow: 0 0 26px rgba(255,180,80,.7); }
+  .result .why { text-align: center; color: #aeb3d8; margin: 4px 0 22px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  .stat { background: #141838; border: 2px solid #343c70; border-radius: 10px; padding: 10px; text-align: center; }
+  .stat .k2 { font-size: 13px; color: #9aa3cf; }
+  .stat .v { font-family: var(--num-font); font-variant-numeric: tabular-nums; font-size: 30px; font-weight: 800; color: var(--paper); }
+  .row2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 22px; }
+  .box { background: #141838; border: 2px solid #343c70; border-radius: 10px; padding: 12px 14px; }
+  .box h5 { font-size: 13px; color: #9aa3cf; margin-bottom: 8px; font-weight: 600; }
+  .build { display: flex; gap: 8px; flex-wrap: wrap; }
+  .soul { display: flex; align-items: center; gap: 12px; }
+  .soul .v { font-family: var(--num-font); font-variant-numeric: tabular-nums; font-size: 40px; font-weight: 800; color: var(--lantern); text-shadow: 0 0 14px rgba(255,140,40,.7); }
+  .soul .flame { width: 36px; height: 44px; border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%; background: radial-gradient(circle at 50% 70%, #fff3c4, #ffae45 45%, #ff6a1a 80%); border: 2px solid var(--line); }
+  .btns { display: flex; justify-content: center; gap: 24px; }
+  .btns .gbtn { width: 240px; font-size: 26px; }
+  .seed { position: absolute; right: 22px; bottom: 14px; font-family: var(--num-font); font-size: 12px; color: #6f77a8; }
+
+  /* ---------- 文档 ---------- */
+  .doc { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .doc { grid-template-columns: 1fr; } }
+  .doc section { background: linear-gradient(160deg, #20274f, #191736); border: 1.5px solid #343c70; border-radius: 12px; padding: 18px 20px; }
+  .doc section.full { grid-column: 1 / -1; }
+  .doc h3 { font-family: var(--title-font); font-size: 22px; color: var(--lantern-2); margin-bottom: 10px; letter-spacing: 2px; }
+  .doc p, .doc li { font-size: 14px; line-height: 1.8; color: #d0d4f2; }
+  .doc ul { padding-left: 18px; }
+  .doc b { color: var(--lantern-2); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #2f3768; vertical-align: top; color: #d0d4f2; }
+  th { color: #9aa3cf; font-weight: 600; }
+  td.t { font-family: var(--num-font); font-variant-numeric: tabular-nums; color: var(--lantern-2); white-space: nowrap; }
+  .school { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 6px; color: var(--ink); }
+  .sw { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sw div { width: 112px; border-radius: 10px; overflow: hidden; border: 2px solid var(--line); font-size: 12px; }
+  .sw div i { display: block; height: 56px; }
+  .sw div span { display: block; padding: 6px 8px; background: #11142e; line-height: 1.4; }
+  .fontdemo { display: flex; gap: 24px; align-items: baseline; flex-wrap: wrap; margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>灯骸夜行 <small>游戏原型 · 待确认稿</small></h1>
+  <nav role="tablist">
+    <button class="tab" role="tab" data-p="art" aria-selected="true">美术设定</button>
+    <button class="tab" role="tab" data-p="title" aria-selected="false">① 标题页</button>
+    <button class="tab" role="tab" data-p="hud" aria-selected="false">② 对局画面</button>
+    <button class="tab" role="tab" data-p="lvl" aria-selected="false">②+ 升级三选一</button>
+    <button class="tab" role="tab" data-p="result" aria-selected="false">③ 结算页</button>
+    <button class="tab" role="tab" data-p="rules" aria-selected="false">玩法说明</button>
+    <button class="tab" role="tab" data-p="style" aria-selected="false">美术风格</button>
+  </nav>
+</header>
+
+<main>
+  <!-- 美术设定 -->
+  <section class="panel on" id="art">
+    <p class="caption">以下全部为 <b>asset 工具真实生成</b> 的素材，主角为全作参考图，其余妖物、Boss、场景都以它为参考保持同一画风。确认后会原样搬进成品。</p>
+    <div class="sheet">
+      <div class="card"><div class="pic"><img src="assets/hero.png" alt="主角：提灯驱邪少年"></div><h3>阿烛 · 提灯驱邪少年</h3><span class="tag">主角</span><p>右手提纸灯笼（照亮周围一圈），左手桃木剑。成品会再做一段 8–12 帧奔跑序列帧。</p></div>
+      <div class="card"><div class="pic"><img src="assets/enemy_paperman.png" alt="纸扎人"></div><h3>纸扎人</h3><span class="tag">追击者 · 慢 · 量多</span><p>直线追主角，开局主力。死亡时碎成纸屑。</p></div>
+      <div class="card"><div class="pic"><img src="assets/enemy_foxfire.png" alt="狐火小妖"></div><h3>狐火</h3><span class="tag">快速小群 · 血薄</span><p>5–8 只成群从屏幕外扑进来，速度是纸扎人的 2 倍。</p></div>
+      <div class="card"><div class="pic"><img src="assets/enemy_lanternyokai.png" alt="破灯笼妖"></div><h3>破灯笼妖</h3><span class="tag">远程射手 · 保持距离</span><p>停在 300px 外，张嘴蓄力 0.5 秒（变红放大）后吐紫色鬼火弹。</p></div>
+      <div class="card"><div class="pic"><img src="assets/enemy_jiangshi.png" alt="跳尸"></div><h3>跳尸</h3><span class="tag">坦克 · 血厚 · 体型大</span><p>一跳一跳逼近，难以击退。2:00 精英版：红色描边光，落地震出冲击圈。</p></div>
+      <div class="card"><div class="pic"><img src="assets/enemy_firecracker.png" alt="爆竹鬼"></div><h3>爆竹鬼</h3><span class="tag">自爆者 · 4:00 后出现</span><p>贴近后引信加速、地面红圈预警 0.6 秒再炸，炸也会伤到其他妖物。</p></div>
+      <div class="card boss"><div class="pic"><img src="assets/boss_lanternbones.png" alt="Boss 灯骸老祖"></div><h3>灯骸老祖 · 终局 Boss（8:00）</h3><span class="tag">三招轮换 · 半血二阶段</span><p>① 骨灯笼弹幕环 ② 骨爪拍地（地面红圈预警）③ 召唤一圈纸扎人。半血后肋间小灯笼全部点亮，弹幕变双层、出招加快。</p></div>
+      <div class="card wide"><div class="pic"><img src="assets/field.jpg" alt="场地：荒村空地"></div><h3>场地 · 荒村夜地</h3><span class="tag">对局背景</span><p>中央留空给战斗；成品里作无限平铺场地，四周随机散落灯笼竿、石灯笼、栅栏，外加一层缓慢飘动的雾。</p></div>
+      <div class="card wide"><div class="pic"><img src="assets/title_keyart.jpg" alt="标题主视觉"></div><h3>标题主视觉</h3><span class="tag">标题页</span><p>左侧暗区叠网页字体标题，图里不含任何文字。</p></div>
+    </div>
+  </section>
+
+  <!-- 标题页 -->
+  <section class="panel" id="title">
+    <p class="caption">进入游戏的第一屏。点画面或按 <b>Enter / 空格</b> 开始；「灯坊」是局外强化商店。</p>
+    <div class="viewport"><div class="stage">
+      <div class="title-bg"></div><div class="title-shade"></div>
+      <div class="logo"><div class="cn">灯<em>骸</em>夜行</div><div class="sub">提一盏灯，守一夜村</div></div>
+      <div class="menu">
+        <button class="gbtn primary">开始夜行</button>
+        <button class="gbtn">灯坊 · 强化</button>
+        <button class="gbtn">设置</button>
+      </div>
+      <div class="press">— 点击画面或按 Enter 开始 —</div>
+      <div class="hint">
+        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> / 方向键 移动
+        <span class="key">空格</span> 冲刺　<span class="key">Esc</span> 暂停<br>
+        攻击全自动 · 升级时用 <span class="key">1</span><span class="key">2</span><span class="key">3</span> 或鼠标选择
+      </div>
+      <div class="best">最久守夜 <span class="num">06:42</span><br>持有魂火 <span class="num">1,280</span></div>
+    </div></div>
+  </section>
+
+  <!-- 对局 HUD -->
+  <section class="panel" id="hud">
+    <p class="caption">对局中段（04:37）示意：主角提灯居中，灯光照亮一圈；黄色符箓与橙色灯火是<b>己方</b>攻击，紫色鬼火是<b>敌方</b>弹幕；红色虚线圈为爆竹鬼的爆炸预警；左侧亮红描边的是精英跳尸。</p>
+    <div class="viewport"><div class="stage">
+      <div class="field"></div>
+      <div class="halo"></div>
+      <!-- 掉落 -->
+      <div class="gem" style="left:520px;top:300px"></div><div class="gem" style="left:548px;top:322px"></div><div class="gem" style="left:760px;top:470px"></div>
+      <div class="gem" style="left:700px;top:250px"></div><div class="coin" style="left:812px;top:300px"></div><div class="gem" style="left:430px;top:500px"></div>
+      <!-- 预警圈 -->
+      <div class="warn" style="left:880px;top:520px;width:170px;height:110px"></div>
+      <!-- 敌人 -->
+      <div class="ent" style="left:470px;top:300px"><img src="assets/enemy_paperman.png" width="66" alt=""></div>
+      <div class="ent hit" style="left:540px;top:250px"><img src="assets/enemy_paperman.png" width="66" alt=""></div>
+      <div class="ent flip" style="left:820px;top:270px"><img src="assets/enemy_paperman.png" width="66" alt=""></div>
+      <div class="ent flip" style="left:900px;top:380px"><img src="assets/enemy_paperman.png" width="66" alt=""></div>
+      <div class="ent" style="left:380px;top:420px"><img src="assets/enemy_paperman.png" width="66" alt=""></div>
+      <div class="ent" style="left:600px;top:590px"><img src="assets/enemy_paperman.png" width="66" alt=""></div>
+      <div class="ent flip" style="left:1050px;top:240px"><img src="assets/enemy_foxfire.png" width="62" alt=""></div>
+      <div class="ent flip" style="left:1110px;top:280px"><img src="assets/enemy_foxfire.png" width="62" alt=""></div>
+      <div class="ent flip" style="left:1080px;top:330px"><img src="assets/enemy_foxfire.png" width="62" alt=""></div>
+      <div class="ent flip" style="left:1150px;top:230px"><img src="assets/enemy_foxfire.png" width="62" alt=""></div>
+      <div class="ent" style="left:330px;top:220px"><img src="assets/enemy_lanternyokai.png" width="62" alt=""></div>
+      <div class="ent flip" style="left:1000px;top:640px"><img src="assets/enemy_lanternyokai.png" width="62" alt=""></div>
+      <div class="ent flip" style="left:880px;top:530px"><img src="assets/enemy_firecracker.png" width="68" alt=""></div>
+      <div class="ent elite" style="left:250px;top:600px"><img src="assets/enemy_jiangshi.png" width="120" alt=""></div>
+      <!-- 主角 -->
+      <div class="ent" style="left:640px;top:420px"><img src="assets/hero.png" width="78" alt=""></div>
+      <div class="mini-hp" style="left:640px;top:430px"></div>
+      <!-- 己方攻击 -->
+      <div class="talisman" style="left:560px;top:290px;transform:rotate(-50deg)"></div>
+      <div class="talisman" style="left:770px;top:300px;transform:rotate(55deg)"></div>
+      <div class="talisman" style="left:790px;top:360px;transform:rotate(75deg)"></div>
+      <div class="orb" style="left:560px;top:380px"></div><div class="orb" style="left:720px;top:330px"></div><div class="orb" style="left:680px;top:465px"></div>
+      <div class="bolt" style="left:660px;top:340px;width:250px;transform:rotate(-58deg)"></div>
+      <!-- 敌方弹 -->
+      <div class="ebullet" style="left:400px;top:230px"></div><div class="ebullet" style="left:450px;top:270px"></div><div class="ebullet" style="left:960px;top:600px"></div>
+      <div class="night"></div>
+      <div class="mini-hp" style="left:250px;top:465px"><i style="width:58%"></i></div><div class="elite-tag" style="left:250px;top:442px">精英 · 跳尸</div>
+      <!-- 飘字 -->
+      <div class="dmg" style="left:545px;top:200px">18</div>
+      <div class="dmg crit" style="left:830px;top:205px">54!</div>
+      <div class="dmg burn" style="left:470px;top:240px">6</div>
+      <div class="dmg" style="left:1080px;top:200px">23</div>
+      <!-- HUD -->
+      <div class="xpbar"><i></i><span>经验 64%</span></div>
+      <div class="hud-tl"><div class="portrait"></div><div class="bars"><div class="lv">Lv 14 · 阿烛</div><div class="hp"><i></i><span>87 / 120</span></div></div></div>
+      <div class="slots">
+        <div class="slot-row"><div class="seal s-fu">符<b>5</b></div><div class="seal s-huo">灯<b>3</b></div><div class="seal s-lei">雷<b>2</b></div></div>
+        <div class="slot-row"><div class="seal s-fu">疾<b>2</b></div><div class="seal s-huo">灼<b>1</b></div><div class="seal s-p">履<b>2</b></div><div class="seal s-p">袋<b>1</b></div></div>
+      </div>
+      <div class="timer"><div class="t">04:37</div><div class="w">06:00 精英 · 破灯笼王</div></div>
+      <div class="hud-tr">击杀 <span class="num">612</span><br>魂火 <span class="num">87</span></div>
+      <div class="dash"><div class="ring">70%</div>冲刺 · 空格</div>
+    </div></div>
+  </section>
+
+  <!-- 升级三选一 -->
+  <section class="panel" id="lvl">
+    <p class="caption">升级时游戏<b>暂停</b>，三张卡固定在画面中部（试玩脚本按相对坐标点击），也可按 1 / 2 / 3。卡顶颜色是稀有度：白 / 蓝 / 紫 / 金（金色=进化）。</p>
+    <div class="viewport"><div class="stage">
+      <div class="field"></div><div class="night"></div>
+      <div class="ent" style="left:640px;top:420px"><img src="assets/hero.png" width="78" alt=""></div>
+      <div class="dim"></div>
+      <div class="xpbar"><i style="width:100%"></i><span>升级！</span></div>
+      <div class="lvl-title">灯 火 渐 盛</div>
+      <div class="lvl-sub">Lv 14 → 15 · 选择一项</div>
+      <div class="cards">
+        <div class="ucard blue"><div class="rar">稀有 · 符箓流</div><div class="seal s-fu ic">疾</div><h4>疾书</h4><div class="lvtxt">Lv 2 → 3</div><p>所有符箓冷却 <em>-12%</em><br>驱邪符飞行速度 <em>+15%</em></p><span class="key k">1</span></div>
+        <div class="ucard gold"><div class="rar">进化 · 符箓流</div><div class="seal s-fu ic">萬</div><h4>万符朝宗</h4><div class="lvtxt">驱邪符 Lv5 + 疾书 → 进化</div><p>每次齐射 <em>8 张</em> 环形符箓<br>穿透 <em>+3</em>，命中留下符印<br>符印 1 秒后再爆 <em>40%</em> 伤害</p><span class="key k">2</span></div>
+        <div class="ucard purple"><div class="rar">史诗 · 雷法流</div><div class="seal s-lei ic">引</div><h4>雷引</h4><div class="lvtxt">Lv 0 → 1</div><p>掌心雷连锁目标 <em>+2</em><br>被灼烧的敌人受雷伤 <em>+30%</em></p><span class="key k">3</span></div>
+      </div>
+      <button class="gbtn reroll">换一批（剩 2 次）</button>
+    </div></div>
+  </section>
+
+  <!-- 结算 -->
+  <section class="panel" id="result">
+    <p class="caption">死亡或撑过 Boss 后进入结算。示意为<b>撑过 8 分钟并击败灯骸老祖</b>的胜利版；死亡版标题为「灯 灭」、魂火按存活时间与击杀折算。</p>
+    <div class="viewport"><div class="stage">
+      <div class="result-bg"></div>
+      <div class="result">
+        <h2 class="win">夜 尽 天 明</h2>
+        <div class="why">灯骸老祖已伏诛，荒村守住了</div>
+        <div class="stats">
+          <div class="stat"><div class="k2">守夜时长</div><div class="v">08:00</div></div>
+          <div class="stat"><div class="k2">等级</div><div class="v">27</div></div>
+          <div class="stat"><div class="k2">击杀</div><div class="v">1,846</div></div>
+          <div class="stat"><div class="k2">最高伤害武器</div><div class="v" style="font-size:22px;font-family:var(--title-font);line-height:45px;color:var(--lantern-2)">万符朝宗</div></div>
+        </div>
+        <div class="row2">
+          <div class="box"><h5>本局构筑</h5><div class="build">
+            <div class="seal s-fu">萬<b>★</b></div><div class="seal s-huo">灯<b>5</b></div><div class="seal s-lei">雷<b>3</b></div><div class="seal s-huo">灼<b>4</b></div>
+            <div class="seal s-lei">引<b>1</b></div><div class="seal s-p">履<b>3</b></div><div class="seal s-p">袋<b>2</b></div><div class="seal s-p">玉<b>2</b></div>
+          </div></div>
+          <div class="box"><h5>获得魂火（局外货币）</h5><div class="soul"><div class="flame"></div><div class="v">+ 426</div></div></div>
+        </div>
+        <div class="btns"><button class="gbtn primary">再来一局</button><button class="gbtn">回标题</button></div>
+      </div>
+      <div class="seed">种子 7F3A·91C2</div>
+    </div></div>
+  </section>
+
+  <!-- 玩法说明 -->
+  <section class="panel" id="rules">
+    <div class="doc">
+      <section>
+        <h3>操作</h3>
+        <ul>
+          <li><b>WASD / 方向键</b> 移动；武器按冷却<b>自动</b>朝最近妖物攻击</li>
+          <li><b>空格 / Shift</b> 冲刺：短距离突进，0.25 秒无敌，冷却 2.5 秒</li>
+          <li>升级三选一：鼠标点击或 <b>1 / 2 / 3</b>；每局 2 次「换一批」</li>
+          <li><b>Esc</b> 暂停（继续 / 重开 / 回标题，并显示当前构筑）</li>
+        </ul>
+      </section>
+      <section>
+        <h3>核心循环（30 秒内在做什么）</h3>
+        <p>走位躲妖物与弹幕 → 自动攻击清怪 → 拾取掉落的<b>魂晶（经验）</b>、铜钱、回血灯油 → 经验满<b>暂停三选一</b>构筑 → 妖物更多更强 → 再走位……<br>一局结束拿<b>魂火</b>，回标题在「灯坊」买永久强化，再来一局。</p>
+      </section>
+      <section class="full">
+        <h3>一局时间轴（8 分钟）</h3>
+        <table>
+          <tr><th>时间</th><th>发生什么</th></tr>
+          <tr><td class="t">00:00</td><td>只刷纸扎人，慢速。开局自带「驱邪符」</td></tr>
+          <tr><td class="t">00:25</td><td>第一次升级（前 5 级很快，构筑早成形）</td></tr>
+          <tr><td class="t">01:00</td><td>狐火成群出现</td></tr>
+          <tr><td class="t">02:00</td><td>精英 · 跳尸（红描边、落地冲击圈），必掉宝箱：一次金/紫升级</td></tr>
+          <tr><td class="t">03:00</td><td>破灯笼妖（远程鬼火弹）加入</td></tr>
+          <tr><td class="t">04:00</td><td>爆竹鬼加入；刷怪种类全开</td></tr>
+          <tr><td class="t">06:00</td><td>精英 · 破灯笼王（扇形三连弹），必掉宝箱</td></tr>
+          <tr><td class="t">08:00</td><td>停止刷普通怪，灯骸老祖登场，顶部大血条；击败即胜利</td></tr>
+        </table>
+      </section>
+      <section class="full">
+        <h3>构筑：15 个升级 · 3 个流派 · 3 种进化</h3>
+        <table>
+          <tr><th>流派</th><th>武器（自动攻击）</th><th>流派被动</th><th>进化（武器满 5 级 + 对应被动）</th></tr>
+          <tr><td><span class="school" style="background:#f2c14b">符箓 · 弹幕穿透</span></td><td>驱邪符：朝最近敌人飞符，命中穿透</td><td>疾书（冷却）、重符（弹体 +1）</td><td>驱邪符 + 疾书 → <b>万符朝宗</b>：环形齐射 + 符印二次爆</td></tr>
+          <tr><td><span class="school" style="background:#ff9a3c">灯火 · 环绕灼烧</span></td><td>灯火环：灯火绕身旋转</td><td>灼魂（灼烧持续伤害）、添油（范围 +）</td><td>灯火环 + 灼魂 → <b>长明灯阵</b>：灯火常驻且留下火路</td></tr>
+          <tr><td><span class="school" style="background:#7fd6ff">雷法 · 连锁暴击</span></td><td>掌心雷：落雷并连锁跳跃</td><td>雷引（连锁 +）、天罡（暴击率/暴伤）</td><td>掌心雷 + 天罡 → <b>五雷正法</b>：五道天雷 + 必暴击</td></tr>
+          <tr><td><span class="school" style="background:#b39cff">通用</span></td><td colspan="3">草履（移速）、护身玉（最大生命）、魂袋（拾取范围）、桃木心（全伤害）、静心（冲刺冷却）、铜钱串（魂火获取）</td></tr>
+        </table>
+        <p style="margin-top:8px">流派联动：<b>灼烧中的敌人受雷伤 +30%</b>；<b>符印被灯火触碰会提前引爆</b>。卡片写具体数值与当前等级；稀有度白/蓝/紫/金。</p>
+      </section>
+      <section>
+        <h3>难度曲线</h3>
+        <ul>
+          <li>妖物血量每分钟 ×1.25，刷新间隔每分钟 ×0.9，同屏上限 220</li>
+          <li>升级所需经验：5, 10, 15… 之后每级 ×1.15</li>
+          <li>目标手感：第 1 分钟轻松 → 第 3 分钟紧张 → 构筑成形后割草 → Boss 前后有压力</li>
+          <li>新手首局约撑 4–5 分钟；站着不动约 70 秒会被打倒</li>
+        </ul>
+      </section>
+      <section>
+        <h3>局外成长「灯坊」（存本地）</h3>
+        <ul>
+          <li>命灯（最大生命 +10/级）· 桃木（伤害 +5%/级）· 草履（移速 +4%/级）</li>
+          <li>魂袋（拾取范围 +15%/级）· 签筒（换一批 +1）· 还魂符（复活一次）</li>
+          <li>价格逐级递增；死亡也给魂火，胜利额外 +50%</li>
+          <li>里程碑解锁：首次撑过 4 分钟 → 「掌心雷」进入升级池</li>
+        </ul>
+      </section>
+      <section class="full">
+        <h3>一局时长 & 手感承诺</h3>
+        <p>一局 <b>8 分钟</b>（死亡更早结束）。打磨清单逐条做：受击白闪 + 击退 + 伤害飘字、暴击顿帧 60ms、小幅震屏、死亡纸屑/火星粒子、魂晶磁吸、受伤 0.8 秒无敌闪烁、UI 面板缓动与按钮回弹、ZzFX 音效 + 生成的战斗 BGM（可静音并记住设置）。</p>
+      </section>
+    </div>
+  </section>
+
+  <!-- 美术风格 -->
+  <section class="panel" id="style">
+    <div class="doc">
+      <section class="full">
+        <h3>画风</h3>
+        <p>2D 手绘卡通游戏素材，<b>粗黑描边</b>，<b>两阶赛璐璐阴影</b>，东方志怪 × 暗夜灯笼，俯视 3/4 视角，Q 版约 1:2.5 头身。角色明亮、场景偏暗：主角与掉落物永远是画面里最亮的东西，保证在妖物堆里一眼可见。夜色用一层径向暗角压低四周，主角灯笼照亮一圈。</p>
+      </section>
+      <section class="full">
+        <h3>色板</h3>
+        <div class="sw">
+          <div><i style="background:#141a33"></i><span>墨蓝·夜<br>#141A33</span></div>
+          <div><i style="background:#1f2a52"></i><span>墨蓝·中<br>#1F2A52</span></div>
+          <div><i style="background:#3b2a5c"></i><span>暗紫<br>#3B2A5C</span></div>
+          <div><i style="background:#5a3f86"></i><span>暗紫·亮<br>#5A3F86</span></div>
+          <div><i style="background:#ff9a3c"></i><span>灯笼暖橙<br>#FF9A3C</span></div>
+          <div><i style="background:#ffc977"></i><span>灯芯金<br>#FFC977</span></div>
+          <div><i style="background:#f3e6c8"></i><span>符纸米白<br>#F3E6C8</span></div>
+          <div><i style="background:#e0463a"></i><span>朱砂红（血/预警）<br>#E0463A</span></div>
+          <div><i style="background:#7fe3ff"></i><span>鬼火青（经验）<br>#7FE3FF</span></div>
+        </div>
+        <p style="margin-top:12px">弹幕区分：<b>己方 = 金黄符箓 / 橙色灯火 / 青白雷光</b>；<b>敌方 = 紫红鬼火</b>；危险预警一律朱砂红虚线圈。</p>
+      </section>
+      <section>
+        <h3>字体</h3>
+        <div class="fontdemo"><span style="font-family:var(--title-font);font-size:40px;color:var(--lantern-2)">灯骸夜行</span><span style="font-family:var(--title-font);font-size:22px">标题 / 卡名：楷体书法</span></div>
+        <div class="fontdemo"><span style="font-size:18px">正文：苹方 / 微软雅黑 无衬线</span><span style="font-family:var(--num-font);font-variant-numeric:tabular-nums;font-size:24px;color:var(--lantern-2)">04:37</span><span style="font-size:13px;color:#9aa3cf">数字：等宽 + tabular-nums</span></div>
+        <p style="margin-top:8px">游戏内文字一律黑色粗描边（同角色描边），任何背景上都读得清。成品会把一款开源书法字体（如 OFL 授权的马善政楷体）下载到本地打包，不依赖联网。</p>
+      </section>
+      <section>
+        <h3>UI 语言</h3>
+        <ul>
+          <li>按钮：粗黑边 + 底部厚阴影的“木牌”感，悬停放大、按下下沉回弹</li>
+          <li>升级图标：统一方形符牌画框，按流派分金 / 橙 / 青 / 紫底（成品用 asset 生成真实图标替换原型里的单字符牌）</li>
+          <li>面板出现：缩放 0.85→1 + Back 缓动；场景切换淡入淡出</li>
+        </ul>
+      </section>
+    </div>
+  </section>
+</main>
+
+<script>
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => x.setAttribute('aria-selected', String(x === t)));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === t.dataset.p));
+    fit();
+  }));
+  function fit() {
+    document.querySelectorAll('.viewport').forEach(v => {
+      const s = v.querySelector('.stage');
+      if (v.clientWidth) s.style.transform = `scale(${v.clientWidth / 1280})`;
+    });
+  }
+  window.addEventListener('resize', fit);
+  fit();
+</script>
+</body>
+</html>

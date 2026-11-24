@@ -1,0 +1,55 @@
+{
+  "key": "hero_xuanshuang",
+  "texKey": "g_hero_xuanshuang",
+  "unitKey": "xuanshuang",
+  "image": "hero_xuanshuang.png",
+  "frameWidth": 220,
+  "frameHeight": 220,
+  "cols": 4,
+  "rows": 4,
+  "frames": 16,
+  "anims": {
+    "idle": {
+      "start": 0,
+      "end": 3,
+      "frameRate": 6,
+      "repeat": -1
+    },
+    "walk": {
+      "start": 4,
+      "end": 7,
+      "frameRate": 12,
+      "repeat": -1
+    },
+    "attack": {
+      "start": 8,
+      "end": 11,
+      "frameRate": 14,
+      "repeat": 0
+    },
+    "cast": {
+      "start": 12,
+      "end": 13,
+      "frameRate": 12,
+      "repeat": 0
+    },
+    "ult": {
+      "start": 12,
+      "end": 13,
+      "frameRate": 12,
+      "repeat": 0
+    },
+    "hurt": {
+      "start": 14,
+      "end": 14,
+      "frameRate": 12,
+      "repeat": 0
+    },
+    "dead": {
+      "start": 15,
+      "end": 15,
+      "frameRate": 8,
+      "repeat": 0
+    }
+  }
+}

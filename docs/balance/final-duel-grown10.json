@@ -1,0 +1,152 @@
+{
+ "when": "2026-11-22T07:39:14.061Z",
+ "N": 40,
+ "sigma": 0.05,
+ "duel": true,
+ "set": "",
+ "secs": 77,
+ "summary": {
+  "proxy": {
+   "azhu": {
+    "n": 40,
+    "winPct": 20,
+    "medWave": 10,
+    "meanWave": 10,
+    "medSec": 50,
+    "medBossHpLeft": 41,
+    "medLv": 6,
+    "reasons": {
+     "英雄阵亡": 32,
+     "BOSS 被击败": 8
+    }
+   },
+   "huoqing": {
+    "n": 40,
+    "winPct": 7.5,
+    "medWave": 10,
+    "meanWave": 10,
+    "medSec": 89,
+    "medBossHpLeft": 46,
+    "medLv": 6,
+    "reasons": {
+     "英雄阵亡": 37,
+     "BOSS 被击败": 3
+    }
+   },
+   "yunque": {
+    "n": 40,
+    "winPct": 85,
+    "medWave": 10,
+    "meanWave": 10,
+    "medSec": 97,
+    "medBossHpLeft": 0,
+    "medLv": 9,
+    "reasons": {
+     "BOSS 被击败": 34,
+     "第 0 波 · 孔明被灯骸老祖所伤": 6
+    }
+   },
+   "xuanshuang": {
+    "n": 40,
+    "winPct": 67.5,
+    "medWave": 10,
+    "meanWave": 10,
+    "medSec": 168,
+    "medBossHpLeft": 0,
+    "medLv": 9,
+    "reasons": {
+     "英雄阵亡": 5,
+     "BOSS 被击败": 27,
+     "超时": 8
+    }
+   },
+   "ALL": {
+    "n": 160,
+    "winPct": 45,
+    "medWave": 10,
+    "meanWave": 10,
+    "medSec": 123,
+    "medBossHpLeft": 9,
+    "medLv": 7,
+    "reasons": {
+     "英雄阵亡": 74,
+     "BOSS 被击败": 72,
+     "第 0 波 · 孔明被灯骸老祖所伤": 6,
+     "超时": 8
+    }
+   }
+  },
+  "perfect": {
+   "azhu": {
+    "n": 40,
+    "winPct": 35,
+    "medWave": 10,
+    "meanWave": 10,
+    "medSec": 43,
+    "medBossHpLeft": 42,
+    "medLv": 6,
+    "reasons": {
+     "英雄阵亡": 26,
+     "BOSS 被击败": 14
+    }
+   },
+   "huoqing": {
+    "n": 40,
+    "winPct": 22.5,
+    "medWave": 10,
+    "meanWave": 10,
+    "medSec": 88,
+    "medBossHpLeft": 42,
+    "medLv": 6,
+    "reasons": {
+     "英雄阵亡": 31,
+     "BOSS 被击败": 9
+    }
+   },
+   "yunque": {
+    "n": 40,
+    "winPct": 70,
+    "medWave": 10,
+    "meanWave": 10,
+    "medSec": 100,
+    "medBossHpLeft": 0,
+    "medLv": 9,
+    "reasons": {
+     "BOSS 被击败": 28,
+     "英雄阵亡": 1,
+     "第 0 波 · 孔明被灯骸老祖所伤": 11
+    }
+   },
+   "xuanshuang": {
+    "n": 40,
+    "winPct": 75,
+    "medWave": 10,
+    "meanWave": 10,
+    "medSec": 186,
+    "medBossHpLeft": 0,
+    "medLv": 9,
+    "reasons": {
+     "BOSS 被击败": 30,
+     "英雄阵亡": 1,
+     "超时": 9
+    }
+   },
+   "ALL": {
+    "n": 160,
+    "winPct": 50.6,
+    "medWave": 10,
+    "meanWave": 10,
+    "medSec": 108,
+    "medBossHpLeft": 0,
+    "medLv": 8,
+    "reasons": {
+     "英雄阵亡": 59,
+     "BOSS 被击败": 81,
+     "第 0 波 · 孔明被灯骸老祖所伤": 11,
+     "超时": 9
+    }
+   }
+  }
+ },
+ "dmgShare": {}
+}

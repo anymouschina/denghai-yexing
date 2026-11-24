@@ -1,0 +1,18 @@
+{
+  "buildRange": { "unit": 220, "kongmingUnit": 300, "kongmingFoundation": 420 },
+  "upMul": [1.2, 1.8],
+  "refund": 0.5,
+  "waveScale": 0.05,
+  "types": {
+    "arrow": { "name": "箭楼", "desc": "单体速射，可打飞行妖物", "tex": "g_bld_arrow", "cost": 100, "r": 34, "h": 110, "scale": 0.6, "def": 10,
+               "hp": [600, 780, 1050], "dmg": [30, 45, 66], "range": 520, "cd": 0.8, "speed": 900, "proj": "g_arrow" },
+    "fu":    { "name": "符塔", "desc": "符箓落地溅射，清成群妖物", "tex": "g_bld_fu", "cost": 140, "r": 34, "h": 110, "scale": 0.6, "def": 10,
+               "hp": [650, 850, 1150], "dmg": [36, 54, 80], "range": 440, "cd": 1.6, "speed": 520, "proj": "proj_talisman", "splash": [90, 105, 120] },
+    "lei":   { "name": "雷坛", "desc": "连锁闪电，跳跃多个目标", "tex": "g_bld_lei", "cost": 180, "r": 34, "h": 110, "scale": 0.6, "def": 10,
+               "hp": [650, 850, 1150], "dmg": [40, 60, 88], "range": 460, "cd": 1.8, "jumps": [3, 4, 5], "jumpR": 200, "decay": 0.75 },
+    "wall":  { "name": "拒马", "desc": "阻挡地面妖物并反伤，耐久高", "tex": "g_bld_wall", "cost": 60, "r": 56, "h": 80, "scale": 0.6, "def": 30, "block": true,
+               "hp": [1400, 2000, 2800], "thorns": [0.3, 0.45, 0.6], "thornsRange": 220 },
+    "lamp":  { "name": "灯柱", "desc": "每秒治疗范围内友军与孔明", "tex": "g_bld_lamp", "cost": 160, "r": 34, "h": 120, "scale": 0.6, "def": 10,
+               "hp": [700, 900, 1200], "heal": [14, 20, 28], "range": 420, "tick": 1 }
+  }
+}

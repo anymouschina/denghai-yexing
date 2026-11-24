@@ -1,0 +1,509 @@
+{
+  "schools": {
+    "fu": {
+      "name": "符箓",
+      "color": "#f2c14b"
+    },
+    "huo": {
+      "name": "灯火",
+      "color": "#ff9a3c"
+    },
+    "lei": {
+      "name": "雷法",
+      "color": "#7fd6ff"
+    },
+    "gen": {
+      "name": "通用",
+      "color": "#b39cff"
+    }
+  },
+  "rarity": {
+    "white": {
+      "name": "普通",
+      "color": "#e8e6f5"
+    },
+    "blue": {
+      "name": "稀有",
+      "color": "#6fb6ff"
+    },
+    "purple": {
+      "name": "史诗",
+      "color": "#c08cff"
+    },
+    "gold": {
+      "name": "进化",
+      "color": "#ffcf5a"
+    }
+  },
+  "list": [
+    {
+      "id": "fu",
+      "type": "weapon",
+      "school": "fu",
+      "name": "驱邪符",
+      "icon": "fu",
+      "max": 5,
+      "stats": [
+        {
+          "dmg": 12,
+          "cd": 1,
+          "count": 1,
+          "pierce": 1
+        },
+        {
+          "dmg": 16,
+          "cd": 1,
+          "count": 1,
+          "pierce": 1
+        },
+        {
+          "dmg": 16,
+          "cd": 0.9,
+          "count": 2,
+          "pierce": 2
+        },
+        {
+          "dmg": 20,
+          "cd": 0.8,
+          "count": 2,
+          "pierce": 2
+        },
+        {
+          "dmg": 24,
+          "cd": 0.75,
+          "count": 3,
+          "pierce": 3
+        }
+      ],
+      "intro": "自动朝最近的妖物掷出驱邪符",
+      "labels": {
+        "dmg": [
+          "伤害",
+          ""
+        ],
+        "cd": [
+          "冷却",
+          " 秒"
+        ],
+        "count": [
+          "符箓",
+          " 张"
+        ],
+        "pierce": [
+          "穿透",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "huanhuo",
+      "type": "weapon",
+      "school": "huo",
+      "name": "灯火环",
+      "icon": "huanhuo",
+      "max": 5,
+      "stats": [
+        {
+          "dmg": 9,
+          "orbs": 2,
+          "radius": 85
+        },
+        {
+          "dmg": 9,
+          "orbs": 3,
+          "radius": 85
+        },
+        {
+          "dmg": 13,
+          "orbs": 3,
+          "radius": 95
+        },
+        {
+          "dmg": 13,
+          "orbs": 4,
+          "radius": 95
+        },
+        {
+          "dmg": 17,
+          "orbs": 5,
+          "radius": 105
+        }
+      ],
+      "intro": "灯火绕身旋转，触碰灼伤并击退妖物",
+      "labels": {
+        "dmg": [
+          "伤害",
+          ""
+        ],
+        "orbs": [
+          "灯火",
+          " 团"
+        ],
+        "radius": [
+          "半径",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "lei",
+      "type": "weapon",
+      "school": "lei",
+      "name": "掌心雷",
+      "icon": "lei",
+      "max": 5,
+      "stats": [
+        {
+          "dmg": 28,
+          "cd": 1.7,
+          "strikes": 1,
+          "chain": 1
+        },
+        {
+          "dmg": 36,
+          "cd": 1.7,
+          "strikes": 1,
+          "chain": 1
+        },
+        {
+          "dmg": 36,
+          "cd": 1.7,
+          "strikes": 2,
+          "chain": 1
+        },
+        {
+          "dmg": 46,
+          "cd": 1.5,
+          "strikes": 2,
+          "chain": 1
+        },
+        {
+          "dmg": 46,
+          "cd": 1.5,
+          "strikes": 3,
+          "chain": 2
+        }
+      ],
+      "intro": "随机劈落天雷，并连锁跳向附近妖物",
+      "labels": {
+        "dmg": [
+          "伤害",
+          ""
+        ],
+        "cd": [
+          "冷却",
+          " 秒"
+        ],
+        "strikes": [
+          "落雷",
+          " 道"
+        ],
+        "chain": [
+          "连锁",
+          ""
+        ]
+      }
+    },
+    {
+      "id": "jishu",
+      "type": "passive",
+      "school": "fu",
+      "name": "疾书",
+      "icon": "jishu",
+      "max": 5,
+      "per": {
+        "fuCd": 0.1,
+        "fuSpeed": 0.15
+      },
+      "lines": [
+        [
+          "fuCd",
+          "符箓冷却 -{v}",
+          "pct"
+        ],
+        [
+          "fuSpeed",
+          "符箓飞速 +{v}",
+          "pct"
+        ]
+      ]
+    },
+    {
+      "id": "zhongfu",
+      "type": "passive",
+      "school": "fu",
+      "name": "重符",
+      "icon": "zhongfu",
+      "max": 3,
+      "per": {
+        "fuCount": 1
+      },
+      "lines": [
+        [
+          "fuCount",
+          "驱邪符每次多掷 {v} 张",
+          "int"
+        ]
+      ]
+    },
+    {
+      "id": "zhuohun",
+      "type": "passive",
+      "school": "huo",
+      "name": "灼魂",
+      "icon": "zhuohun",
+      "max": 5,
+      "per": {
+        "burnDps": 4,
+        "igniteChance": 0.08
+      },
+      "lines": [
+        [
+          "burnDps",
+          "灯火附加灼烧 每秒 {v}",
+          "int"
+        ],
+        [
+          "igniteChance",
+          "其他攻击点燃率 {v}",
+          "pct"
+        ]
+      ],
+      "note": "灼烧持续 {burn.time} 秒"
+    },
+    {
+      "id": "tianyou",
+      "type": "passive",
+      "school": "huo",
+      "name": "添油",
+      "icon": "tianyou",
+      "max": 5,
+      "per": {
+        "orbRadius": 0.12,
+        "orbSpin": 0.12
+      },
+      "lines": [
+        [
+          "orbRadius",
+          "灯火环半径 +{v}",
+          "pct"
+        ],
+        [
+          "orbSpin",
+          "旋转速度 +{v}",
+          "pct"
+        ]
+      ]
+    },
+    {
+      "id": "leiyin",
+      "type": "passive",
+      "school": "lei",
+      "name": "雷引",
+      "icon": "leiyin",
+      "max": 3,
+      "per": {
+        "chain": 1
+      },
+      "lines": [
+        [
+          "chain",
+          "掌心雷连锁 +{v}",
+          "int"
+        ]
+      ],
+      "note": "被灼烧的妖物受雷伤 +{lei.burnBonus%}"
+    },
+    {
+      "id": "tiangang",
+      "type": "passive",
+      "school": "lei",
+      "name": "天罡",
+      "icon": "tiangang",
+      "max": 5,
+      "per": {
+        "crit": 0.08,
+        "critMul": 0.25
+      },
+      "lines": [
+        [
+          "crit",
+          "暴击率 +{v}",
+          "pct"
+        ],
+        [
+          "critMul",
+          "暴击伤害 +{v}",
+          "pct"
+        ]
+      ]
+    },
+    {
+      "id": "caolv",
+      "type": "passive",
+      "school": "gen",
+      "name": "草履",
+      "icon": "caolv",
+      "max": 5,
+      "per": {
+        "speed": 0.08
+      },
+      "lines": [
+        [
+          "speed",
+          "移动速度 +{v}",
+          "pct"
+        ]
+      ]
+    },
+    {
+      "id": "yupei",
+      "type": "passive",
+      "school": "gen",
+      "name": "护身玉",
+      "icon": "yupei",
+      "max": 5,
+      "per": {
+        "maxHp": 20
+      },
+      "lines": [
+        [
+          "maxHp",
+          "最大生命 +{v}",
+          "int"
+        ]
+      ],
+      "note": "选取时立即回复同等生命"
+    },
+    {
+      "id": "hundai",
+      "type": "passive",
+      "school": "gen",
+      "name": "魂袋",
+      "icon": "hundai",
+      "max": 5,
+      "per": {
+        "pickup": 0.3
+      },
+      "lines": [
+        [
+          "pickup",
+          "拾取范围 +{v}",
+          "pct"
+        ]
+      ]
+    },
+    {
+      "id": "taomu",
+      "type": "passive",
+      "school": "gen",
+      "name": "桃木心",
+      "icon": "taomu",
+      "max": 5,
+      "per": {
+        "dmg": 0.1
+      },
+      "lines": [
+        [
+          "dmg",
+          "武器伤害 +{v}",
+          "pct"
+        ]
+      ],
+      "note": "灼烧与符印爆炸不受加成"
+    },
+    {
+      "id": "jingxin",
+      "type": "passive",
+      "school": "gen",
+      "name": "静心",
+      "icon": "jingxin",
+      "max": 5,
+      "per": {
+        "dashCd": 0.12
+      },
+      "lines": [
+        [
+          "dashCd",
+          "冲刺冷却 -{v}",
+          "pct"
+        ]
+      ]
+    },
+    {
+      "id": "tongqian",
+      "type": "passive",
+      "school": "gen",
+      "name": "铜钱串",
+      "icon": "tongqian",
+      "max": 5,
+      "per": {
+        "soulGain": 0.15,
+        "coinChance": 0.02
+      },
+      "lines": [
+        [
+          "soulGain",
+          "结算魂火 +{v}",
+          "pct"
+        ],
+        [
+          "coinChance",
+          "铜钱掉落率 +{v}",
+          "pct"
+        ]
+      ]
+    }
+  ],
+  "evolutions": [
+    {
+      "id": "evo_wanfu",
+      "weapon": "fu",
+      "needs": "jishu",
+      "school": "fu",
+      "name": "万符朝宗",
+      "icon": "evo_wanfu",
+      "stats": {
+        "ringCount": 8,
+        "ringCd": 1.1,
+        "pierceBonus": 3,
+        "markDelay": 1,
+        "markRatio": 0.4,
+        "markRadius": 70
+      },
+      "desc": "每 {ringCd} 秒环射 {ringCount} 张符（受疾书加速）\n穿透 +{pierceBonus}，命中留下符印\n符印 {markDelay} 秒后炸开\n半径 {markRadius}，造成 {markRatio%} 伤害"
+    },
+    {
+      "id": "evo_changming",
+      "weapon": "huanhuo",
+      "needs": "zhuohun",
+      "school": "huo",
+      "name": "长明灯阵",
+      "icon": "evo_changming",
+      "stats": {
+        "orbs": 6,
+        "dmg": 22,
+        "radius": 120,
+        "trailEvery": 0.22,
+        "trailLife": 1.4,
+        "trailDmg": 7
+      },
+      "desc": "灯火固定 {orbs} 团，伤害 {dmg}\n半径 {radius}\n灯火走过之处留下火路\n火路每 0.5 秒灼伤 {trailDmg}"
+    },
+    {
+      "id": "evo_wulei",
+      "weapon": "lei",
+      "needs": "tiangang",
+      "school": "lei",
+      "name": "五雷正法",
+      "icon": "evo_wulei",
+      "stats": {
+        "strikes": 5,
+        "cd": 1.3,
+        "chainBonus": 1,
+        "alwaysCrit": true
+      },
+      "desc": "每次劈落 {strikes} 道天雷\n冷却 {cd} 秒，连锁 +{chainBonus}\n天雷必定暴击"
+    }
+  ]
+}

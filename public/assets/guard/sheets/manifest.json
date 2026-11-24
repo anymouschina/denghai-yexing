@@ -1,0 +1,667 @@
+{
+  "sheets": {
+    "azhu": {
+      "texKey": "hero_run",
+      "unitKey": "azhu",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "hero_huoqing": {
+      "texKey": "g_hero_huoqing",
+      "unitKey": "huoqing",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "hero_xuanshuang": {
+      "texKey": "g_hero_xuanshuang",
+      "unitKey": "xuanshuang",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "hero_yunque": {
+      "texKey": "g_hero_yunque",
+      "unitKey": "yunque",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "kongming": {
+      "texKey": "g_kongming",
+      "unitKey": "kongming",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "beast_xuanwu": {
+      "texKey": "g_beast_xuanwu",
+      "unitKey": "xuanwu",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "beast_zhuque": {
+      "texKey": "g_beast_zhuque",
+      "unitKey": "zhuque",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "beast_baihu": {
+      "texKey": "g_beast_baihu",
+      "unitKey": "baihu",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "beast_qinglong": {
+      "texKey": "g_beast_qinglong",
+      "unitKey": "qinglong",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "beast_qilin": {
+      "texKey": "g_beast_qilin",
+      "unitKey": "qilin",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "boss_lvda": {
+      "texKey": "g_boss_lvda",
+      "unitKey": "lvda",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "boss_xiangyu": {
+      "texKey": "g_boss_xiangyu",
+      "unitKey": "xiangyu",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    },
+    "boss_xingtian": {
+      "texKey": "g_boss_xingtian",
+      "unitKey": "xingtian",
+      "frameWidth": 220,
+      "frameHeight": 220,
+      "frames": 16,
+      "anims": {
+        "idle": {
+          "start": 0,
+          "end": 3,
+          "frameRate": 6,
+          "repeat": -1
+        },
+        "walk": {
+          "start": 4,
+          "end": 7,
+          "frameRate": 12,
+          "repeat": -1
+        },
+        "attack": {
+          "start": 8,
+          "end": 11,
+          "frameRate": 14,
+          "repeat": 0
+        },
+        "cast": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "ult": {
+          "start": 12,
+          "end": 13,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "hurt": {
+          "start": 14,
+          "end": 14,
+          "frameRate": 12,
+          "repeat": 0
+        },
+        "dead": {
+          "start": 15,
+          "end": 15,
+          "frameRate": 8,
+          "repeat": 0
+        }
+      }
+    }
+  }
+}

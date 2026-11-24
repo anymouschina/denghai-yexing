@@ -1,0 +1,149 @@
+{
+ "env": {
+  "cpu": "Apple M4",
+  "cores": 10,
+  "load": [
+   6.1,
+   9.3,
+   15.7
+  ],
+  "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
+ },
+ "rows": [
+  {
+   "targetEnemies": 0,
+   "targetBuildings": 0,
+   "fps": 60.1,
+   "clock": 1,
+   "tickMs": 0.03,
+   "enemies": 0,
+   "buildings": 0
+  },
+  {
+   "targetEnemies": 50,
+   "targetBuildings": 0,
+   "fps": 60,
+   "clock": 1,
+   "tickMs": 0.08,
+   "enemies": 50,
+   "buildings": 0
+  },
+  {
+   "targetEnemies": 100,
+   "targetBuildings": 0,
+   "fps": 60,
+   "clock": 1,
+   "tickMs": 0.06,
+   "enemies": 100,
+   "buildings": 0
+  },
+  {
+   "targetEnemies": 200,
+   "targetBuildings": 0,
+   "fps": 60,
+   "clock": 1,
+   "tickMs": 0.07,
+   "enemies": 200,
+   "buildings": 0
+  },
+  {
+   "targetEnemies": 260,
+   "targetBuildings": 0,
+   "fps": 60,
+   "clock": 1,
+   "tickMs": 0.08,
+   "enemies": 260,
+   "buildings": 0
+  },
+  {
+   "targetEnemies": 0,
+   "targetBuildings": 10,
+   "fps": 60.1,
+   "clock": 1.01,
+   "tickMs": 0.02,
+   "enemies": 0,
+   "buildings": 10
+  },
+  {
+   "targetEnemies": 50,
+   "targetBuildings": 10,
+   "fps": 60.1,
+   "clock": 1,
+   "tickMs": 0.06,
+   "enemies": 50,
+   "buildings": 10
+  },
+  {
+   "targetEnemies": 100,
+   "targetBuildings": 10,
+   "fps": 60,
+   "clock": 1,
+   "tickMs": 0.09,
+   "enemies": 100,
+   "buildings": 6
+  },
+  {
+   "targetEnemies": 200,
+   "targetBuildings": 10,
+   "fps": 60,
+   "clock": 1,
+   "tickMs": 0.09,
+   "enemies": 200,
+   "buildings": 4
+  },
+  {
+   "targetEnemies": 260,
+   "targetBuildings": 10,
+   "fps": 60,
+   "clock": 1,
+   "tickMs": 0.1,
+   "enemies": 260,
+   "buildings": 7
+  },
+  {
+   "targetEnemies": 0,
+   "targetBuildings": 20,
+   "fps": 60.1,
+   "clock": 1,
+   "tickMs": 0.02,
+   "enemies": 0,
+   "buildings": 20
+  },
+  {
+   "targetEnemies": 50,
+   "targetBuildings": 20,
+   "fps": 60,
+   "clock": 1,
+   "tickMs": 0.05,
+   "enemies": 50,
+   "buildings": 18
+  },
+  {
+   "targetEnemies": 100,
+   "targetBuildings": 20,
+   "fps": 60.1,
+   "clock": 1,
+   "tickMs": 0.07,
+   "enemies": 100,
+   "buildings": 12
+  },
+  {
+   "targetEnemies": 200,
+   "targetBuildings": 20,
+   "fps": 60,
+   "clock": 1,
+   "tickMs": 0.08,
+   "enemies": 200,
+   "buildings": 11
+  },
+  {
+   "targetEnemies": 260,
+   "targetBuildings": 20,
+   "fps": 60,
+   "clock": 1,
+   "tickMs": 0.09,
+   "enemies": 260,
+   "buildings": 10
+  }
+ ]
+}

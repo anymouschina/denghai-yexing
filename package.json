@@ -1,0 +1,21 @@
+{
+  "name": "denghai-yexing",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test tests/guard/",
+    "test:browser": "vite build && node tests/browser/original-regression.mjs && node tests/browser/m1-smoke.mjs"
+  },
+  "dependencies": {
+    "@fontsource/ma-shan-zheng": "^5.3.1",
+    "phaser": "^3.90.0",
+    "zzfx": "^1.4.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.8"
+  }
+}

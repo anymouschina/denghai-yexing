@@ -1,0 +1,62 @@
+{
+  "id": "w-20261118-65cdba",
+  "title": "灯骸夜行",
+  "type": "game",
+  "version": 3,
+  "summary": "东方志怪 × 暗夜灯笼的俯视角动作肉鸽（割草类）网页游戏。WASD/摇杆移动、自动攻击、闪避冲刺；一局约 8 分钟，升级三选一、多流派与进化，精英与 Boss 战，局外强化。已适配手机横屏：浮动摇杆、闪避键、竖屏引导、切后台自动暂停；键鼠同样可玩。美术全部由平台生成。",
+  "interfaces": {
+    "entry": "dist/index.html",
+    "doc": null
+  },
+  "dependsOn": [],
+  "sop": {
+    "id": "game",
+    "label": "游戏制作"
+  },
+  "standardsVersion": "026ed08",
+  "evidence": {
+    "required": [
+      "turn_completed",
+      "web_entry",
+      "page_loaded",
+      "screenshot",
+      "no_console_errors",
+      "interaction_responds",
+      "playthrough",
+      "generated_art_used",
+      "standards_review"
+    ],
+    "satisfied": [
+      "turn_completed",
+      "web_entry",
+      "page_loaded",
+      "screenshot",
+      "no_console_errors",
+      "interaction_responds",
+      "playthrough",
+      "generated_art_used",
+      "standards_review"
+    ],
+    "review": {
+      "passed": true,
+      "summary": "构建：dist 含触屏适配代码（\"请横屏\"在 bundle 中），宿主加载无缺失文件、无控制台报错，构建约 13.4MB、加载 193–274ms。运行：手机横屏 844×390 与竖屏 390×844 均正常加载、非空白，无错误。交互：宿主试玩 7 步状态与标签一致（title→game→pause→levelup→game 且闪避冷却 dashCd>0→pause→重开 level 1 并有击杀）；执行者日志在 844×390 与 932×430 各给出逐项 PASS（摇杆移动、第二指闪避多点、升级三选一、暂停/继续、切后台自动暂停、死亡结算、再来一局、竖屏引导层自动暂停）。键盘桌面回归日志全 PASS。画面：本审查模型不能看图，截图画风/文字清晰度未核实。流程：标题→开局→移动→攻击→升级→暂停→死亡→再来一局均有日志或宿主证据覆盖；手机适配说明.md 含改动表、局域网命令与步骤、已知限制，无发布类动作。未核实：真机表现、截图视觉质量；死亡结算一步日志自述用 setHp(1) 钩子加速，其余为真实触摸。",
+      "blockers": 0
+    }
+  },
+  "preview": ".tapcanvas/preview.png",
+  "artifacts": [
+    {
+      "kind": "web",
+      "title": "《灯骸夜行》手机横屏适配版（dist/index.html）",
+      "path": "dist/index.html"
+    }
+  ],
+  "source": {
+    "taskId": "20261117-fa193d66"
+  },
+  "project": {
+    "projectId": "e6d56cc0-f312-5d63-a6c0-280ad05d3cee"
+  },
+  "createdAt": "2026-11-18T01:25:32.548Z",
+  "updatedAt": "2026-11-18T02:38:02.206Z"
+}

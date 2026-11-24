@@ -1,0 +1,154 @@
+{
+ "when": "2026-11-22T07:40:34.018Z",
+ "N": 40,
+ "sigma": 0.05,
+ "duel": true,
+ "set": "",
+ "secs": 157,
+ "summary": {
+  "proxy": {
+   "azhu": {
+    "n": 40,
+    "winPct": 95,
+    "medWave": 20,
+    "meanWave": 20,
+    "medSec": 64,
+    "medBossHpLeft": 0,
+    "medLv": 16,
+    "reasons": {
+     "BOSS 被击败": 38,
+     "第 0 波 · 孔明被旱魃所伤": 2
+    }
+   },
+   "huoqing": {
+    "n": 40,
+    "winPct": 0,
+    "medWave": 20,
+    "meanWave": 20,
+    "medSec": 0,
+    "medBossHpLeft": 61,
+    "medLv": 14,
+    "reasons": {
+     "英雄阵亡": 40
+    }
+   },
+   "yunque": {
+    "n": 40,
+    "winPct": 77.5,
+    "medWave": 20,
+    "meanWave": 20,
+    "medSec": 68,
+    "medBossHpLeft": 0,
+    "medLv": 16,
+    "reasons": {
+     "BOSS 被击败": 31,
+     "英雄阵亡": 8,
+     "第 0 波 · 孔明被旱魃所伤": 1
+    }
+   },
+   "xuanshuang": {
+    "n": 40,
+    "winPct": 67.5,
+    "medWave": 20,
+    "meanWave": 20,
+    "medSec": 176,
+    "medBossHpLeft": 0,
+    "medLv": 16,
+    "reasons": {
+     "BOSS 被击败": 27,
+     "超时": 12,
+     "没撑到第 20 波": 1
+    }
+   },
+   "ALL": {
+    "n": 160,
+    "winPct": 60,
+    "medWave": 20,
+    "meanWave": 20,
+    "medSec": 75,
+    "medBossHpLeft": 0,
+    "medLv": 16,
+    "reasons": {
+     "BOSS 被击败": 96,
+     "第 0 波 · 孔明被旱魃所伤": 3,
+     "英雄阵亡": 48,
+     "超时": 12,
+     "没撑到第 20 波": 1
+    }
+   }
+  },
+  "perfect": {
+   "azhu": {
+    "n": 40,
+    "winPct": 97.5,
+    "medWave": 20,
+    "meanWave": 20,
+    "medSec": 66,
+    "medBossHpLeft": 0,
+    "medLv": 16,
+    "reasons": {
+     "BOSS 被击败": 39,
+     "第 0 波 · 孔明被旱魃所伤": 1
+    }
+   },
+   "huoqing": {
+    "n": 40,
+    "winPct": 2.5,
+    "medWave": 20,
+    "meanWave": 20,
+    "medSec": 63,
+    "medBossHpLeft": 61,
+    "medLv": 15,
+    "reasons": {
+     "英雄阵亡": 39,
+     "BOSS 被击败": 1
+    }
+   },
+   "yunque": {
+    "n": 40,
+    "winPct": 70,
+    "medWave": 20,
+    "meanWave": 20,
+    "medSec": 82,
+    "medBossHpLeft": 0,
+    "medLv": 16,
+    "reasons": {
+     "BOSS 被击败": 28,
+     "英雄阵亡": 10,
+     "第 0 波 · 孔明被旱魃所伤": 2
+    }
+   },
+   "xuanshuang": {
+    "n": 40,
+    "winPct": 85,
+    "medWave": 20,
+    "meanWave": 20,
+    "medSec": 163,
+    "medBossHpLeft": 0,
+    "medLv": 16,
+    "reasons": {
+     "BOSS 被击败": 34,
+     "超时": 5,
+     "没撑到第 20 波": 1
+    }
+   },
+   "ALL": {
+    "n": 160,
+    "winPct": 63.8,
+    "medWave": 20,
+    "meanWave": 20,
+    "medSec": 86,
+    "medBossHpLeft": 0,
+    "medLv": 16,
+    "reasons": {
+     "BOSS 被击败": 102,
+     "英雄阵亡": 49,
+     "第 0 波 · 孔明被旱魃所伤": 3,
+     "超时": 5,
+     "没撑到第 20 波": 1
+    }
+   }
+  }
+ },
+ "dmgShare": {}
+}

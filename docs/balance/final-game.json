@@ -1,0 +1,453 @@
+{
+ "when": "2026-11-22T07:42:08.731Z",
+ "N": 50,
+ "sigma": 0.05,
+ "duel": false,
+ "set": "",
+ "secs": 251,
+ "summary": {
+  "proxy": {
+   "azhu": {
+    "n": 50,
+    "winPct": 30,
+    "medWave": 30,
+    "meanWave": 29.5,
+    "medLv": 20,
+    "beasts": 3.5,
+    "quests": 11.5,
+    "kmEquipPct": 100,
+    "setPct": 92,
+    "deathCauses": {
+     "孔明被夜帝·无光所伤": 22,
+     "孔明被夜鸦所伤": 4,
+     "孔明被破灯笼妖所伤": 3,
+     "孔明被鬼车所伤": 3,
+     "孔明被旱魃所伤": 1
+    },
+    "loseWaves": {
+     "26-30": 33,
+     "21-25": 1,
+     "16-20": 1
+    },
+    "bossSec": {
+     "灯骸老祖": 73,
+     "旱魃": 101,
+     "夜帝·无光": 232
+    }
+   },
+   "huoqing": {
+    "n": 50,
+    "winPct": 40,
+    "medWave": 30,
+    "meanWave": 28.1,
+    "medLv": 20,
+    "beasts": 2.7,
+    "quests": 10.9,
+    "kmEquipPct": 100,
+    "setPct": 78,
+    "deathCauses": {
+     "孔明被鬼车所伤": 11,
+     "孔明被夜帝·无光所伤": 6,
+     "孔明被跳尸所伤": 3,
+     "孔明被旱魃所伤": 2,
+     "孔明被破灯笼妖所伤": 2
+    },
+    "loseWaves": {
+     "21-25": 11,
+     "26-30": 19
+    },
+    "bossSec": {
+     "灯骸老祖": 105,
+     "旱魃": 116,
+     "夜帝·无光": 195
+    }
+   },
+   "yunque": {
+    "n": 50,
+    "winPct": 36,
+    "medWave": 30,
+    "meanWave": 29.8,
+    "medLv": 20,
+    "beasts": 4,
+    "quests": 11.7,
+    "kmEquipPct": 100,
+    "setPct": 100,
+    "deathCauses": {
+     "孔明被夜帝·无光所伤": 18,
+     "孔明被鬼车所伤": 6,
+     "孔明被破灯笼妖所伤": 3,
+     "孔明被夜鸦所伤": 2,
+     "孔明被爆竹鬼所伤": 1
+    },
+    "loseWaves": {
+     "26-30": 32
+    },
+    "bossSec": {
+     "灯骸老祖": 71,
+     "旱魃": 95,
+     "夜帝·无光": 236
+    }
+   },
+   "xuanshuang": {
+    "n": 50,
+    "winPct": 44,
+    "medWave": 30,
+    "meanWave": 28.4,
+    "medLv": 20,
+    "beasts": 2.9,
+    "quests": 11.2,
+    "kmEquipPct": 100,
+    "setPct": 88,
+    "deathCauses": {
+     "孔明被鬼车所伤": 11,
+     "孔明被夜帝·无光所伤": 6,
+     "孔明被旱魃所伤": 3,
+     "孔明被破灯笼妖所伤": 3,
+     "孔明被纸扎人所伤": 2
+    },
+    "loseWaves": {
+     "26-30": 21,
+     "16-20": 2,
+     "21-25": 5
+    },
+    "bossSec": {
+     "灯骸老祖": 163,
+     "旱魃": 115,
+     "夜帝·无光": 227
+    }
+   },
+   "ALL": {
+    "n": 200,
+    "winPct": 37.5,
+    "medWave": 30,
+    "meanWave": 29,
+    "medLv": 20,
+    "beasts": 3.3,
+    "quests": 11.3,
+    "kmEquipPct": 100,
+    "setPct": 89.5,
+    "deathCauses": {
+     "孔明被夜帝·无光所伤": 52,
+     "孔明被鬼车所伤": 31,
+     "孔明被破灯笼妖所伤": 11,
+     "孔明被夜鸦所伤": 8,
+     "孔明被旱魃所伤": 6
+    },
+    "loseWaves": {
+     "26-30": 105,
+     "21-25": 17,
+     "16-20": 3
+    },
+    "bossSec": {
+     "灯骸老祖": 86,
+     "旱魃": 109,
+     "夜帝·无光": 220
+    }
+   }
+  },
+  "random": {
+   "azhu": {
+    "n": 50,
+    "winPct": 0,
+    "medWave": 13,
+    "meanWave": 13.4,
+    "medLv": 8,
+    "beasts": 0,
+    "quests": 2.7,
+    "kmEquipPct": 0,
+    "setPct": 0,
+    "deathCauses": {
+     "孔明被灯骸老祖所伤": 22,
+     "孔明被纸扎人所伤": 8,
+     "孔明被跳尸所伤": 7,
+     "孔明被鬼车所伤": 7,
+     "孔明被破灯笼妖所伤": 5
+    },
+    "loseWaves": {
+     "11-15": 42,
+     "16-20": 8
+    },
+    "bossSec": {
+     "灯骸老祖": 183,
+     "旱魃": 0,
+     "夜帝·无光": 0
+    }
+   },
+   "huoqing": {
+    "n": 50,
+    "winPct": 0,
+    "medWave": 13,
+    "meanWave": 13.1,
+    "medLv": 8,
+    "beasts": 0,
+    "quests": 2.5,
+    "kmEquipPct": 0,
+    "setPct": 0,
+    "deathCauses": {
+     "孔明被灯骸老祖所伤": 24,
+     "孔明被跳尸所伤": 8,
+     "孔明被纸扎人所伤": 5,
+     "孔明被夜鸦所伤": 4,
+     "孔明被鬼车所伤": 4
+    },
+    "loseWaves": {
+     "11-15": 46,
+     "16-20": 4
+    },
+    "bossSec": {
+     "灯骸老祖": 211,
+     "旱魃": 0,
+     "夜帝·无光": 0
+    }
+   },
+   "yunque": {
+    "n": 50,
+    "winPct": 0,
+    "medWave": 13,
+    "meanWave": 14.2,
+    "medLv": 8,
+    "beasts": 0,
+    "quests": 3.1,
+    "kmEquipPct": 0,
+    "setPct": 0,
+    "deathCauses": {
+     "孔明被灯骸老祖所伤": 19,
+     "孔明被纸扎人所伤": 8,
+     "孔明被跳尸所伤": 8,
+     "孔明被破灯笼妖所伤": 5,
+     "孔明被鬼车所伤": 5
+    },
+    "loseWaves": {
+     "11-15": 38,
+     "16-20": 11,
+     "21-25": 1
+    },
+    "bossSec": {
+     "灯骸老祖": 175,
+     "旱魃": 0,
+     "夜帝·无光": 0
+    }
+   },
+   "xuanshuang": {
+    "n": 50,
+    "winPct": 0,
+    "medWave": 13,
+    "meanWave": 13.7,
+    "medLv": 8,
+    "beasts": 0,
+    "quests": 2.6,
+    "kmEquipPct": 0,
+    "setPct": 2,
+    "deathCauses": {
+     "孔明被灯骸老祖所伤": 13,
+     "孔明被跳尸所伤": 11,
+     "孔明被鬼车所伤": 10,
+     "孔明被纸扎人所伤": 9,
+     "孔明被夜鸦所伤": 3
+    },
+    "loseWaves": {
+     "11-15": 42,
+     "16-20": 8
+    },
+    "bossSec": {
+     "灯骸老祖": 174,
+     "旱魃": 0,
+     "夜帝·无光": 0
+    }
+   },
+   "ALL": {
+    "n": 200,
+    "winPct": 0,
+    "medWave": 13,
+    "meanWave": 13.6,
+    "medLv": 8,
+    "beasts": 0,
+    "quests": 2.7,
+    "kmEquipPct": 0,
+    "setPct": 0.5,
+    "deathCauses": {
+     "孔明被灯骸老祖所伤": 78,
+     "孔明被跳尸所伤": 34,
+     "孔明被纸扎人所伤": 30,
+     "孔明被鬼车所伤": 26,
+     "孔明被破灯笼妖所伤": 15
+    },
+    "loseWaves": {
+     "11-15": 168,
+     "16-20": 31,
+     "21-25": 1
+    },
+    "bossSec": {
+     "灯骸老祖": 176,
+     "旱魃": 0,
+     "夜帝·无光": 0
+    }
+   }
+  },
+  "perfect": {
+   "azhu": {
+    "n": 50,
+    "winPct": 34,
+    "medWave": 30,
+    "meanWave": 29.8,
+    "medLv": 20,
+    "beasts": 3.7,
+    "quests": 11.3,
+    "kmEquipPct": 100,
+    "setPct": 100,
+    "deathCauses": {
+     "孔明被夜帝·无光所伤": 18,
+     "孔明被鬼车所伤": 6,
+     "孔明被破灯笼妖所伤": 5,
+     "孔明被夜鸦所伤": 2,
+     "孔明被爆竹鬼所伤": 1
+    },
+    "loseWaves": {
+     "26-30": 33
+    },
+    "bossSec": {
+     "灯骸老祖": 72,
+     "旱魃": 93,
+     "夜帝·无光": 209
+    }
+   },
+   "huoqing": {
+    "n": 50,
+    "winPct": 40,
+    "medWave": 30,
+    "meanWave": 28.6,
+    "medLv": 20,
+    "beasts": 2.7,
+    "quests": 11.5,
+    "kmEquipPct": 100,
+    "setPct": 84,
+    "deathCauses": {
+     "孔明被鬼车所伤": 6,
+     "孔明被跳尸所伤": 6,
+     "孔明被夜帝·无光所伤": 6,
+     "孔明被夜鸦所伤": 5,
+     "孔明被狐火所伤": 3
+    },
+    "loseWaves": {
+     "21-25": 9,
+     "26-30": 21
+    },
+    "bossSec": {
+     "灯骸老祖": 99,
+     "旱魃": 102,
+     "夜帝·无光": 187
+    }
+   },
+   "yunque": {
+    "n": 50,
+    "winPct": 20,
+    "medWave": 30,
+    "meanWave": 29.7,
+    "medLv": 20,
+    "beasts": 3.7,
+    "quests": 11,
+    "kmEquipPct": 100,
+    "setPct": 96,
+    "deathCauses": {
+     "孔明被夜帝·无光所伤": 16,
+     "孔明被鬼车所伤": 8,
+     "孔明被跳尸所伤": 6,
+     "孔明被破灯笼妖所伤": 6,
+     "孔明被夜鸦所伤": 2
+    },
+    "loseWaves": {
+     "26-30": 39,
+     "21-25": 1
+    },
+    "bossSec": {
+     "灯骸老祖": 73,
+     "旱魃": 112,
+     "夜帝·无光": 234
+    }
+   },
+   "xuanshuang": {
+    "n": 50,
+    "winPct": 52,
+    "medWave": 30,
+    "meanWave": 28.9,
+    "medLv": 21,
+    "beasts": 3.4,
+    "quests": 11.4,
+    "kmEquipPct": 100,
+    "setPct": 90,
+    "deathCauses": {
+     "孔明被夜帝·无光所伤": 7,
+     "孔明被跳尸所伤": 7,
+     "孔明被鬼车所伤": 5,
+     "孔明被夜鸦所伤": 2,
+     "孔明被旱魃所伤": 2
+    },
+    "loseWaves": {
+     "26-30": 19,
+     "21-25": 4,
+     "16-20": 1
+    },
+    "bossSec": {
+     "灯骸老祖": 161,
+     "旱魃": 100,
+     "夜帝·无光": 204
+    }
+   },
+   "ALL": {
+    "n": 200,
+    "winPct": 36.5,
+    "medWave": 30,
+    "meanWave": 29.3,
+    "medLv": 20,
+    "beasts": 3.4,
+    "quests": 11.3,
+    "kmEquipPct": 100,
+    "setPct": 92.5,
+    "deathCauses": {
+     "孔明被夜帝·无光所伤": 47,
+     "孔明被鬼车所伤": 25,
+     "孔明被跳尸所伤": 19,
+     "孔明被破灯笼妖所伤": 13,
+     "孔明被夜鸦所伤": 11
+    },
+    "loseWaves": {
+     "26-30": 112,
+     "21-25": 14,
+     "16-20": 1
+    },
+    "bossSec": {
+     "灯骸老祖": 88,
+     "旱魃": 103,
+     "夜帝·无光": 204
+    }
+   }
+  }
+ },
+ "dmgShare": {
+  "bld:arrow": "17.1%",
+  "bld:fu": "8.9%",
+  "beast:baihu": "6.6%",
+  "beast:zhuque/e": "5.6%",
+  "bld:lei": "5%",
+  "beast:xuanwu": "4.7%",
+  "beast:zhuque": "3.8%",
+  "bld:fu/splash": "3.4%",
+  "beast:baihu/e": "3.2%",
+  "hero:xuanshuang": "3.2%",
+  "beast:qinglong": "2.4%",
+  "hero:huoqing": "2.3%",
+  "beast:baihu/q": "2.2%",
+  "hero:huoqing/u": "2%",
+  "merc:nu": "1.9%",
+  "hero:azhu": "1.8%",
+  "beast:qilin": "1.7%",
+  "kongming:kongming": "1.5%",
+  "hero:xuanshuang/q": "1.5%",
+  "hero:yunque": "1.5%",
+  "beast:qinglong/q": "1.4%",
+  "beast:xuanwu/e": "1.3%",
+  "hero:yunque/u": "1.3%",
+  "hero:xuanshuang/u": "1.3%",
+  "merc:nu/q": "1.3%"
+ }
+}

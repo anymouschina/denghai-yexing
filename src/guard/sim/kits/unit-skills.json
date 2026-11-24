@@ -1,0 +1,13 @@
+{
+  "_note": "雇佣兵与神兽技能数值（units.json 归其它里程碑，这里按 key/槽位补充字段，运行时与 units.json 的 skills 合并）",
+  "dao":      { "q": { "coef": 1.6, "r": 120, "arc": 1.6, "stun": 1.0 } },
+  "nu":       { "q": { "coef": 0.9, "n": 6, "gap": 0.08, "speed": 800, "range": 500 } },
+  "tong":     { "q": { "coef": 4, "pct": 0.05, "r": 320, "kmMul": 0.6 } },
+  "baihu":    { "q": { "coef": 2.4, "range": 380, "r": 110, "dur": 0.28 }, "e": { "coef": 0.6, "r": 160, "dur": 3, "tick": 0.3 } },
+  "zhuque":   { "q": { "coef": 2.0, "r": 280, "arc": 1.0, "burn": 0.5, "burnT": 3 }, "e": { "coef": 0.8, "r": 180, "dur": 4, "tick": 0.4, "range": 560, "burn": 0.4 } },
+  "xuanwu":   { "q": { "shield": 0.12, "r": 360, "dur": 6 }, "e": { "r": 280, "tauntT": 3, "slow": 0.4, "coef": 1.0 } },
+  "qinglong": { "q": { "coef": 2.8, "r": 150, "range": 560, "stun": 0.5 }, "e": { "coef": 1.6, "n": 12, "range": 700, "jumpR": 260 } },
+  "qilin":    { "q": { "coef": 5, "pct": 0.08, "r": 520, "kmMul": 0.8 }, "e": { "coef": 2.4, "dist": 340, "dur": 0.3, "knock": 120, "hitR": 80 } },
+  "xiangyu":  { "q": { "coef": 3.0, "r": 210, "stun": 1.2 }, "e": { "coef": 2.6, "range": 420, "r": 140, "dur": 0.28, "buffSec": 6 } },
+  "xingtian": { "q": { "coef": 0.95, "r": 190, "dur": 3.2, "tick": 0.28 }, "e": { "healPct": 0.25, "dur": 8, "r": 200, "coef": 1.8 } }
+}

@@ -1,0 +1,317 @@
+{
+  "_doc": "可复用装备合成与神兵锻造配方表（纯数据驱动，地图无关）：支持同槽同阶二合一升阶，以及经典名将神兵定向锻造。",
+  "tierUp": {
+    "count": 2,
+    "maxSourceQ": 3,
+    "copperByQ": [40, 90, 180, 360]
+  },
+  "legendaries": [
+    {
+      "id": "qinglong_yanyuedao",
+      "name": "青龙偃月刀",
+      "slot": "weapon",
+      "set": "qinglong",
+      "q": 4,
+      "tex": "g_eq_legend_qinglong_blade",
+      "copper": 220,
+      "materials": [
+        { "slot": "weapon", "minQ": 2, "count": 1, "label": "灵器及以上武器 ×1" },
+        { "slot": "weapon", "minQ": 1, "count": 1, "label": "精钢及以上武器 ×1" }
+      ],
+      "main": { "stat": "atk", "add": 88 },
+      "subs": [
+        { "stat": "skillDmg", "mul": 0.28 },
+        { "stat": "crit", "mul": 0.14 },
+        { "stat": "aspd", "mul": 0.18 }
+      ],
+      "passive": "青龙破阵：技能额外造成 25% 破甲雷伤，攻速暴击全面飞跃",
+      "passiveTag": "yanyuedao"
+    },
+    {
+      "id": "fangtian_huaji",
+      "name": "方天画戟",
+      "slot": "weapon",
+      "set": "baihu",
+      "q": 4,
+      "tex": "g_eq_legend_fangtian_halberd",
+      "copper": 240,
+      "materials": [
+        { "slot": "weapon", "minQ": 2, "count": 1, "label": "灵器及以上武器 ×1" },
+        { "slot": "accessory", "minQ": 1, "count": 1, "label": "精钢及以上饰品 ×1" }
+      ],
+      "main": { "stat": "atk", "add": 98 },
+      "subs": [
+        { "stat": "critDmg", "mul": 0.50 },
+        { "stat": "dmg", "mul": 0.22 },
+        { "stat": "crit", "mul": 0.12 }
+      ],
+      "passive": "无双画戟：普攻与技能暴伤暴涨，击杀敌人额外回复 4% 生命",
+      "passiveTag": "fangtian"
+    },
+    {
+      "id": "zhuque_yushan",
+      "name": "朱雀羽扇",
+      "slot": "weapon",
+      "set": "zhuque",
+      "q": 4,
+      "tex": "g_eq_legend_zhuque_fan",
+      "copper": 220,
+      "materials": [
+        { "slot": "weapon", "minQ": 2, "count": 1, "label": "灵器及以上武器 ×1" },
+        { "slot": "treasure", "minQ": 1, "count": 1, "label": "精钢及以上法宝 ×1" }
+      ],
+      "main": { "stat": "atk", "add": 78 },
+      "subs": [
+        { "stat": "skillDmg", "mul": 0.42 },
+        { "stat": "cdr", "mul": 0.16 },
+        { "stat": "ultGain", "mul": 0.35 }
+      ],
+      "passive": "离火焚空：技能伤害与大招充能大幅跃升，施法行云流水",
+      "passiveTag": "yushan"
+    },
+    {
+      "id": "xuanwu_zhenyuejia",
+      "name": "玄武镇岳甲",
+      "slot": "armor",
+      "set": "xuanwu",
+      "q": 4,
+      "tex": "g_eq_legend_xuanwu_armor",
+      "copper": 200,
+      "materials": [
+        { "slot": "armor", "minQ": 2, "count": 1, "label": "灵器及以上护甲 ×1" },
+        { "slot": "armor", "minQ": 1, "count": 1, "label": "精钢及以上护甲 ×1" }
+      ],
+      "main": { "stat": "maxHp", "add": 960 },
+      "subs": [
+        { "stat": "def", "add": 48 },
+        { "stat": "regen", "add": 20 },
+        { "stat": "dmgTaken", "mul": 0.12 }
+      ],
+      "passive": "镇岳神躯：高额生命护甲与每秒回复，硬抗 BOSS 大招不倒",
+      "passiveTag": "zhenyuejia"
+    },
+    {
+      "id": "qilin_shengyin",
+      "name": "麒麟圣印",
+      "slot": "accessory",
+      "set": "wolong",
+      "q": 4,
+      "tex": "g_eq_legend_qilin_seal",
+      "copper": 240,
+      "materials": [
+        { "slot": "accessory", "minQ": 2, "count": 1, "label": "灵器及以上饰品 ×1" },
+        { "slot": "treasure", "minQ": 1, "count": 1, "label": "精钢及以上法宝 ×1" }
+      ],
+      "main": { "stat": "aspd", "mul": 0.28 },
+      "subs": [
+        { "stat": "crit", "mul": 0.18 },
+        { "stat": "cdr", "mul": 0.18 },
+        { "stat": "skillDmg", "mul": 0.26 }
+      ],
+      "passive": "麒麟祥瑞：攻速、暴击、冷却与技伤四维拉满",
+      "passiveTag": "shengyin"
+    },
+    {
+      "id": "wolong_bazhentu",
+      "name": "卧龙八阵图",
+      "slot": "treasure",
+      "set": "wolong",
+      "q": 4,
+      "tex": "g_eq_legend_wolong_scroll",
+      "copper": 260,
+      "materials": [
+        { "slot": "treasure", "minQ": 2, "count": 1, "label": "灵器及以上法宝 ×1" },
+        { "slot": "armor", "minQ": 1, "count": 1, "label": "精钢及以上护甲 ×1" }
+      ],
+      "main": { "stat": "skillDmg", "mul": 0.50 },
+      "subs": [
+        { "stat": "ultGain", "mul": 0.48 },
+        { "stat": "cdr", "mul": 0.18 },
+        { "stat": "atk", "add": 54 }
+      ],
+      "passive": "八阵奇谋：终极法宝，所有技能与治疗质变，大招连发不断",
+      "passiveTag": "bazhentu"
+    },
+    {
+      "id": "bawang_pozhunqiang",
+      "name": "霸王破阵枪",
+      "slot": "weapon",
+      "set": "xiangyu",
+      "q": 4,
+      "tex": "g_eq_legend_fangtian_halberd",
+      "tint": "0xff7a50",
+      "copper": 320,
+      "materials": [
+        { "slot": "weapon", "minQ": 3, "count": 1, "label": "仙宝及以上武器 ×1" },
+        { "slot": "armor", "minQ": 2, "count": 1, "label": "灵器及以上护甲 ×1" }
+      ],
+      "main": { "stat": "atk", "add": 124 },
+      "subs": [
+        { "stat": "skillDmg", "mul": 0.36 },
+        { "stat": "dmg", "mul": 0.24 },
+        { "stat": "maxHp", "add": 680 }
+      ],
+      "passive": "霸王破阵：巨额攻击与技能伤害加成，配霸王套装威力惊人",
+      "passiveTag": "bawang_pozhun"
+    },
+    {
+      "id": "xingtian_ganqifu",
+      "name": "刑天干戚斧",
+      "slot": "weapon",
+      "set": "xingtian",
+      "q": 4,
+      "tex": "g_eq_legend_qinglong_blade",
+      "tint": "0xc47bff",
+      "copper": 340,
+      "materials": [
+        { "slot": "weapon", "minQ": 3, "count": 1, "label": "仙宝及以上武器 ×1" },
+        { "slot": "armor", "minQ": 2, "count": 1, "label": "灵器及以上护甲 ×1" }
+      ],
+      "main": { "stat": "atk", "add": 116 },
+      "subs": [
+        { "stat": "maxHp", "add": 1100 },
+        { "stat": "def", "add": 45 },
+        { "stat": "dmgTaken", "mul": 0.10 }
+      ],
+      "passive": "不屈干戚：攻防一体并附带强力减伤，配战神套装屹立不倒",
+      "passiveTag": "xingtian_ganqi"
+    },
+    {
+      "id": "lvbu_wushuangji",
+      "name": "吕布无双戟",
+      "slot": "weapon",
+      "set": "lvbu",
+      "q": 4,
+      "tex": "g_eq_legend_fangtian_halberd",
+      "tint": "0xff5ac8",
+      "copper": 360,
+      "materials": [
+        { "slot": "weapon", "minQ": 3, "count": 1, "label": "仙宝及以上武器 ×1" },
+        { "slot": "accessory", "minQ": 2, "count": 1, "label": "灵器及以上饰品 ×1" }
+      ],
+      "main": { "stat": "atk", "add": 132 },
+      "subs": [
+        { "stat": "crit", "mul": 0.20 },
+        { "stat": "critDmg", "mul": 0.60 },
+        { "stat": "aspd", "mul": 0.26 }
+      ],
+      "passive": "无双乱舞：暴击、暴伤与攻速极限强化，配无双套装纵横战场",
+      "passiveTag": "lvbu_wushuang"
+    },
+    {
+      "id": "nuwa_stone",
+      "name": "女娲石",
+      "slot": "treasure",
+      "set": "wolong",
+      "q": 4,
+      "artifact": true,
+      "tex": "g_eq_legend_qilin_seal",
+      "tint": "0x5fe08a",
+      "copper": 420,
+      "materials": [
+        { "slot": "treasure", "minQ": 3, "count": 1, "label": "仙宝及以上法宝 ×1" },
+        { "slot": "accessory", "minQ": 2, "count": 1, "label": "灵器及以上饰品 ×1" }
+      ],
+      "main": { "stat": "maxHp", "add": 1200 },
+      "subs": [
+        { "stat": "regen", "add": 32 },
+        { "stat": "skillDmg", "mul": 0.35 },
+        { "stat": "cdr", "mul": 0.15 }
+      ],
+      "passive": "上古神器·涅槃：受致命伤原地满血复活并无敌2.5秒（45秒冷却）；每12秒群疗周围友军与孔明10%生命",
+      "passiveTag": "nuwa_stone"
+    },
+    {
+      "id": "donghuang_bell",
+      "name": "东皇钟",
+      "slot": "treasure",
+      "set": "xuanwu",
+      "q": 4,
+      "artifact": true,
+      "tex": "g_eq_legend_xuanwu_armor",
+      "tint": "0xffd36a",
+      "copper": 400,
+      "materials": [
+        { "slot": "treasure", "minQ": 3, "count": 1, "label": "仙宝及以上法宝 ×1" },
+        { "slot": "armor", "minQ": 2, "count": 1, "label": "灵器及以上护甲 ×1" }
+      ],
+      "main": { "stat": "def", "add": 68 },
+      "subs": [
+        { "stat": "maxHp", "add": 980 },
+        { "stat": "dmgTaken", "mul": 0.14 },
+        { "stat": "skillDmg", "mul": 0.25 }
+      ],
+      "passive": "上古神器·混沌沉默：每10秒震响，对280码敌人造成2.2倍攻击伤害并沉默2.5秒，自身获15%护盾",
+      "passiveTag": "donghuang_bell"
+    },
+    {
+      "id": "fuxi_qin",
+      "name": "伏羲琴",
+      "slot": "treasure",
+      "set": "qinglong",
+      "q": 4,
+      "artifact": true,
+      "tex": "g_eq_legend_wolong_scroll",
+      "tint": "0x7fe3ff",
+      "copper": 380,
+      "materials": [
+        { "slot": "treasure", "minQ": 3, "count": 1, "label": "仙宝及以上法宝 ×1" },
+        { "slot": "accessory", "minQ": 2, "count": 1, "label": "灵器及以上饰品 ×1" }
+      ],
+      "main": { "stat": "skillDmg", "mul": 0.45 },
+      "subs": [
+        { "stat": "aspd", "mul": 0.22 },
+        { "stat": "cdr", "mul": 0.18 },
+        { "stat": "ultGain", "mul": 0.40 }
+      ],
+      "passive": "上古神器·天音疗愈：每8秒群疗周围320码友军15%生命（孔明8%），并赋予+20%攻速/移速4秒",
+      "passiveTag": "fuxi_qin"
+    },
+    {
+      "id": "pangu_axe",
+      "name": "盘古斧",
+      "slot": "weapon",
+      "set": "xingtian",
+      "q": 4,
+      "artifact": true,
+      "tex": "g_eq_legend_fangtian_halberd",
+      "tint": "0xc47bff",
+      "copper": 450,
+      "materials": [
+        { "slot": "weapon", "minQ": 3, "count": 1, "label": "仙宝及以上武器 ×1" },
+        { "slot": "weapon", "minQ": 2, "count": 1, "label": "灵器及以上武器 ×1" }
+      ],
+      "main": { "stat": "atk", "add": 145 },
+      "subs": [
+        { "stat": "dmg", "mul": 0.28 },
+        { "stat": "crit", "mul": 0.16 },
+        { "stat": "critDmg", "mul": 0.45 }
+      ],
+      "passive": "上古神器·开天沉默：普攻20%触发220码2.5倍破甲重击并沉默2秒",
+      "passiveTag": "pangu_axe"
+    },
+    {
+      "id": "xuanyuan_sword",
+      "name": "轩辕剑",
+      "slot": "weapon",
+      "set": "plain",
+      "q": 4,
+      "artifact": true,
+      "tex": "g_eq_legend_xuanyuan_sword",
+      "copper": 480,
+      "materials": [
+        { "slot": "weapon", "minQ": 3, "count": 1, "label": "仙宝及以上武器 ×1" },
+        { "slot": "treasure", "minQ": 2, "count": 1, "label": "灵器及以上法宝 ×1" }
+      ],
+      "main": { "stat": "atk", "add": 130 },
+      "subs": [
+        { "stat": "dmg", "mul": 0.20 },
+        { "stat": "aspd", "mul": 0.15 },
+        { "stat": "crit", "mul": 0.10 }
+      ],
+      "effect": { "maxHpPct": 0.01, "icd": 0.35 },
+      "passive": "上古神器·圣道斩妖：普攻与技能命中附加目标最大生命1%的真实伤害（无视护甲，每0.35秒1次），妖物越强斩得越多",
+      "passiveTag": "xuanyuan_sword"
+    }
+  ]
+}

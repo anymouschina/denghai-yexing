@@ -1,0 +1,127 @@
+[
+ {
+  "name": "选英雄（玄霜）并进入剧情",
+  "pass": true,
+  "hero": "xuanshuang"
+ },
+ {
+  "name": "建造面板点击建造箭楼",
+  "pass": true,
+  "buildings": 1,
+  "copper": 110
+ },
+ {
+  "name": "雇佣面板雇佣乡勇刀盾",
+  "pass": true,
+  "mercs": 1,
+  "party": 2
+ },
+ {
+  "name": "孔明军令「筑箭楼」完成",
+  "pass": true,
+  "quests": 1
+ },
+ {
+  "name": "Tab 切换到雇佣兵",
+  "pass": true,
+  "ctrl": "merc:dao"
+ },
+ {
+  "name": "点头像切回英雄",
+  "pass": true,
+  "ctrl": "hero:xuanshuang"
+ },
+ {
+  "name": "注入代打机器人（只走 input/command）",
+  "pass": true
+ },
+ {
+  "name": "背包里给孔明换装",
+  "pass": true,
+  "before": 0,
+  "after": 2,
+  "kmSets": []
+ },
+ {
+  "name": "BOSS 波",
+  "pass": true,
+  "boss": "灯骸老祖",
+  "wave": 10
+ },
+ {
+  "name": "套装效果触发",
+  "pass": true,
+  "kmSets": [],
+  "sets": [
+   "卧龙2"
+  ]
+ },
+ {
+  "name": "进入神兽秘境（主线照常推进）",
+  "pass": true,
+  "realm": "xuanwu",
+  "wave": 13
+ },
+ {
+  "name": "收服神兽、加入可切换队伍",
+  "pass": true,
+  "tamed": [
+   "xuanwu"
+  ],
+  "party": 3
+ },
+ {
+  "name": "数字键切换到神兽",
+  "pass": true,
+  "ctrl": "beast:xuanwu"
+ },
+ {
+  "name": "B 段结束状态",
+  "pass": true,
+  "wave": 16,
+  "scene": "play",
+  "over": null,
+  "beasts": [
+   "xuanwu"
+  ],
+  "kmEquip": 4,
+  "kmSets": [
+   "镇岳2"
+  ],
+  "buildings": 3,
+  "mercs": 1,
+  "quests": 7,
+  "lv": 13
+ },
+ {
+  "name": "整局流程覆盖（种子 16838，共尝试 1 个种子）",
+  "pass": true,
+  "missing": [],
+  "tried": [
+   {
+    "seed": 16838,
+    "missing": []
+   }
+  ]
+ },
+ {
+  "name": "孔明阵亡 → 立即结算（失败）",
+  "pass": true,
+  "wave": 14,
+  "kmHp": 0
+ },
+ {
+  "name": "结算页 Enter 再守一夜",
+  "pass": true
+ },
+ {
+  "name": "控制台零报错",
+  "pass": true,
+  "errors": []
+ },
+ {
+  "name": "无 404",
+  "pass": true,
+  "missing": []
+ }
+]

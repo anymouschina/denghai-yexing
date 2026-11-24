@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>守灯·镇夜 — 原型稿</title>
+<style>
+  :root { --ink:#0b0d18; --navy:#141a33; --panel:#161a3c; --line:#343a66; --gold:#ffc977; --orange:#ff9a3c; --paper:#f3e6c8; --red:#e0463a; --cyan:#7fe3ff; --mute:#9aa3cf; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#0b0d1c; color:var(--paper); font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif; }
+  .k { font-family:"STKaiti","KaiTi","Kaiti SC",serif; }
+  header { padding:18px 28px; display:flex; align-items:center; gap:18px; border-bottom:2px solid var(--line); background:linear-gradient(90deg,#1b1640,#0b0d1c); }
+  header h1 { margin:0; font-size:34px; letter-spacing:8px; color:var(--gold); -webkit-text-stroke:1px var(--ink); text-shadow:0 0 18px rgba(255,154,60,.5); }
+  header small { color:var(--mute); }
+  nav { display:flex; gap:10px; margin-left:auto; }
+  nav button { font:inherit; font-size:15px; padding:9px 18px; border-radius:10px; border:3px solid var(--ink); background:#262b5e; color:var(--paper); cursor:pointer; box-shadow:0 0 0 2px var(--line); transition:transform .08s; }
+  nav button:hover { transform:scale(1.05); } nav button:active { transform:scale(.95); }
+  nav button.on { background:linear-gradient(#ffb05a,#e8711c); color:var(--ink); font-weight:700; box-shadow:0 0 0 2px var(--gold); }
+  .stage { width:1280px; height:720px; margin:22px auto; position:relative; overflow:hidden; border:3px solid var(--ink); box-shadow:0 0 0 2px var(--line),0 20px 60px #000; border-radius:8px; }
+  .screen { position:absolute; inset:0; display:none; } .screen.on { display:block; }
+  /* 标题/选英雄 */
+  #s1 .bg { position:absolute; inset:0; background:url(../public/assets/guard/keyart.jpg) center/cover; }
+  #s1 .shade { position:absolute; inset:0; background:linear-gradient(90deg,rgba(10,12,30,.95) 0,rgba(10,12,30,.7) 38%,rgba(10,12,30,0) 62%),linear-gradient(0deg,rgba(10,12,30,.85),rgba(10,12,30,0) 45%); }
+  #s1 .logo { position:absolute; left:64px; top:48px; font-size:92px; letter-spacing:10px; -webkit-text-stroke:3px var(--ink); paint-order:stroke fill; text-shadow:0 6px 26px #ff8a2a; }
+  #s1 .logo em { font-style:normal; color:var(--orange); }
+  #s1 .sub { position:absolute; left:70px; top:170px; color:#d6d0f0; letter-spacing:6px; font-size:19px; }
+  .heroes { position:absolute; left:56px; bottom:118px; display:flex; gap:14px; }
+  .hc { width:150px; height:204px; border-radius:14px; border:3px solid var(--ink); background:linear-gradient(#262b5e,#141a33); box-shadow:0 0 0 2px var(--line); position:relative; overflow:hidden; text-align:center; }
+  .hc img { height:128px; margin-top:10px; filter:drop-shadow(0 4px 0 var(--ink)); }
+  .hc b { display:block; font-size:24px; color:var(--paper); } .hc i { font-style:normal; font-size:12px; color:var(--mute); }
+  .hc.sel { box-shadow:0 0 0 3px var(--gold),0 0 24px rgba(255,154,60,.6); transform:translateY(-8px); }
+  .mode { position:absolute; left:56px; bottom:44px; display:flex; gap:12px; }
+  .btn { padding:12px 26px; font-size:22px; border-radius:12px; border:3px solid var(--ink); background:#262b5e; color:var(--paper); box-shadow:0 0 0 2px var(--line); }
+  .btn.p { background:linear-gradient(#ffb05a,#e8711c); color:var(--ink); box-shadow:0 0 0 2px var(--gold); }
+  .rec { position:absolute; right:36px; bottom:36px; width:250px; padding:14px 18px; border-radius:12px; background:rgba(15,17,40,.85); border:3px solid var(--ink); font-size:14px; line-height:26px; color:#d8d2f5; }
+  .rec span { float:right; font-family:Menlo,monospace; color:var(--gold); font-weight:700; }
+  /* 对局 HUD */
+  #s2 .world { position:absolute; inset:0; background:url(../public/assets/guard/ground.jpg) 0 0/512px; filter:saturate(.9) brightness(.82); }
+  #s2 .night { position:absolute; inset:0; background:radial-gradient(ellipse at 50% 52%,rgba(6,8,26,0) 18%,rgba(6,8,26,.45) 55%,rgba(4,5,16,.85) 100%); }
+  .spr { position:absolute; transform:translate(-50%,-100%); filter:drop-shadow(0 3px 0 rgba(0,0,0,.4)); }
+  .road { position:absolute; background:rgba(120,96,70,.35); border-radius:40px; }
+  .hpb { position:absolute; height:6px; width:54px; transform:translateX(-50%); background:#2a0f14; border:2px solid var(--ink); border-radius:4px; }
+  .hpb i { display:block; height:100%; background:#e0463a; border-radius:2px; }
+  .hpb.ally i { background:#5fe08a; }
+  .km { position:absolute; left:50%; top:14px; transform:translateX(-50%); width:520px; text-align:center; }
+  .km .bar { height:24px; border-radius:12px; border:3px solid var(--ink); background:#2a0f14; box-shadow:0 0 0 2px #ff5a4a,0 0 22px rgba(255,60,60,.7); overflow:hidden; position:relative; }
+  .km .bar i { position:absolute; left:0; top:0; bottom:0; width:58%; background:linear-gradient(#ff8a6a,#d8322a); }
+  .km .bar span { position:relative; font:700 14px Menlo,monospace; line-height:18px; }
+  .km .name { font-size:20px; color:var(--gold); margin-bottom:3px; -webkit-text-stroke:.5px var(--ink); }
+  .alert { position:absolute; left:50%; top:76px; transform:translateX(-50%); padding:6px 22px; border-radius:20px; background:rgba(160,20,20,.85); border:2px solid #ffb0a0; font-size:18px; letter-spacing:4px; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:.55; } }
+  .edge { position:absolute; inset:0; box-shadow:inset 0 0 90px rgba(255,40,40,.45); pointer-events:none; }
+  .wave { position:absolute; left:18px; top:14px; padding:10px 16px; border-radius:12px; background:rgba(15,17,40,.85); border:3px solid var(--ink); font-size:15px; line-height:24px; min-width:220px; }
+  .wave b { font-size:26px; color:var(--gold); } .wave .num { font-family:Menlo,monospace; color:var(--gold); }
+  .res { position:absolute; right:18px; top:14px; padding:10px 16px; border-radius:12px; background:rgba(15,17,40,.85); border:3px solid var(--ink); font-size:15px; line-height:26px; min-width:200px; }
+  .res img { height:22px; vertical-align:middle; margin-right:6px; }
+  .res .num { float:right; font-family:Menlo,monospace; color:var(--gold); font-weight:700; }
+  .mini { position:absolute; right:18px; top:120px; width:180px; height:129px; border-radius:10px; border:3px solid var(--ink); background:#12173a; box-shadow:0 0 0 2px var(--line); }
+  .mini i { position:absolute; width:7px; height:7px; border-radius:50%; }
+  .quest { position:absolute; right:18px; top:262px; width:240px; padding:10px 14px; border-radius:12px; background:rgba(15,17,40,.85); border:3px solid var(--ink); font-size:13px; line-height:21px; }
+  .quest h4 { margin:0 0 4px; font-size:16px; color:var(--gold); }
+  .quest .pg { height:6px; border-radius:3px; background:#2a2f5c; margin:3px 0 6px; } .quest .pg i { display:block; height:100%; border-radius:3px; background:var(--orange); }
+  .avatars { position:absolute; left:18px; bottom:16px; display:flex; gap:8px; }
+  .av { width:68px; height:68px; border-radius:12px; border:3px solid var(--ink); background:#262b5e; box-shadow:0 0 0 2px var(--line); position:relative; overflow:hidden; }
+  .av img { position:absolute; left:50%; top:4px; height:96px; transform:translateX(-50%); }
+  .av.on { box-shadow:0 0 0 3px var(--gold),0 0 18px rgba(255,154,60,.7); }
+  .av s { position:absolute; left:3px; top:1px; font:700 12px Menlo,monospace; text-decoration:none; color:var(--paper); text-shadow:0 0 3px var(--ink),0 1px 0 var(--ink); }
+  .av u { position:absolute; left:4px; right:4px; bottom:4px; height:5px; background:#2a0f14; border-radius:3px; } .av u b { display:block; height:100%; background:#5fe08a; border-radius:3px; }
+  .skills { position:absolute; right:18px; bottom:16px; display:flex; gap:8px; align-items:flex-end; }
+  .sk { width:64px; height:64px; position:relative; } .sk img { width:100%; height:100%; }
+  .sk.big { width:84px; height:84px; filter:drop-shadow(0 0 10px #ffcf5a); }
+  .sk .cd { position:absolute; inset:4px; background:conic-gradient(rgba(5,6,20,.75) 0 62%,transparent 0); border-radius:6px; }
+  .sk kbd { position:absolute; left:50%; bottom:-6px; transform:translateX(-50%); font:700 12px Menlo,monospace; background:var(--ink); color:var(--gold); padding:0 6px; border-radius:4px; }
+  .xp { position:absolute; left:0; right:0; bottom:0; height:6px; background:#141833; } .xp i { display:block; width:42%; height:100%; background:var(--cyan); }
+  .bag { position:absolute; left:400px; top:150px; width:520px; padding:14px; border-radius:14px; border:3px solid var(--ink); background:rgba(22,26,60,.94); box-shadow:0 0 0 2px var(--gold),0 20px 40px rgba(0,0,0,.6); }
+  .bag h3 { margin:0 0 8px; font-size:24px; color:var(--gold); }
+  .bag .row { display:flex; gap:14px; }
+  .doll { width:170px; } .doll .slot, .grid div { width:56px; height:56px; border-radius:8px; border:2px solid var(--line); background:#101433; display:flex; align-items:center; justify-content:center; }
+  .doll .slot img, .grid img { max-width:46px; max-height:46px; }
+  .doll .wrap { display:grid; grid-template-columns:repeat(2,56px); gap:8px; margin-top:6px; }
+  .grid { display:grid; grid-template-columns:repeat(6,48px); gap:5px; } .grid div { width:48px; height:48px; }
+  .q1{border-color:#c9c9c9!important}.q2{border-color:#5fe08a!important}.q3{border-color:#5aa8ff!important}.q4{border-color:#c77dff!important}.q5{border-color:#ffb340!important;box-shadow:0 0 10px rgba(255,179,64,.6)}
+  .setbn { position:absolute; left:50%; top:300px; transform:translateX(-50%); font-size:40px; letter-spacing:10px; color:#7fe3ff; -webkit-text-stroke:2px var(--ink); paint-order:stroke fill; text-shadow:0 0 22px #3fb0ff; white-space:nowrap; }
+  /* 结算 */
+  #s3 .bg { position:absolute; inset:0; background:url(../public/assets/guard/keyart.jpg) center/cover; filter:blur(3px) brightness(.4); }
+  #s3 .panel { position:absolute; left:240px; top:60px; width:800px; height:600px; border-radius:18px; background:rgba(22,26,60,.95); border:3px solid var(--ink); box-shadow:0 0 0 3px var(--gold),0 0 50px rgba(255,154,60,.4); padding:26px 40px; }
+  #s3 h2 { margin:0; text-align:center; font-size:66px; letter-spacing:16px; color:var(--gold); -webkit-text-stroke:2px var(--ink); text-shadow:0 0 22px #ff8a2a; }
+  #s3 .why { text-align:center; color:#d6d0f0; margin:-4px 0 14px; }
+  #s3 .stats { display:grid; grid-template-columns:1fr 1fr; gap:6px 40px; font-size:17px; line-height:32px; }
+  #s3 .stats span { float:right; font-family:Menlo,monospace; color:var(--gold); font-weight:700; }
+  #s3 .team { display:flex; gap:10px; justify-content:center; margin:16px 0; }
+  #s3 .team img { height:84px; filter:drop-shadow(0 3px 0 var(--ink)); }
+  #s3 .btns { display:flex; gap:18px; justify-content:center; margin-top:12px; }
+  section.doc { width:1280px; margin:10px auto 40px; display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  section.doc article { background:var(--panel); border:2px solid var(--line); border-radius:14px; padding:18px 22px; line-height:1.75; font-size:14.5px; }
+  section.doc h3 { margin:0 0 8px; color:var(--gold); font-size:22px; }
+  .art { width:1280px; margin:0 auto; background:var(--panel); border:2px solid var(--line); border-radius:14px; padding:16px 22px; }
+  .art h3 { margin:0 0 10px; color:var(--gold); font-size:22px; }
+  .gal { display:flex; flex-wrap:wrap; gap:10px; }
+  .gal figure { margin:0; width:142px; text-align:center; background:#101433; border-radius:10px; padding:6px; font-size:12px; color:var(--mute); }
+  .gal img { height:110px; max-width:130px; object-fit:contain; display:block; margin:0 auto 4px; }
+  .sw { display:inline-block; width:22px; height:22px; border-radius:5px; border:2px solid var(--ink); vertical-align:middle; margin-right:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 class="k">守灯 · 镇夜</h1><small>《灯骸夜行》新模式 · 原型稿（只画面与说明，不含游戏逻辑）</small>
+  <nav>
+    <button class="on" data-s="s1">① 标题 / 选英雄</button>
+    <button data-s="s2">② 对局画面（HUD）</button>
+    <button data-s="s3">③ 结算</button>
+  </nav>
+</header>
+
+<div class="stage">
+  <!-- ① 标题 / 选英雄 -->
+  <div class="screen on" id="s1">
+    <div class="bg"></div><div class="shade"></div>
+    <div class="logo k">守灯<em>·</em>镇夜</div>
+    <div class="sub">七 星 续 命 ， 一 夜 不 熄</div>
+    <div class="heroes">
+      <div class="hc"><img src="../public/assets/hero.png" alt="阿烛"><b class="k">阿烛</b><i>远程术士 · 符箓</i></div>
+      <div class="hc sel"><img src="../public/assets/guard/hero_huoqing.png" alt="霍青"><b class="k">霍青</b><i>近战枪客 · 突进</i></div>
+      <div class="hc"><img src="../public/assets/guard/hero_yunque.png" alt="云鹊"><b class="k">云鹊</b><i>远程射手 · 穿透</i></div>
+      <div class="hc"><img src="../public/assets/guard/hero_xuanshuang.png" alt="玄霜"><b class="k">玄霜</b><i>辅助治疗 · 冰控</i></div>
+    </div>
+    <div class="mode"><span class="btn p k">剧情 · 守满三十波</span><span class="btn k">无尽 · 镇夜到天明</span><span class="btn k">返回</span></div>
+    <div class="rec">剧情通关 <span>2 / 9</span><br>无尽最高 <span>第 37 波</span><br>霍青最佳 <span>第 30 波</span></div>
+  </div>
+
+  <!-- ② 对局 HUD -->
+  <div class="screen" id="s2">
+    <div class="world"></div>
+    <div class="road" style="left:590px;top:-40px;width:110px;height:330px"></div>
+    <div class="road" style="left:-40px;top:420px;width:560px;height:100px"></div>
+    <img class="spr" src="../public/assets/guard/altar.png" style="left:640px;top:470px;width:300px">
+    <img class="spr" src="../public/assets/guard/kongming.png" style="left:640px;top:420px;width:110px">
+    <div class="hpb ally" style="left:640px;top:318px;width:90px"><i style="width:58%"></i></div>
+    <img class="spr" src="../public/assets/guard/bld_arrow.png" style="left:470px;top:330px;width:86px">
+    <img class="spr" src="../public/assets/guard/bld_lei.png" style="left:820px;top:330px;width:70px">
+    <img class="spr" src="../public/assets/guard/bld_foundation.png" style="left:470px;top:640px;width:110px">
+    <img class="spr" src="../public/assets/guard/bld_wall.png" style="left:640px;top:250px;width:100px">
+    <img class="spr" src="../public/assets/guard/hero_huoqing.png" style="left:560px;top:260px;width:104px">
+    <div class="hpb ally" style="left:560px;top:150px"><i style="width:80%"></i></div>
+    <img class="spr" src="../public/assets/guard/merc_nu.png" style="left:740px;top:300px;width:64px">
+    <img class="spr" src="../public/assets/guard/beast_baihu.png" style="left:330px;top:560px;width:130px">
+    <img class="spr" src="../public/assets/enemy_paperman.png" style="left:610px;top:170px;width:56px">
+    <img class="spr" src="../public/assets/enemy_paperman.png" style="left:680px;top:150px;width:56px">
+    <img class="spr" src="../public/assets/enemy_foxfire.png" style="left:520px;top:130px;width:48px">
+    <img class="spr" src="../public/assets/guard/enemy_guiche.png" style="left:180px;top:500px;width:120px">
+    <img class="spr" src="../public/assets/guard/enemy_yeya.png" style="left:900px;top:200px;width:80px">
+    <img class="spr" src="../public/assets/enemy_jiangshi.png" style="left:110px;top:470px;width:70px">
+    <div class="hpb" style="left:180px;top:388px;width:80px"><i style="width:70%"></i></div>
+    <div class="night"></div>
+    <div class="edge"></div>
+    <div class="km"><div class="name k">孔明 · 七星续命</div><div class="bar"><i></i><span>1392 / 2400</span></div></div>
+    <div class="alert k">⚠ 孔明遇袭 · 北路</div>
+    <div class="wave"><b class="k">第 12 波</b> / 30<br>下一波 <span class="num">00:31</span>　<span style="color:#9aa3cf">N 提前召唤</span><br>本波剩余妖物 <span class="num">46</span></div>
+    <div class="res"><img src="../public/assets/drop_coin.png">铜钱 <span class="num">1,240</span><br><img src="../public/assets/drop_soul.png">霍青 Lv <span class="num">11</span><br><img src="../public/assets/drop_chest.png">背包 <span class="num">17/30</span></div>
+    <div class="mini"><i style="left:84px;top:58px;background:#ffc977;width:10px;height:10px"></i><i style="left:80px;top:30px;background:#e0463a"></i><i style="left:30px;top:62px;background:#e0463a"></i><i style="left:6px;top:6px;background:#7fe3ff"></i><i style="left:160px;top:6px;background:#5fe08a"></i><i style="left:160px;top:110px;background:#ff7a50"></i><i style="left:6px;top:110px;background:#ffffff"></i></div>
+    <div class="quest"><h4 class="k">孔明军令</h4>斩狐火 18 / 30<div class="pg"><i style="width:60%"></i></div>本波孔明失血 ≤ 15%<div class="pg"><i style="width:85%;background:#5fe08a"></i></div><span style="color:#9aa3cf">奖励：卧龙·七星灯（珍）</span></div>
+    <div class="avatars">
+      <div class="av on"><img src="../public/assets/guard/hero_huoqing.png"><s>1</s><u><b style="width:80%"></b></u></div>
+      <div class="av"><img src="../public/assets/guard/beast_baihu.png" style="height:70px;top:6px"><s>2</s><u><b style="width:100%"></b></u></div>
+      <div class="av"><img src="../public/assets/guard/merc_dao.png"><s>3</s><u><b style="width:55%"></b></u></div>
+      <div class="av"><img src="../public/assets/guard/merc_nu.png"><s>4</s><u><b style="width:90%"></b></u></div>
+      <div class="av" style="width:92px;font-size:12px;color:#9aa3cf;display:flex;align-items:center;justify-content:center;text-align:center;background:#141833">Tab 轮换<br>点头像切换</div>
+    </div>
+    <div class="skills">
+      <div class="sk"><img src="../public/assets/guard/sk/hq_q.png"><kbd>Q</kbd></div>
+      <div class="sk"><img src="../public/assets/guard/sk/hq_e.png"><div class="cd"></div><kbd>E</kbd></div>
+      <div class="sk"><img src="../public/assets/guard/sk/hq_r.png"><kbd>R</kbd></div>
+      <div class="sk"><img src="../public/assets/guard/sk/hq_f.png"><kbd>F</kbd></div>
+      <div class="sk big"><img src="../public/assets/guard/sk/hq_u.png"><kbd>空格</kbd></div>
+    </div>
+    <div class="bag">
+      <h3 class="k">背包 · 孔明装备 <span style="font-size:13px;color:#9aa3cf;font-family:sans-serif">（打开时战斗不暂停）</span></h3>
+      <div class="row">
+        <div class="doll"><img src="../public/assets/guard/kongming.png" style="height:92px;display:block;margin:0 auto"><div class="wrap">
+          <div class="slot q4"><img src="../public/assets/guard/eq/wolong_w.png"></div><div class="slot q3"><img src="../public/assets/guard/eq/wolong_a.png"></div>
+          <div class="slot q4"><img src="../public/assets/guard/eq/wolong_j.png"></div><div class="slot q5"><img src="../public/assets/guard/eq/wolong_t.png"></div></div>
+          <div style="font-size:12px;color:#7fe3ff;margin-top:6px">卧龙 4/4：冷却 −15%｜八阵图</div></div>
+        <div class="grid">
+          <div class="q3"><img src="../public/assets/guard/eq/baihu_w.png"></div><div class="q2"><img src="../public/assets/guard/eq/baihu_a.png"></div><div class="q5"><img src="../public/assets/guard/eq/qinglong_w.png"></div><div class="q1"><img src="../public/assets/guard/eq/plain_a.png"></div><div class="q2"><img src="../public/assets/guard/eq/pill.png"></div><div class="q2"><img src="../public/assets/guard/eq/oil.png"></div>
+          <div class="q4"><img src="../public/assets/guard/eq/xuanwu_a.png"></div><div class="q3"><img src="../public/assets/guard/eq/zhuque_j.png"></div><div class="q1"><img src="../public/assets/guard/eq/plain_w.png"></div><div class="q3"><img src="../public/assets/guard/eq/qinglong_t.png"></div><div class="q2"><img src="../public/assets/guard/eq/purse.png"></div><div class="q2"><img src="../public/assets/guard/eq/swift.png"></div>
+          <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+        </div>
+      </div>
+    </div>
+    <div class="xp"><i></i></div>
+  </div>
+
+  <!-- ③ 结算 -->
+  <div class="screen" id="s3">
+    <div class="bg"></div>
+    <div class="panel">
+      <h2 class="k">天 明 灯 存</h2>
+      <div class="why">剧情模式 · 第 30 波 · 夜帝·无光 已伏诛</div>
+      <div class="team"><img src="../public/assets/guard/kongming.png"><img src="../public/assets/guard/hero_huoqing.png"><img src="../public/assets/guard/beast_baihu.png"><img src="../public/assets/guard/beast_qinglong.png"><img src="../public/assets/guard/merc_nu.png"></div>
+      <div class="stats">
+        <div>守住波数<span>30 / 30</span></div><div>用时<span>24:51</span></div>
+        <div>击杀妖物<span>2,418</span></div><div>BOSS 击杀<span>3</span></div>
+        <div>收服神兽<span>3 / 5</span></div><div>建筑（满级）<span>9 (4)</span></div>
+        <div>完成军令<span>11</span></div><div>最高套装<span>卧龙 4 件</span></div>
+        <div>孔明剩余生命<span>41%</span></div><div>种子<span>20261117</span></div>
+      </div>
+      <div class="btns"><span class="btn p k">再守一夜（Enter）</span><span class="btn k">换英雄</span><span class="btn k">回标题</span></div>
+      <div style="text-align:center;color:#9aa3cf;margin-top:10px;font-size:13px">失败时标题为「灯 灭 · 孔 明 陨」，并写明死因（如：第 14 波 被鬼车 撞毁灯坛）</div>
+    </div>
+  </div>
+</div>
+
+<section class="doc">
+  <article>
+    <h3 class="k">玩法说明</h3>
+    <b>操作</b>：WASD 移动；J/左键 普攻（朝鼠标）；Q E R F 技能；空格 大招；Tab / 1–9 / 点头像 切换操控单位（英雄·雇佣兵·神兽，没操控的单位自动作战）；B 背包与孔明装备；G 建造；H 雇佣；T 任务；N 提前召唤下一波；Esc 系统菜单。<br>
+    <b>核心循环</b>：守波次 → 拿铜钱与装备 → 地基造塔/升级、雇守卫、做孔明军令 → 抽空进四角秘境打神兽收服、刷套装（主线照常推进，要权衡）→ 每 10 波 BOSS。<br>
+    <b>成长与难度曲线</b>：1–3 波只开北路、几乎不会输；4 波起多路、5 波精英；10 波第一个 BOSS 是第一次"差点输"；15 波四路全开，鬼车拆塔、夜鸦直扑孔明；20、30 波 BOSS 前压力最大。英雄 30 级、5 档品质、5 套 2/4 件套、建筑 3 级。<br>
+    <b>一局时长</b>：剧情 30 波约 25 分钟；无尽模式直到孔明阵亡。孔明阵亡立即结算。
+  </article>
+  <article>
+    <h3 class="k">美术风格说明</h3>
+    <b>画风</b>：与原作一致——2D 手绘卡通，粗黑描边，两阶赛璐璐阴影，Q 版比例，俯视 3/4 视角；东方志怪 × 三国，夜色中以灯火为视觉中心。全部素材由 asset 工具生成（gpt-image-2.6-flare，参考原作主角与妖物保持同一画风）。<br>
+    <b>色板</b>：<span class="sw" style="background:#141a33"></span>夜靛 <span class="sw" style="background:#3b2a5c"></span>暗紫 <span class="sw" style="background:#ff9a3c"></span>灯橙 <span class="sw" style="background:#ffc977"></span>暖金 <span class="sw" style="background:#e0463a"></span>朱红（敌方/警报） <span class="sw" style="background:#7fe3ff"></span>青（友方技能/套装）<br>
+    <b>品质色</b>：凡 白 / 良 绿 / 精 蓝 / 珍 紫 / 绝 金。<br>
+    <b>字体</b>：标题与卡名用马善政书法体（工程内打包），正文用系统无衬线，数字用等宽体。
+  </article>
+</section>
+
+<div class="art">
+  <h3 class="k">美术设定（asset 真实生成）</h3>
+  <div class="gal">
+    <figure><img src="../public/assets/guard/kongming.png">孔明（守护对象）</figure>
+    <figure><img src="../public/assets/hero.png">英雄·阿烛（沿用）</figure>
+    <figure><img src="../public/assets/guard/hero_huoqing.png">英雄·霍青</figure>
+    <figure><img src="../public/assets/guard/hero_yunque.png">英雄·云鹊</figure>
+    <figure><img src="../public/assets/guard/hero_xuanshuang.png">英雄·玄霜</figure>
+    <figure><img src="../public/assets/guard/merc_dao.png">雇佣·乡勇刀盾</figure>
+    <figure><img src="../public/assets/guard/merc_nu.png">雇佣·连弩手</figure>
+    <figure><img src="../public/assets/guard/merc_tong.png">雇佣·道童</figure>
+    <figure><img src="../public/assets/guard/beast_baihu.png">神兽·白虎</figure>
+    <figure><img src="../public/assets/guard/beast_zhuque.png">神兽·朱雀</figure>
+    <figure><img src="../public/assets/guard/beast_xuanwu.png">神兽·玄武</figure>
+    <figure><img src="../public/assets/guard/beast_qinglong.png">神兽·青龙</figure>
+    <figure><img src="../public/assets/guard/beast_qilin.png">神兽·麒麟（隐藏）</figure>
+    <figure><img src="../public/assets/guard/enemy_guiche.png">妖物·鬼车（攻城）</figure>
+    <figure><img src="../public/assets/guard/enemy_yeya.png">妖物·夜鸦（飞行）</figure>
+    <figure><img src="../public/assets/guard/boss_hanba.png">BOSS·旱魃</figure>
+    <figure><img src="../public/assets/guard/boss_yedi.png">终极·夜帝无光</figure>
+    <figure><img src="../public/assets/guard/altar.png">场景·七星灯坛</figure>
+    <figure><img src="../public/assets/guard/realm_gate.png">场景·秘境之门</figure>
+    <figure><img src="../public/assets/guard/bld_arrow.png">箭楼</figure>
+    <figure><img src="../public/assets/guard/bld_fu.png">符塔</figure>
+    <figure><img src="../public/assets/guard/bld_lei.png">雷坛</figure>
+    <figure><img src="../public/assets/guard/bld_wall.png">拒马</figure>
+    <figure><img src="../public/assets/guard/bld_lamp.png">灯柱</figure>
+  </div>
+</div>
+<script>
+  for (const b of document.querySelectorAll('nav button')) b.onclick = () => {
+    document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === b.dataset.s));
+  };
+</script>
+</body>
+</html>

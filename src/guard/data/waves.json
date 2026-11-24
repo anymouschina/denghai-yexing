@@ -1,0 +1,9 @@
+{
+  "pools": [
+    { "from": 1,  "weights": { "paperman": 6, "foxfire": 2 } },
+    { "from": 4,  "weights": { "paperman": 6, "foxfire": 3, "lantern": 1.5 } },
+    { "from": 6,  "weights": { "paperman": 5, "foxfire": 3, "lantern": 2, "jiangshi": 1, "firecracker": 1 } },
+    { "from": 11, "weights": { "paperman": 5, "foxfire": 3, "lantern": 2, "jiangshi": 1.5, "firecracker": 1.5, "guiche": 0.6, "yeya": 1.2 } },
+    { "from": 21, "weights": { "paperman": 4, "foxfire": 3, "lantern": 2.5, "jiangshi": 2, "firecracker": 2, "guiche": 1, "yeya": 1.8 } }
+  ]
+}
