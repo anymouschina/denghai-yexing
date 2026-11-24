@@ -6,13 +6,24 @@ import { sfx, music, unlockAudio } from '../../audio.js';
 import { makeButton, popIn, drawPanel, hintRow } from '../../widgets.js';
 import { preloadGuard, makeGuardTextures } from '../assets.js';
 import { loadGuardSave } from '../save.js';
+import { listRuns, latestRun, SLOT_NAME } from '../persist/store.js';
 import { touch } from '../../touch.js';
 
 const IDS = ['azhu', 'huoqing', 'yunque', 'xuanshuang'];
 const INK_N = 0x0b0d18;
 
+function agoText(ts) {
+  const sec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (sec < 60) return `${sec} 秒前`;
+  if (sec < 3600) return `${Math.floor(sec / 60)} 分钟前`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)} 小时前`;
+  return `${Math.floor(sec / 86400)} 天前`;
+}
+
 export class GuardSelect extends Phaser.Scene {
   constructor() { super('GuardSelect'); }
+
+  init(data) { this.autoResume = (data && data.resume) || null; } // 从标题页「继续守灯」直达：素材加载完立即读档
 
   preload() {
     const label = this.add.text(640, 360, '灯坛布阵中… 0%', { fontFamily: BF, fontSize: '20px', color: '#ffc977' }).setOrigin(0.5);
@@ -66,11 +77,12 @@ export class GuardSelect extends Phaser.Scene {
     // 详情面板
     this.detail = this.add.container(0, 0);
     this.modeBtns = [
-      makeButton(this, 200, 594, 280, 58, '剧情 · 守满三十波', () => this.start('story'), { primary: true, size: 25 }),
-      makeButton(this, 500, 594, 280, 58, '无尽 · 镇夜到天明', () => this.start('endless'), { size: 25 }),
-      makeButton(this, 730, 594, 140, 58, '返回', () => this.back(), { size: 25 }),
+      makeButton(this, 392, 594, 260, 58, '剧情 · 守满三十波', () => this.start('story'), { primary: true, size: 24 }),
+      makeButton(this, 664, 594, 260, 58, '无尽 · 镇夜到天明', () => this.start('endless'), { size: 24 }),
+      makeButton(this, 861, 594, 110, 58, '返回', () => this.back(), { size: 25 }),
     ];
     this.modeBtns.forEach((b, i) => popIn(this, b, 300 + i * 70));
+    this.buildContinue();
     if (!touch.enabled) {
       hintRow(this, 60, 662, [
         { key: '右键/点地' }, { text: '或' }, { key: 'WASD' }, { text: '移动' },
@@ -87,10 +99,64 @@ export class GuardSelect extends Phaser.Scene {
       if (e.key === 'ArrowLeft' || e.key === 'a') this.select((this.sel + 3) % 4);
       else if (e.key === 'ArrowRight' || e.key === 'd') this.select((this.sel + 1) % 4);
       else if (e.key >= '1' && e.key <= '4') this.select(Number(e.key) - 1);
+      else if (e.key === 'c' || e.key === 'C') this.continueRun();
       else if (e.key === 'Enter' || e.key === ' ') this.start('story');
       else if (e.key === 'Escape') this.back();
     });
     music.play('title');
+    if (this.autoResume) {
+      const slot = this.autoResume;
+      this.autoResume = null;
+      this.time.delayedCall(80, () => this.continueRun(slot));
+    }
+  }
+
+  // 「继续游戏」：列出自动 / 手动存档，点哪个读哪个；没有存档时灰显
+  buildContinue() {
+    this.runs = listRuns();
+    const latest = latestRun();
+    this.contBtn = makeButton(this, 155, 594, 190, 58, latest ? '继续游戏 [C]' : '继续（无存档）', () => this.continueRun(), { primary: !!latest, size: 24 });
+    this.contBtn.setEnabled?.(!!latest);
+    popIn(this, this.contBtn, 340);
+    this.runCards = this.runs.map((r, i) => {
+      const x = 60 + i * 322;
+      const y = 454;
+      const c = this.add.container(x, y);
+      const g = this.add.graphics();
+      const on = r.ok;
+      g.fillStyle(0x0b0d18).fillRoundedRect(0, 5, 310, 66, 10).fillStyle(on ? 0x24285a : 0x1a1d3a).fillRoundedRect(0, 0, 310, 66, 10).lineStyle(2.5, on ? 0xffc977 : 0x3a3f6a).strokeRoundedRect(0, 0, 310, 66, 10);
+      c.add(g);
+      let l1 = SLOT_NAME[r.slot];
+      let l2 = '— 暂无 —';
+      let col = '#80839c';
+      if (r.ok) {
+        const m = r.meta;
+        const hero = HEROES[m.heroId] ? HEROES[m.heroId].name : m.heroId;
+        l1 = `${SLOT_NAME[r.slot]} · ${hero} · ${m.mode === 'story' ? '剧情' : '无尽'}`;
+        l2 = `第 ${m.wave} 波 · Lv.${m.lv} · ${m.kills} 杀 · ${agoText(r.savedAt)}`;
+        col = '#d8d2f5';
+      } else if (!r.empty) { l2 = r.reason; col = '#ff8a7a'; }
+      c.add(this.add.text(14, 8, l1, { fontFamily: BF, fontSize: '16px', color: on ? '#ffc977' : '#9aa3cf', fontStyle: 'bold' }));
+      c.add(this.add.text(14, 36, l2, { fontFamily: BF, fontSize: '14px', color: col, wordWrap: { width: 286 } }));
+      if (on) {
+        const hit = this.add.rectangle(155, 33, 310, 66, 0, 0.001).setInteractive({ useHandCursor: true });
+        hit.on('pointerdown', () => this.continueRun(r.slot));
+        c.add(hit);
+      }
+      popIn(this, c, 320 + i * 60);
+      return c;
+    });
+  }
+
+  continueRun(slot) {
+    if (this.starting) return;
+    const pick = slot || (latestRun() || {}).slot;
+    if (!pick) return;
+    this.starting = true;
+    unlockAudio();
+    sfx('click');
+    this.cameras.main.fadeOut(350, 5, 6, 18);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('GuardGame', { resume: pick }));
   }
 
   buildRecord() {

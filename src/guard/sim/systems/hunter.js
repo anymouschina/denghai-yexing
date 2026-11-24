@@ -2,6 +2,7 @@
 // - 西南林缘驻扎「老猎人·陈老汉」与野狼群（苍原野狼 / 银背狼王），绝不进攻孔明。
 // - 猎人任务可无限重复：每猎杀 questNeed 只野狼自动交付，奖励铜钱 + 永久成长书卷 + 装备！
 import { pushOutOfWalls } from '../map.js';
+import { regFn } from '../../persist/fnRegistry.js';
 
 function nearestAllyNear(sim, e, range) {
   let best = null;
@@ -157,3 +158,6 @@ export default {
     },
   },
 };
+
+// 存档：妖物 update 函数登记，读档时按名字还原
+regFn('hunter.wolfUpdate', wolfUpdate);

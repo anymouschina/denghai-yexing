@@ -92,6 +92,9 @@ export class GuardHUD extends Phaser.Scene {
       if (r && r.ok && r.bonus) this.toast(`提前召唤 · 铜钱 +${r.bonus}`, '#ffd36a');
     }, { size: 12, font: BF, primary: true }).setDepth(16);
 
+    // 手动存档按钮（也可按 F6）；自动存档在波次切换 / 每 30 秒 / 切后台与刷新时发生
+    this.saveBtn = makeButton(this, 294, 66, 104, 26, '存档 [F6]', () => { this.gg.manualSave(); }, { size: 12, font: BF }).setDepth(16);
+
     this.coinIcon = this.add.image(1078, 32, 'drop_coin').setScale(0.4).setDepth(15);
     this.coinText = this.add.text(1254, 32, '', st(21, '#ffd36a', NF, { fontStyle: 'bold' })).setOrigin(1, 0.5).setDepth(15);
     this.lvText = this.add.text(1062, 58, '', st(13, '#d8d2f5')).setDepth(15);
@@ -1091,7 +1094,8 @@ export class GuardHUD extends Phaser.Scene {
     const p = drawPanel(this.add.graphics(), -250, -255, 500, 510, { glow: 0xff9a3c });
     const t = this.add.text(0, -210, '暂 停', st(50, '#ffc977', TF, { strokeThickness: 7 })).setOrigin(0.5);
     const sub = this.add.text(0, -158, `第 ${this.sim.wave.n} 波 · 孔明 ${Math.ceil(this.sim.kongming.hp)} / ${this.sim.kongming.maxHp}`, st(15, '#d8d2f5')).setOrigin(0.5);
-    const muteBtn = makeButton(this, 0, 8, 300, 46, isMuted() ? '声音：关' : '声音：开', () => {
+    const saveNote = this.add.text(0, -140, '', st(13, '#9ff0b8')).setOrigin(0.5);
+    const muteBtn = makeButton(this, 0, 62, 300, 46, isMuted() ? '声音：关' : '声音：开', () => {
       setMuted(!isMuted());
       muteBtn.setLabel(isMuted() ? '声音：关' : '声音：开');
     }, { size: 20 });
@@ -1105,25 +1109,26 @@ export class GuardHUD extends Phaser.Scene {
       return '震屏强度：100%';
     };
     const feelInit = getFeel();
-    const shakeBtn = makeButton(this, 0, 62, 300, 44, fmtShake(feelInit.shakeStrength), () => {
+    const shakeBtn = makeButton(this, 0, 114, 300, 44, fmtShake(feelInit.shakeStrength), () => {
       const cur = getFeel().shakeStrength;
       const next = cur <= 0.05 ? 0.5 : cur <= 0.6 ? 1.0 : 0;
       const updated = setFeel({ shakeStrength: next });
       shakeBtn.setLabel(fmtShake(updated.shakeStrength));
     }, { size: 18, font: BF });
-    const flashBtn = makeButton(this, 0, 114, 300, 44, `减弱闪光：${feelInit.reduceFlash ? '开' : '关'}`, () => {
+    const flashBtn = makeButton(this, 0, 166, 300, 44, `减弱闪光：${feelInit.reduceFlash ? '开' : '关'}`, () => {
       const cur = getFeel().reduceFlash;
       const updated = setFeel({ reduceFlash: !cur });
       flashBtn.setLabel(`减弱闪光：${updated.reduceFlash ? '开' : '关'}`);
     }, { size: 18, font: BF });
 
-    box.add([p, t, sub,
+    box.add([p, t, sub, saveNote,
       makeButton(this, 0, -102, 300, 46, '继续（Esc）', () => this.togglePause(), { primary: true, size: 21 }),
       makeButton(this, 0, -47, 300, 46, '重新开始', () => this.restart(), { size: 21 }),
+      makeButton(this, 0, 8, 300, 46, '手动存档', () => { const r = this.gg.manualSave(); if (r && r.ok) saveNote.setText(`已存档 · 第 ${r.meta.wave} 波 · ${fmtTime(r.meta.t)}`); }, { size: 21 }),
       muteBtn,
       shakeBtn,
       flashBtn,
-      makeButton(this, 0, 182, 300, 46, '回标题', () => this.toTitle(), { size: 20 })]);
+      makeButton(this, 0, 218, 300, 46, '回标题', () => this.toTitle(), { size: 20 })]);
     root.add([dim, box]);
     popIn(this, box);
     this.pauseC = root;

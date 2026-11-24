@@ -4,6 +4,7 @@
 // - 击杀稳产经验、铜钱与装备掉落，支持边刷练功房边回防主线！
 import ENEMIES from '../../data/enemies.json' with { type: 'json' };
 import { inRect, pushOutOfWalls } from '../map.js';
+import { regFn } from '../../persist/fnRegistry.js';
 
 function clampIn(o, rect, pad) {
   o.x = Math.max(rect[0] + pad, Math.min(rect[2] - pad, o.x));
@@ -294,3 +295,6 @@ export default {
     },
   },
 };
+
+// 存档：妖物 update 函数登记，读档时按名字还原
+regFn('training.temperArcherUpdate', temperArcherUpdate);

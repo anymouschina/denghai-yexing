@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import META from '../data/meta.json';
 import { TF, BF, NF, INK } from '../fonts.js';
 import { loadSave, writeSave } from '../save.js';
+import { latestRun } from '../guard/persist/store.js';
 import { sfx, music, unlockAudio, setMuted, isMuted } from '../audio.js';
 import { touch } from '../touch.js';
 import GUARD_GLYPHS from 'virtual:guard-glyphs';
@@ -48,6 +49,13 @@ export class Title extends Phaser.Scene {
     ];
     // 新模式入口「守灯·镇夜」：独立玩法与存档，见 src/guard/
     this.guardBtn = makeButton(this, 230, 380, 300, 56, '守灯 · 镇夜', () => this.startGuard());
+    // 继续游戏：有守灯存档时，入口直接给「继续守灯」
+    this.runInfo = latestRun();
+    if (this.runInfo) {
+      const m = this.runInfo.meta;
+      this.continueBtn = makeButton(this, 230, 248, 300, 56, `继续守灯 · 第 ${m.wave} 波`, () => this.continueGuard(this.runInfo.slot), { primary: true });
+      popIn(this, this.continueBtn, 60);
+    }
     const badge = this.add.container(370, 360);
     const bg = this.add.graphics();
     bg.fillStyle(0x0b0d18).fillRoundedRect(-30, -11, 64, 26, 8).fillStyle(0xe0463a).fillRoundedRect(-32, -14, 64, 26, 8);
@@ -83,6 +91,7 @@ export class Title extends Phaser.Scene {
       else if ((e.key === 'Enter' || e.key === ' ') && !this.shop) this.startGame();
       else if (e.key === 'm' || e.key === 'M') this.toggleSound();
       else if ((e.key === 'g' || e.key === 'G') && !this.shop) this.startGuard();
+      else if ((e.key === 'c' || e.key === 'C') && !this.shop && this.runInfo) this.continueGuard(this.runInfo.slot);
     });
     music.play('title');
   }
@@ -145,6 +154,16 @@ export class Title extends Phaser.Scene {
     const fontReady = document.fonts.load('48px "Ma Shan Zheng"', GUARD_GLYPHS).catch(() => {});
     this.cameras.main.fadeOut(350, 5, 6, 18);
     this.cameras.main.once('camerafadeoutcomplete', () => fontReady.then(() => this.scene.start('GuardSelect')));
+  }
+
+  continueGuard(slot) {
+    if (this.starting || this.shop) return;
+    this.starting = true;
+    unlockAudio();
+    sfx('click');
+    const fontReady = document.fonts.load('48px "Ma Shan Zheng"', GUARD_GLYPHS).catch(() => {});
+    this.cameras.main.fadeOut(350, 5, 6, 18);
+    this.cameras.main.once('camerafadeoutcomplete', () => fontReady.then(() => this.scene.start('GuardSelect', { resume: slot })));
   }
 
   // ---------------- 灯坊（局外强化） ----------------

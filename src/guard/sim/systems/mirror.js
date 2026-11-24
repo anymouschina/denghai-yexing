@@ -2,6 +2,7 @@
 // - 挑战 2倍 / 5倍 / 10倍 自身英雄镜像，击败各阶获得巨额永久战力飞升（三阶累计提升 30,000 战力！）
 // - 镜像拥有与当前英雄一致的外观与精灵图、招式与高额爆发，击败后永久计入 sim.mirror.bonus 并实时反映在属性面板。
 import { pushOutOfWalls, clampWorld } from '../map.js';
+import { regFn } from '../../persist/fnRegistry.js';
 
 function mirrorTarget(sim, e) {
   const h = sim.hero;
@@ -197,3 +198,6 @@ export default {
     },
   },
 };
+
+// 存档：妖物 update 函数登记，读档时按名字还原
+regFn('mirror.mirrorUpdate', mirrorUpdate);

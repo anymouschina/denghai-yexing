@@ -4,6 +4,7 @@
 import { pushOutOfWalls } from '../map.js';
 import ENEMIES from '../../data/enemies.json' with { type: 'json' };
 import { ITEMS } from './loot.js';
+import { regFn } from '../../persist/fnRegistry.js';
 
 function adaptiveInfo(sim) {
   const B = sim.bandits;
@@ -309,3 +310,7 @@ export default {
     },
   },
 };
+
+// 存档：妖物 update 函数登记，读档时按名字还原
+regFn('bandits.banditUnitUpdate', banditUnitUpdate);
+regFn('bandits.towerUpdate', towerUpdate);

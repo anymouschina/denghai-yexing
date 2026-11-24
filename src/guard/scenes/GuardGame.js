@@ -16,6 +16,8 @@ import { createGameFeel } from '../render/gameFeel.js';
 import { ensureUnitSpriteSheet, isActionSpriteSheet, isNativeSpriteSheet, playUnitActionAnim } from '../render/charAnim.js';
 import { resolveNativeSheet } from '../assets.js';
 import '../render/extensions.js';
+import { readRun } from '../persist/store.js';
+import { attachAutosave } from '../persist/autosave.js';
 
 const VIEW_PAD = 220;
 const params = new URLSearchParams(location.search);
@@ -26,12 +28,20 @@ export class GuardGame extends Phaser.Scene {
   init(data) {
     this.heroId = data.heroId || 'huoqing';
     this.mode = data.mode || 'story';
+    this.resumeSlot = data.resume || null; // 「继续游戏」：存档槽位 auto / manual
   }
 
   create() {
     const urlSeed = Number(params.get('seed'));
     this.seed = urlSeed ? urlSeed >>> 0 : (Math.random() * 0xffffffff) >>> 0;
-    this.sim = new Sim({ seed: this.seed, heroId: this.heroId, mode: this.mode });
+    this.resumed = null;
+    this.resumeError = null;
+    if (this.resumeSlot) {
+      const r = readRun(this.resumeSlot);
+      if (r.ok) { this.sim = r.sim; this.resumed = r; this.seed = r.sim.seed; this.heroId = r.sim.heroId; this.mode = r.sim.mode; } else this.resumeError = r.reason;
+      this.resumeSlot = null; // restart 时不再重复读档
+    }
+    if (!this.sim || !this.resumed) this.sim = new Sim({ seed: this.seed, heroId: this.heroId, mode: this.mode });
     this.sim.input.autoAttack = true;
     this.attackMoveMode = false;
     this.orderRipples = [];
@@ -130,10 +140,30 @@ export class GuardGame extends Phaser.Scene {
       const sp = unit && this.sprites?.get(unit.id);
       if (sp && this.feel) this.feel.popSprite(sp, 1.34, 0.74, 240);
     });
+    // 存档：波次切换 / 清波 / 每 30 秒 / 切后台与刷新 自动存；F6 或暂停菜单手动存
+    this.autosave = attachAutosave(this.sim, {
+      onSaved: (r) => { if (r.kind === 'manual' && this.hud) this.hud.toast(`已手动存档 · 第 ${r.meta.wave} 波`, '#9ff0b8'); },
+      onFail: (r) => { if (this.hud) this.hud.toast(r.reason || '存档失败', '#ff8a7a'); },
+    });
+    if (this.resumed) {
+      this.sim.t0Resumed = this.sim.t;
+      this.time.delayedCall(700, () => { if (this.hud) this.hud.toast(`已读取${this.resumed.slot === 'manual' ? '手动' : '自动'}存档 · 第 ${this.sim.wave.n} 波`, '#9ff0b8'); });
+      if (this.sim.enemies.some((e) => e.alive && e.boss && !e.realm)) music.play('boss');
+    } else if (this.resumeError) {
+      this.time.delayedCall(700, () => { if (this.hud) this.hud.toast(`读档失败：${this.resumeError}，已开始新局`, '#ff8a7a'); });
+    }
     this.events.once('shutdown', () => {
+      if (this.autosave) { this.autosave.dispose(); this.autosave = null; }
       this.tweens.killAll();
       setTouchVisible(false);
     });
+  }
+
+  manualSave() {
+    if (!this.autosave || this.sim.over) return null;
+    const r = this.autosave.manual();
+    if (r && !r.ok && this.hud) this.hud.toast(r.reason || '存档失败', '#ff8a7a');
+    return r;
   }
 
   addOrderRipple(x, y, color = 0x5fe08a, kind = 'move') {
@@ -435,6 +465,7 @@ export class GuardGame extends Phaser.Scene {
       return;
     }
     if (this.paused || this.panelPaused) return;
+    if (k === 'F6') { e.preventDefault?.(); this.manualSave(); return; }
     if (k === 'Tab') { e.preventDefault?.(); this.cmd({ type: 'cycle', dir: e.shiftKey ? -1 : 1 }); return; }
     if (k === 'F1') { e.preventDefault?.(); this.cmd({ type: 'switch', id: s.hero.id }); return; }
     if (k >= '1' && k <= '9') { const id = s.party.filter((i) => s.byId(i))[Number(k) - 1]; if (id) this.cmd({ type: 'switch', id }); return; }
@@ -559,6 +590,7 @@ export class GuardGame extends Phaser.Scene {
       let n = 0;
       while (this.acc >= TICK && n < 8 * this.timeScale) { s.step(); this.acc -= TICK; n++; }
       if (this.acc > TICK * 4) this.acc = 0;
+      if (this.autosave) this.autosave.flush();
     }
     this.render(rawDt, feelState);
     if (s.over && !this.endShown) {

@@ -4,6 +4,7 @@
 // - BOSS 绝不离开房间、绝不攻击孔明；切走操控的 AI 友军 3 秒后自动送回灯坛。
 import { inRect, pushOutOfWalls } from '../map.js';
 import { ITEMS } from './loot.js';
+import { regFn } from '../../persist/fnRegistry.js';
 
 function adaptiveInfo(sim, tierId) {
   const BR = sim.bossRoom;
@@ -318,3 +319,6 @@ export default {
     },
   },
 };
+
+// 存档：妖物 update 函数登记，读档时按名字还原
+regFn('bossRoom.roomBossUpdate', roomBossUpdate);

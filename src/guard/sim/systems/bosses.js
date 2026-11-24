@@ -8,6 +8,7 @@ import BD from '../../data/bosses.json' with { type: 'json' };
 import ENEMIES from '../../data/enemies.json' with { type: 'json' };
 import { poolFor, isBossWave } from './waves.js';
 import { pushOutOfWalls } from '../map.js';
+import { regFn } from '../../persist/fnRegistry.js';
 
 const W = BAL.waves;
 const TAU = Math.PI * 2;
@@ -324,3 +325,6 @@ export default {
     for (const e of sim.enemies) if (e.alive && e.elite && !e.boss) eliteSkill(sim, e, dt);
   },
 };
+
+// 存档：妖物 update 函数登记，读档时按名字还原
+regFn('bosses.bossUpdate', bossUpdate);

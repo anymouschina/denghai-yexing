@@ -6,6 +6,7 @@ import BAL from '../../data/balance.json' with { type: 'json' };
 import RD from '../../data/realms.json' with { type: 'json' };
 import ENEMIES from '../../data/enemies.json' with { type: 'json' };
 import { REALMS, HIDDEN, EXTRA_REALMS, ALL_REALMS, pushOutOfWalls, inRect } from '../map.js';
+import { regFn } from '../../persist/fnRegistry.js';
 
 const H = BAL.hiddenRealm;
 
@@ -648,3 +649,6 @@ export default {
     },
   },
 };
+
+// 存档：妖物 update 函数登记，读档时按名字还原
+regFn('realms.bossUpdate', bossUpdate);
