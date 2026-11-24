@@ -95,6 +95,7 @@ export class GuardHUD extends Phaser.Scene {
 
     // 手动存档按钮（也可按 F6）；自动存档在波次切换 / 每 30 秒 / 切后台与刷新时发生
     this.saveBtn = makeButton(this, 294, 66, 104, 26, '存档 [F6]', () => { this.gg.manualSave(); }, { size: 12, font: BF }).setDepth(16);
+    this.add.image(250, 66, 'g_ui_save_lantern').setDisplaySize(15, 24).setDepth(17);
 
     this.coinIcon = this.add.image(1078, 32, 'drop_coin').setScale(0.4).setDepth(15);
     this.coinText = this.add.text(1254, 32, '', st(21, '#ffd36a', NF, { fontStyle: 'bold' })).setOrigin(1, 0.5).setDepth(15);

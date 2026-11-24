@@ -136,8 +136,10 @@ export class GuardSelect extends Phaser.Scene {
         l2 = `第 ${m.wave} 波 · Lv.${m.lv} · ${m.kills} 杀 · ${agoText(r.savedAt)}`;
         col = '#d8d2f5';
       } else if (!r.empty) { l2 = r.reason; col = '#ff8a7a'; }
+      const ic = this.add.image(282, 33, 'g_ui_save_lantern').setDisplaySize(36, 66).setAlpha(on ? 1 : 0.3);
+      c.add(ic);
       c.add(this.add.text(14, 8, l1, { fontFamily: BF, fontSize: '16px', color: on ? '#ffc977' : '#9aa3cf', fontStyle: 'bold' }));
-      c.add(this.add.text(14, 36, l2, { fontFamily: BF, fontSize: '14px', color: col, wordWrap: { width: 286 } }));
+      c.add(this.add.text(14, 36, l2, { fontFamily: BF, fontSize: '14px', color: col, wordWrap: { width: 250 } }));
       if (on) {
         const hit = this.add.rectangle(155, 33, 310, 66, 0, 0.001).setInteractive({ useHandCursor: true });
         hit.on('pointerdown', () => this.continueRun(r.slot));
