@@ -20,6 +20,7 @@ import { readRun } from '../persist/store.js';
 import { attachAutosave } from '../persist/autosave.js';
 
 const VIEW_PAD = 220;
+const PARTICLE_CAP = 360; // 单个发射器同时存活粒子上限（怪潮连杀时防止粒子无限堆积）
 const params = new URLSearchParams(location.search);
 
 export class GuardGame extends Phaser.Scene {
@@ -52,6 +53,12 @@ export class GuardGame extends Phaser.Scene {
       globalThis.__guardScene = this;
     }
     this.acc = 0;
+    // scene.restart 不会重建实例：上一局遗留的标志必须在 create 里复位（endShown 不复位会导致第二局结算界面永不出现）
+    this.endShown = false;
+    this.errorCount = 0;
+    this.lastError = null;
+    this.failStreak = 0;
+    this.halted = false;
     this.paused = false;
     this.panelPaused = false;
     this.timeScale = params.get('tapcanvasPlaytest') === '1' ? Math.max(1, Math.min(8, Number(params.get('ts')) || 1)) : 1;
@@ -79,11 +86,11 @@ export class GuardGame extends Phaser.Scene {
     }
     this.textIdx = 0;
     const pcfg = (extra) => this.add.particles(0, 0, 'glow', {
-      emitting: false, speed: { min: 80, max: 260 }, lifespan: { min: 300, max: 650 }, scale: { start: 0.5, end: 0 }, alpha: { start: 1, end: 0 }, blendMode: 'ADD', ...extra,
+      emitting: false, speed: { min: 80, max: 260 }, lifespan: { min: 300, max: 650 }, scale: { start: 0.5, end: 0 }, alpha: { start: 1, end: 0 }, blendMode: 'ADD', maxAliveParticles: PARTICLE_CAP, ...extra,
     }).setDepth(9150);
     this.pSpark = pcfg({ tint: [0xffa040, 0xffd36a, 0xe0463a] });
     this.pPaper = this.add.particles(0, 0, 'paper', {
-      emitting: false, speed: { min: 80, max: 260 }, lifespan: { min: 300, max: 700 }, gravityY: 260, rotate: { min: 0, max: 360 }, scale: { start: 1, end: 0.2 }, alpha: { start: 1, end: 0 }, tint: [0xf3e6c8, 0xb9a6d6, 0xe0463a],
+      emitting: false, speed: { min: 80, max: 260 }, lifespan: { min: 300, max: 700 }, gravityY: 260, rotate: { min: 0, max: 360 }, scale: { start: 1, end: 0.2 }, alpha: { start: 1, end: 0 }, tint: [0xf3e6c8, 0xb9a6d6, 0xe0463a], maxAliveParticles: PARTICLE_CAP,
     }).setDepth(9150);
     this.pGold = pcfg({ tint: [0xffd36a, 0xffffff, 0x7fe3ff], speed: { min: 150, max: 420 }, lifespan: { min: 500, max: 1000 } });
     this.pHeal = pcfg({ tint: [0x5fe08a, 0xc8ffd8], speed: { min: 30, max: 90 }, gravityY: -120 });
@@ -155,6 +162,10 @@ export class GuardGame extends Phaser.Scene {
     this.events.once('shutdown', () => {
       if (this.autosave) { this.autosave.dispose(); this.autosave = null; }
       this.tweens.killAll();
+      this.time.removeAllEvents();
+      this.sprites.clear();
+      this.pools.clear();
+      this.fxItems.length = 0;
       setTouchVisible(false);
     });
   }
@@ -581,22 +592,38 @@ export class GuardGame extends Phaser.Scene {
   // ---------------- 主循环 ----------------
   update(_, deltaMs) {
     const rawDt = Math.min(deltaMs, 100) / 1000;
-    const feelState = this.feel ? this.feel.update(rawDt) : { simScale: 1, offsetX: 0, offsetY: 0, roll: 0 };
-    this.feelState = feelState;
+    let feelState = this.feelState || { simScale: 1, offsetX: 0, offsetY: 0, roll: 0 };
     const s = this.sim;
-    if (!this.paused && !this.panelPaused && !s.over) {
-      this.readInput();
-      this.acc += rawDt * this.timeScale * feelState.simScale;
-      let n = 0;
-      while (this.acc >= TICK && n < 8 * this.timeScale) { s.step(); this.acc -= TICK; n++; }
-      if (this.acc > TICK * 4) this.acc = 0;
-      if (this.autosave) this.autosave.flush();
+    // 全局错误保护（最后保险，不是泄漏修复的替代品）：Phaser 的主循环先调 update 再排下一帧 rAF，
+    // 场景 update 抛出的异常会让整个游戏循环停摆（表现为"闪退/卡死"），所以每个阶段单独兜住并计数，errorCount 经调试钩子暴露。
+    try { if (this.feel) feelState = this.feelState = this.feel.update(rawDt); } catch (e) { this.reportError(e, 'feel'); }
+    if (!this.paused && !this.panelPaused && !s.over && !this.halted) {
+      try {
+        this.readInput();
+        this.acc += rawDt * this.timeScale * feelState.simScale;
+        let n = 0;
+        while (this.acc >= TICK && n < 8 * this.timeScale) { s.step(); this.acc -= TICK; n++; }
+        if (this.acc > TICK * 4) this.acc = 0;
+        this.failStreak = 0;
+        if (this.autosave) this.autosave.flush();
+      } catch (e) {
+        this.acc = 0;
+        this.reportError(e, 'sim');
+        // 模拟层连续报错说明状态已不一致，继续跑只会刷屏并拖垮帧率：停步并提示重开
+        if (++this.failStreak >= 30) { this.halted = true; this.hud?.toast?.('模拟出现异常已暂停，请按 Esc 选择重开', '#ff8a7a'); }
+      }
     }
-    this.render(rawDt, feelState);
+    try { this.render(rawDt, feelState); } catch (e) { this.reportError(e, 'render'); }
     if (s.over && !this.endShown) {
       this.endShown = true;
       this.time.delayedCall(1300, () => this.hud.showResult());
     }
+  }
+
+  reportError(e, where) {
+    this.errorCount = (this.errorCount || 0) + 1;
+    this.lastError = `${where}: ${(e && e.stack) || e}`;
+    if (this.errorCount <= 5 || this.errorCount % 500 === 0) console.error(`[guard] ${where} 异常 #${this.errorCount}`, e);
   }
 
   // 渲染帧位置插值（30Hz 模拟步长 → 60/120fps 丝滑渲染；闪现/传送位移 > 220px 直接吸附不拉丝）

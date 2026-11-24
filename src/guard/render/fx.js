@@ -116,7 +116,10 @@ const HANDLERS = {
   ring(sc, f) {
     spawnRingVfx(sc, f);
   },
-  warnRing(sc, f) { sc.fxItems.push({ k: 'warn', ...f, life: f.dur, max: f.dur }); },
+  warnRing(sc, f) {
+    sc.fxItems.push({ k: 'warn', ...f, life: f.dur, max: f.dur });
+    if (sc.fxItems.length > 120) sc.fxItems.shift(); // 预警圈上限：超限丢最旧
+  },
   charge() {},
   levelup(sc, f) {
     sc.pGold?.explode(30, f.x, f.y - 40);

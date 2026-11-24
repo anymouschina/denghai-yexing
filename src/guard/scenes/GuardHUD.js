@@ -29,6 +29,7 @@ export class GuardHUD extends Phaser.Scene {
   create() {
     this.gg = this.scene.get('GuardGame');
     this.sim = this.gg.sim;
+    this.errorCount = 0;
     this.modal = null; // 'pause' | 'result'
     this.panel = null; // 当前打开的面板 {name, obj}
     this.panelObjs = {};
@@ -640,7 +641,11 @@ export class GuardHUD extends Phaser.Scene {
   }
 
   // ---------------- 每帧刷新 ----------------
-  update() {
+  update(...a) {
+    try { this.updateHud(...a); } catch (e) { this.errorCount = (this.errorCount || 0) + 1; this.gg?.reportError?.(e, 'hud'); }
+  }
+
+  updateHud() {
     const s = this.sim;
     const g = this.g.clear();
     const km = s.kongming;

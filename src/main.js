@@ -10,7 +10,7 @@ import { UI } from './scenes/UI.js';
 import { GuardSelect } from './guard/scenes/GuardSelect.js';
 import { GuardGame } from './guard/scenes/GuardGame.js';
 import { GuardHUD } from './guard/scenes/GuardHUD.js';
-import { guardSnapshot } from './guard/playtest.js';
+import { guardSnapshot, guardDebug } from './guard/playtest.js';
 import { initTouch, touch } from './touch.js';
 
 const glyphs = TITLE_TEXT + UP.list.map((u) => u.name).join('') + UP.evolutions.map((e) => e.name).join('') + META.map((m) => m.name).join('');
@@ -47,6 +47,7 @@ if (new URLSearchParams(location.search).get('tapcanvasPlaytest') === '1') {
   globalThis.__TAPCANVAS_PLAYTEST__ = {
     // 仅自动化验收用：把当前血量压到 n，让后面的死亡走真实受击流程（headless 低帧率下自然死亡要很久）
     setHp(n) { const g = game.scene.getScene('Game'); if (g && g.p) g.p.hp = n; },
+    guard: guardDebug(game),
     snapshot() {
       const gs = guardSnapshot(game);
       if (gs) return gs;
