@@ -9,5 +9,6 @@
   "qinglong": { "q": { "coef": 2.8, "r": 150, "range": 560, "stun": 0.5 }, "e": { "coef": 1.6, "n": 12, "range": 700, "jumpR": 260 } },
   "qilin":    { "q": { "coef": 5, "pct": 0.08, "r": 520, "kmMul": 0.8 }, "e": { "coef": 2.4, "dist": 340, "dur": 0.3, "knock": 120, "hitR": 80 } },
   "xiangyu":  { "q": { "coef": 3.0, "r": 210, "stun": 1.2 }, "e": { "coef": 2.6, "range": 420, "r": 140, "dur": 0.28, "buffSec": 6 } },
-  "xingtian": { "q": { "coef": 0.95, "r": 190, "dur": 3.2, "tick": 0.28 }, "e": { "healPct": 0.25, "dur": 8, "r": 200, "coef": 1.8 } }
+  "xingtian": { "q": { "coef": 0.95, "r": 190, "dur": 3.2, "tick": 0.28 }, "e": { "healPct": 0.25, "dur": 8, "r": 200, "coef": 1.8 } },
+  "guanyu":   { "q": { "coef": 3.2, "r": 220, "arc": 2.0, "stun": 0.8 }, "e": { "coef": 2.1, "r": 260, "knock": 110, "buffR": 360, "dur": 7 } }
 }

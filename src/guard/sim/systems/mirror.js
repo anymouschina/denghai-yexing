@@ -22,29 +22,31 @@ function mirrorUpdate(sim, e, dt, frozen) {
   e.face = t.x >= e.x ? 1 : -1;
   const dist = Math.hypot(t.x - e.x, t.y - e.y);
 
-  // 镜像释放冲锋斩 / 镜像震击
-  if (e.mcd.nova <= 0 && dist < 240) {
-    e.mcd.nova = 8;
-    e.castT = 0.7;
-    sim.telegraph(e.x, e.y, 190, 0.7, () => {
-      if (!e.alive) return;
-      for (const u of sim.alliesIn(e.x, e.y, 190)) if (u.kind !== 'kongming') sim.damage(e, u, e.atk * 1.9, { tag: 'mirror' });
-      sim.pushFx({ t: 'boom', x: e.x, y: e.y, r: 190 });
-    }, 0xc47bff);
-    sim.pushFx({ t: 'text', x: e.x, y: e.y - e.h - 20, text: '心魔爆裂！', color: '#c47bff', size: 26 });
-    return;
-  }
-  if (e.mcd.dash <= 0 && dist < 440 && dist > 120) {
-    e.mcd.dash = 6;
-    e.castT = 0.55;
-    const tx = t.x; const ty = t.y;
-    sim.telegraph(tx, ty, 115, 0.55, () => {
-      if (!e.alive) return;
-      e.x = tx; e.y = ty; e.prevX = tx; e.prevY = ty;
-      for (const u of sim.alliesIn(tx, ty, 115)) if (u.kind !== 'kongming') sim.damage(e, u, e.atk * 1.5, { tag: 'mirror' });
-      sim.pushFx({ t: 'boom', x: tx, y: ty, r: 115, small: true });
-    }, 0xff9a5a);
-    return;
+  // 镜像释放冲锋斩 / 镜像震击（沉默时禁止施放）
+  if (!(e.st.silence > 0)) {
+    if (e.mcd.nova <= 0 && dist < 240) {
+      e.mcd.nova = 8;
+      e.castT = 0.7;
+      sim.telegraph(e.x, e.y, 190, 0.7, () => {
+        if (!e.alive) return;
+        for (const u of sim.alliesIn(e.x, e.y, 190)) if (u.kind !== 'kongming') sim.damage(e, u, e.atk * 1.9, { tag: 'mirror' });
+        sim.pushFx({ t: 'boom', x: e.x, y: e.y, r: 190 });
+      }, 0xc47bff);
+      sim.pushFx({ t: 'text', x: e.x, y: e.y - e.h - 20, text: '心魔爆裂！', color: '#c47bff', size: 26 });
+      return;
+    }
+    if (e.mcd.dash <= 0 && dist < 440 && dist > 120) {
+      e.mcd.dash = 6;
+      e.castT = 0.55;
+      const tx = t.x; const ty = t.y;
+      sim.telegraph(tx, ty, 115, 0.55, () => {
+        if (!e.alive) return;
+        e.x = tx; e.y = ty; e.prevX = tx; e.prevY = ty;
+        for (const u of sim.alliesIn(tx, ty, 115)) if (u.kind !== 'kongming') sim.damage(e, u, e.atk * 1.5, { tag: 'mirror' });
+        sim.pushFx({ t: 'boom', x: tx, y: ty, r: 115, small: true });
+      }, 0xff9a5a);
+      return;
+    }
   }
 
   const reach = e.range + e.r + (t.r || 20);

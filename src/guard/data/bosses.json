@@ -6,7 +6,7 @@
   "final": "yedi",
   "laozu": {
     "name": "灯骸老祖", "tex": "boss", "sheet": "boss_idle", "sheetScale": 1.05, "h": 250, "r": 70,
-    "hp": 65000, "atk": 165, "def": 75, "spd": 44, "range": 90, "cd": 1.5, "aggro": 360, "copper": 420, "xp": 280,
+    "hp": 36000, "atk": 135, "def": 38, "spd": 44, "range": 90, "cd": 1.5, "aggro": 360, "copper": 420, "xp": 280,
     "skills": [
       { "id": "slam", "name": "灯骸震地", "cd": 7, "warn": 0.9, "r": 200, "coef": 2.6 },
       { "id": "volley", "name": "冥火连珠", "cd": 8, "warn": 0.7, "n": 5, "r": 90, "spread": 260, "coef": 1.6 },
@@ -15,7 +15,7 @@
   },
   "hanba": {
     "name": "旱魃", "tex": "g_boss_hanba", "h": 230, "r": 64,
-    "hp": 260000, "atk": 380, "def": 135, "spd": 52, "range": 90, "cd": 1.4, "aggro": 380, "copper": 780, "xp": 560,
+    "hp": 105000, "atk": 245, "def": 62, "spd": 52, "range": 90, "cd": 1.4, "aggro": 380, "copper": 780, "xp": 560,
     "skills": [
       { "id": "firerain", "name": "赤地火雨", "cd": 7, "warn": 1.0, "n": 6, "r": 110, "spread": 380, "coef": 1.8, "burnT": 3, "zoneT": 3 },
       { "id": "charge", "name": "焚身冲撞", "cd": 9, "warn": 0.9, "dist": 520, "r": 90, "coef": 2.8, "speed": 900 },
@@ -24,7 +24,7 @@
   },
   "yedi": {
     "name": "夜帝·无光", "tex": "g_boss_yedi", "h": 260, "r": 72,
-    "hp": 850000, "atk": 760, "def": 220, "spd": 48, "range": 100, "cd": 1.35, "aggro": 400, "copper": 0, "xp": 0,
+    "hp": 260000, "atk": 420, "def": 95, "spd": 48, "range": 100, "cd": 1.35, "aggro": 400, "copper": 0, "xp": 0,
     "phase2": { "at": 0.5, "cdMul": 0.65, "spdMul": 1.3, "atkMul": 1.2 },
     "skills": [
       { "id": "dark", "name": "吞光领域", "cd": 10, "warn": 1.0, "r": 280, "dur": 6, "coef": 0.5, "tick": 0.5, "dmgCut": 0.3 },
@@ -34,5 +34,45 @@
     ]
   },
   "elite": { "every": 5, "scale": 1.6, "hpMul": 10, "atkMul": 1.9, "tint": 16757824, "copperMul": 10, "xpMul": 8, "exclude": ["firecracker"],
-             "skill": { "name": "精英重击", "cd": 7, "warn": 0.8, "r": 140, "coef": 2.5, "range": 260 } }
+             "skill": { "name": "精英重击", "cd": 7, "warn": 0.8, "r": 140, "coef": 2.5, "range": 260 } },
+  "endlessRoster": {
+    "laozu": [
+      "白骨谋士·贾诩影",
+      "冥灯祭酒·郭嘉魂",
+      "九幽军师·荀彧灵",
+      "幽冥鬼策·程昱骸",
+      "寒灯术尊·钟繇煞",
+      "玄阴老魔·满宠魂"
+    ],
+    "hanba": [
+      "赤炎魔将·夏侯渊骸",
+      "焚城煞将·张郃傀",
+      "烈狱虎痴·许褚煞",
+      "焦土战将·典韦魂",
+      "赤煞骑督·曹纯影",
+      "炼狱都督·曹真骸"
+    ],
+    "yedi": [
+      "冢虎残魂·司马懿",
+      "魏武黑帝·曹孟德影",
+      "永夜天子·司马昭骸",
+      "幽都大帝·司马师魂",
+      "蚀日魔君·钟会煞",
+      "无光鬼皇·邓艾傀"
+    ]
+  },
+  "eliteRoster": [
+    { "name": "魏军先锋·乐进骸", "skillKind": "charge", "skillName": "破阵突袭" },
+    { "name": "幽冥都尉·于禁影", "skillKind": "slam",   "skillName": "镇军重锤" },
+    { "name": "鬼面校尉·李典傀", "skillKind": "volley", "skillName": "鬼火齐射" },
+    { "name": "黑甲猛将·曹仁煞", "skillKind": "nova",   "skillName": "铁壁震煞" },
+    { "name": "断魂骑都·张辽影", "skillKind": "charge", "skillName": "逍遥奔袭" },
+    { "name": "阴兵统领·徐晃骸", "skillKind": "slam",   "skillName": "断山巨斧" },
+    { "name": "九幽步将·庞德煞", "skillKind": "nova",   "skillName": "抬棺血怒" },
+    { "name": "赤眸校尉·文聘傀", "skillKind": "volley", "skillName": "江夏冥箭" },
+    { "name": "蚀灯都督·郝昭骸", "skillKind": "nova",   "skillName": "陈仓烈焰" },
+    { "name": "冥火参军·夏侯尚", "skillKind": "volley", "skillName": "冥灯连弹" },
+    { "name": "寒渊偏将·王双影", "skillKind": "slam",   "skillName": "流星重砸" },
+    { "name": "阴山先锋·郭淮魂", "skillKind": "charge", "skillName": "陇右铁骑" }
+  ]
 }

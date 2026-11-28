@@ -63,7 +63,12 @@ export class GuardGame extends Phaser.Scene {
     this.panelPaused = false;
     this.timeScale = params.get('tapcanvasPlaytest') === '1' ? Math.max(1, Math.min(8, Number(params.get('ts')) || 1)) : 1;
     this.sprites = new Map();
-    this.pools = new Map();
+    this.pools = new Map();       // Image 对象池（建筑、弹体、普通静态怪、掉落物）
+    this.spritePools = new Map(); // Sprite 动画对象池（英雄、神兽、原生精灵图单位、BOSS），严禁与 Image 混池避免 sp.anims 崩溃
+    this._sheetCache = new Map(); // (texKey|unitKey) -> resolvedSheet 缓存，避免每帧对 200+ 实体重复查表
+    this._nativeCache = new Map();
+    this._posBuf = { x: 0, y: 0 };
+    this._ctrlPosBuf = { x: 0, y: 0 };
     this.lastMouse = -99;
     this.cameras.main.fadeIn(450, 5, 6, 18);
     if (touch.enabled) setTouchVisible(true, { dash: false, guard: true });
@@ -165,6 +170,11 @@ export class GuardGame extends Phaser.Scene {
       this.time.removeAllEvents();
       this.sprites.clear();
       this.pools.clear();
+      this.spritePools?.clear();
+      this._sheetCache?.clear();
+      this._nativeCache?.clear();
+      this.camBaseX = undefined;
+      this.camBaseY = undefined;
       this.fxItems.length = 0;
       setTouchVisible(false);
     });
@@ -432,7 +442,8 @@ export class GuardGame extends Phaser.Scene {
     if (N) {
       const nx = N.x;
       const ny = N.y;
-      const npcTex = this.textures.exists('g_kongming') ? 'g_kongming' : 'g_hero_huoqing';
+      const hasNanhua = this.textures.exists('g_npc_nanhua');
+      const npcTex = hasNanhua ? 'g_npc_nanhua' : (this.textures.exists('g_kongming') ? 'g_kongming' : 'g_hero_huoqing');
       const aura = this.add.image(nx, ny - 10, 'glow')
         .setTint(0x7fe3ff).setBlendMode('ADD').setScale(3.6, 2.0).setAlpha(0.42).setDepth(ny - 20);
       this.tweens.add({ targets: aura, alpha: { from: 0.28, to: 0.62 }, duration: 1500, yoyo: true, repeat: -1 });
@@ -445,7 +456,8 @@ export class GuardGame extends Phaser.Scene {
       haloC.add(halo);
       this.tweens.add({ targets: halo, rotation: Math.PI * 2, duration: 8000, repeat: -1 });
       const npcImg = this.add.image(nx, ny + 4, npcTex)
-        .setOrigin(0.5, 0.92).setScale(0.46).setTint(0xc8f4ff).setDepth(ny);
+        .setOrigin(0.5, 0.92).setScale(hasNanhua ? 0.44 : 0.46).setDepth(ny);
+      if (!hasNanhua) npcImg.setTint(0xc8f4ff);
       this.tweens.add({ targets: npcImg, y: ny - 2, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       this.add.text(nx, ny - 104, '南华仙人 · 强化渡劫', {
         fontFamily: '"Ma Shan Zheng", "STKaiti", serif',
@@ -626,29 +638,70 @@ export class GuardGame extends Phaser.Scene {
     if (this.errorCount <= 5 || this.errorCount % 500 === 0) console.error(`[guard] ${where} 异常 #${this.errorCount}`, e);
   }
 
-  // 渲染帧位置插值（30Hz 模拟步长 → 60/120fps 丝滑渲染；闪现/传送位移 > 220px 直接吸附不拉丝）
-  interp(o, alpha) {
-    if (!o || o.prevX === undefined || o.prevY === undefined) return { x: o.x, y: o.y };
+  // 渲染帧位置插值（30Hz 模拟步长 → 60/120fps 丝滑渲染；闪现/传送位移 > 220px 直接吸附不拉丝；支持复写 out 零分配）
+  interp(o, alpha, out) {
+    const res = out || { x: 0, y: 0 };
+    if (!o) { res.x = 0; res.y = 0; return res; }
+    if (o.prevX === undefined || o.prevY === undefined) { res.x = o.x; res.y = o.y; return res; }
     const dx = o.x - o.prevX;
     const dy = o.y - o.prevY;
-    if (dx * dx + dy * dy > 220 * 220) return { x: o.x, y: o.y };
-    return { x: o.prevX + dx * alpha, y: o.prevY + dy * alpha };
+    if (dx * dx + dy * dy > 220 * 220) { res.x = o.x; res.y = o.y; return res; }
+    res.x = o.prevX + dx * alpha;
+    res.y = o.prevY + dy * alpha;
+    return res;
   }
 
   // ---------------- 渲染 ----------------
   getSprite(id, tex, frame) {
     let sp = this.sprites.get(id);
-    if (sp && sp.texKey !== tex) { this.releaseSprite(id); sp = null; }
+    if (sp && (sp.texKey !== tex || sp._isAnimSprite)) { this.releaseSprite(id); sp = null; }
     if (!sp) {
       const pool = this.pools.get(tex);
       sp = pool && pool.length ? pool.pop() : this.add.image(0, 0, tex, frame);
       sp.texKey = tex;
+      sp._isAnimSprite = false;
       sp.setVisible(true).setAlpha(1).clearTint().setRotation(0).setFlipX(false);
       if (frame !== undefined) sp.setFrame(frame);
       this.sprites.set(id, sp);
     }
     sp.seen = this.frameN;
     return sp;
+  }
+
+  getAnimSprite(id, sheetKey) {
+    let sp = this.sprites.get(id);
+    if (sp && (sp.texKey !== sheetKey || !sp._isAnimSprite)) { this.releaseSprite(id); sp = null; }
+    if (!sp) {
+      const pool = this.spritePools.get(sheetKey);
+      sp = pool && pool.length ? pool.pop() : this.add.sprite(0, 0, sheetKey, 0);
+      sp.texKey = sheetKey;
+      sp._isAnimSprite = true;
+      sp._lastActionSeq = 0;
+      sp.setVisible(true).setAlpha(1).clearTint().setRotation(0).setFlipX(false);
+      this.sprites.set(id, sp);
+    }
+    sp.seen = this.frameN;
+    return sp;
+  }
+
+  resolveCachedSheet(texKey, unitKey = null) {
+    const ck = `${texKey || ''}|${unitKey || ''}`;
+    let s = this._sheetCache.get(ck);
+    if (s === undefined) {
+      s = ensureUnitSpriteSheet(this, texKey, unitKey);
+      this._sheetCache.set(ck, s);
+    }
+    return s;
+  }
+
+  resolveCachedNative(texKey, unitKey = null) {
+    const ck = `${texKey || ''}|${unitKey || ''}`;
+    let n = this._nativeCache.get(ck);
+    if (n === undefined) {
+      n = resolveNativeSheet(this, texKey, unitKey) || null;
+      this._nativeCache.set(ck, n);
+    }
+    return n;
   }
 
   releaseSprite(id) {
@@ -658,12 +711,17 @@ export class GuardGame extends Phaser.Scene {
       sp._feelPopTween.stop?.();
       sp._feelPopTween = null;
     }
+    if (sp._isAnimSprite && sp.anims) {
+      sp.anims.stop();
+      sp._lastActionSeq = 0;
+    }
     delete sp._feelRestScaleX;
     delete sp._feelRestScaleY;
-    sp.setScale(1);
+    sp.setScale(1).setAlpha(1).setRotation(0).setFlipX(false).clearTint();
     sp.setVisible(false);
-    let pool = this.pools.get(sp.texKey);
-    if (!pool) this.pools.set(sp.texKey, (pool = []));
+    const map = sp._isAnimSprite ? this.spritePools : this.pools;
+    let pool = map.get(sp.texKey);
+    if (!pool) map.set(sp.texKey, (pool = []));
     pool.push(sp);
     this.sprites.delete(id);
   }
@@ -674,7 +732,7 @@ export class GuardGame extends Phaser.Scene {
     const alpha = (this.paused || this.panelPaused || s.over) ? 1 : Phaser.Math.Clamp(this.acc / TICK, 0, 1);
     const cam = this.cameras.main;
     const ctrl = s.ctrl || s.hero;
-    const cPos = this.interp(ctrl, alpha);
+    const cPos = this.interp(ctrl, alpha, this._ctrlPosBuf);
     // 帧率无关指数平滑镜头跟随（与创伤震屏偏移分离，互不拉扯）
     const tx = Phaser.Math.Clamp(cPos.x - 640, 0, Math.max(0, BAL.world.w - cam.width));
     const ty = Phaser.Math.Clamp(cPos.y - 60 - 360, 0, Math.max(0, BAL.world.h - cam.height));
@@ -753,7 +811,7 @@ export class GuardGame extends Phaser.Scene {
         if (this.sprites.has(p.id)) this.releaseSprite(p.id);
         continue;
       }
-      const pp = this.interp(p, alpha);
+      const pp = this.interp(p, alpha, this._posBuf);
       const sp = this.getSprite(p.id, p.tex || 'proj_talisman');
       sp.setPosition(pp.x, pp.y).setRotation(Math.atan2(p.vy, p.vx)).setDepth(pp.y + 40).setScale(p.scale || (p.side === 'enemy' ? 0.5 : 0.55));
       if (p.tint) sp.setTint(p.tint);
@@ -767,7 +825,7 @@ export class GuardGame extends Phaser.Scene {
       const bob = Math.sin(s.t * 5 + gd.id) * 4;
       const fr = sp.frame;
       const targetSz = isEpic || gd.unique ? 42 : 34;
-      const sc = targetSz / Math.max(fr.width || targetSz, fr.height || targetSz);
+      const sc = targetSz / Math.max((fr && fr.width) || targetSz, (fr && fr.height) || targetSz);
       sp.setOrigin(0.5, 0.7).setPosition(gd.x, gd.y + bob).setDepth(gd.y + 10).setScale(sc);
       if (gd.item.tint) sp.setTint(parseInt(gd.item.tint, 16));
       const isU = gd.unique || isEpic;
@@ -917,28 +975,20 @@ export class GuardGame extends Phaser.Scene {
   drawUnit(u, sg, bg, alpha = 1) {
     const d = u.def;
     const s = this.sim;
-    const pos = this.interp(u, alpha);
+    const pos = this.interp(u, alpha, this._posBuf);
     const ux = pos.x;
     const uy = pos.y;
     const act = u.action || { state: u.moving ? 'walk' : 'idle', t: 0, dur: 0, slot: null, ang: 0 };
-    const resolvedSheet = ensureUnitSpriteSheet(this, d.tex, u.key);
+    const resolvedSheet = this.resolveCachedSheet(d.tex, u.key);
     const nativeMultiPose = isNativeSpriteSheet(resolvedSheet);
     const useLegacyAzhuRun = !nativeMultiPose && u.key === 'azhu' && (act.state === 'walk' || act.state === 'idle');
     const sheetKey = useLegacyAzhuRun ? 'hero_run' : resolvedSheet;
 
-    let sp = this.sprites.get(u.id);
-    if (!sp || sp.texKey !== sheetKey) {
-      this.releaseSprite(u.id);
-      sp = this.pools.get(sheetKey)?.pop() || this.add.sprite(0, 0, sheetKey, 0);
-      sp.texKey = sheetKey;
-      sp.setVisible(true).setAlpha(1).clearTint().setRotation(0).setFlipX(false);
-      this.sprites.set(u.id, sp);
-    }
-    sp.seen = this.frameN;
+    const sp = this.getAnimSprite(u.id, sheetKey);
 
     if (useLegacyAzhuRun) {
-      if (u.moving) { if (!sp.anims.isPlaying) sp.play('run'); }
-      else if (sp.anims.isPlaying) { sp.anims.stop(); sp.setFrame(0); }
+      if (u.moving) { if (sp.anims && !sp.anims.isPlaying && this.anims.exists('run')) sp.play('run'); }
+      else if (sp.anims && sp.anims.isPlaying) { sp.anims.stop(); sp.setFrame(0); }
     } else if (isActionSpriteSheet(sheetKey)) {
       playUnitActionAnim(sp, sheetKey, u.alive ? act.state : 'dead', act.seq || 0);
     }
@@ -979,7 +1029,7 @@ export class GuardGame extends Phaser.Scene {
 
     // 移动脚步微尘粒子（每 ~0.28s 一次）
     if (u.moving && u.kind !== 'kongming' && !u.flying && ((s.tickN + u.id * 3) % 9 === 0)) {
-      this.pPaper.explode(1, ux - u.face * 10, uy - 4);
+      this.pPaper?.explode(1, ux - u.face * 10, uy - 4);
     }
 
     sg.fillStyle(0x000000, 0.35).fillEllipse(ux, uy, u.r * 2.6, u.r * 1.1);
@@ -1001,39 +1051,26 @@ export class GuardGame extends Phaser.Scene {
   drawEnemy(e, sg, bg, alpha = 1, denseSwarm = false, visCount = 0) {
     const s = this.sim;
     const d = e.def;
-    const pos = this.interp(e, alpha);
+    const pos = this.interp(e, alpha, this._posBuf);
     const ex = pos.x;
     const ey = pos.y;
     let sp;
     const unitLookup = e.sheetKey || e.beastKey || e.boss || e.type;
-    const nativeEnemy = !e.sheet ? resolveNativeSheet(this, e.sheetKey || d.tex || e.tex, unitLookup) : null;
+    const nativeEnemy = !e.sheet ? this.resolveCachedNative(e.sheetKey || d.tex || e.tex, unitLookup) : null;
     if (nativeEnemy) {
-      const sheetKey = ensureUnitSpriteSheet(this, e.sheetKey || d.tex || e.tex, unitLookup);
-      sp = this.sprites.get(e.id);
-      if (!sp || sp.texKey !== sheetKey) {
-        this.releaseSprite(e.id);
-        sp = this.pools.get(sheetKey)?.pop() || this.add.sprite(0, 0, sheetKey, 0);
-        sp.texKey = sheetKey;
-        sp.setVisible(true).setAlpha(1).clearTint().setRotation(0).setFlipX(false);
-        this.sprites.set(e.id, sp);
-      }
-      sp.seen = this.frameN;
+      const sheetKey = this.resolveCachedSheet(e.sheetKey || d.tex || e.tex, unitLookup);
+      sp = this.getAnimSprite(e.id, sheetKey);
       const eState = e.hitT > 0 ? 'hurt' : (e.atkAnim > 0 || e.charge > 0 || e.castT > 0) ? 'attack' : 'walk';
       playUnitActionAnim(sp, sheetKey, eState, 0);
     } else if (e.sheet) {
-      sp = this.sprites.get(e.id);
-      if (!sp || sp.texKey !== e.sheet) {
-        this.releaseSprite(e.id);
-        sp = this.pools.get(e.sheet)?.pop() || this.add.sprite(0, 0, e.sheet, 0);
-        sp.texKey = e.sheet;
-        sp.setVisible(true);
-        this.sprites.set(e.id, sp);
-        sp.play(e.sheet);
-      }
-      sp.seen = this.frameN;
+      const prev = this.sprites.get(e.id);
+      const needPlay = !prev || prev.texKey !== e.sheet || !prev._isAnimSprite;
+      sp = this.getAnimSprite(e.id, e.sheet);
+      if (needPlay && sp.anims && this.anims.exists(e.sheet)) sp.play(e.sheet);
     } else sp = this.getSprite(e.id, d.tex || e.tex);
     const h = e.h;
-    let sc = (h / (sp.frame.height || 100)) * (e.sheetScale || 1);
+    const frameH = (sp.frame && sp.frame.height) || 100;
+    let sc = (h / frameH) * (e.sheetScale || 1);
     let yOff = 0;
     if (!e.sheet && !nativeEnemy && d.hop) yOff = -Math.abs(Math.sin((s.t / d.hop) * Math.PI + e.id)) * 14;
     else if (e.flying) yOff = -20 + Math.sin(s.t * 5 + e.id) * 5;

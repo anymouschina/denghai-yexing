@@ -139,7 +139,7 @@ function spawnTrainingMob(sim, cfg, tierDef) {
       xp: effectiveTrainingXp(sim, tierDef),
       aggro: 900,
       bulletSpeed: tierDef.bulletSpeed || 560,
-      update: tierDef.ranged ? temperArcherUpdate : undefined,
+      ...(tierDef.ranged ? { update: temperArcherUpdate } : {}),
     },
   });
   return e;

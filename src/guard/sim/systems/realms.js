@@ -256,9 +256,16 @@ function spawnBoss(sim, id) {
   const rd = RD.realms[id];
   const [cx, cy] = campOf(r);
   const b = rd.boss;
-  const def = { ...b, tex: b.tex || `g_beast_${r.beast}`, aggro: 900 };
+  const clears = (sim.realms && sim.realms.clearCount && sim.realms.clearCount[id]) || 0;
+  let bossName = b.name;
+  if (clears === 0) {
+    if (sim.usedBossNames) sim.usedBossNames[b.name] = 1;
+  } else if (sim.pickUniqueBossName) {
+    bossName = sim.pickUniqueBossName(b.name, b.altNames || [], b.name);
+  }
+  const def = { ...b, name: bossName, tex: b.tex || `g_beast_${r.beast}`, aggro: 900 };
   const e = sim.spawnEnemy(`realm_${id}`, cx, cy, {
-    def, name: b.name, boss: 'realm', realm: id, home: { x: cx, y: cy },
+    def, name: bossName, boss: 'realm', realm: id, home: { x: cx, y: cy },
     hpMul: RD.bossHpScale,
     atkMul: 1,
     copper: b.copper || 40,
@@ -278,7 +285,7 @@ function spawnBoss(sim, id) {
     },
   });
   sim.realms.run[id].boss = e.id;
-  sim.banner(`${b.name} 现身！`, '#ff8a5a', true);
+  sim.banner(`${bossName} 现身！`, '#ff8a5a', true);
   sim.pushFx({ t: 'realmBoss', x: cx, y: cy, color: r.color, key: r.beast });
   return e;
 }

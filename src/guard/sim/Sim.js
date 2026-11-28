@@ -57,6 +57,8 @@ export class Sim {
     this.kmAlert = { t: -99, x: 0, y: 0, lastWarn: -99 };
     this.stats = { kills: 0, killsBy: {}, dmgBy: {}, kmDmgTaken: 0, bossKills: 0, copperEarned: 0, maxEnemies: 0 };
     this.wave = { n: 0, nextAt: BAL.waves.firstDelay, spawnLeft: 0, spawnT: 0, lanes: [], boss: null, alive: 0, cleared: true };
+    this.usedBossNames = {};
+    this._mobSkillLast = {};
 
     const K = BAL.kongming;
     this.kongming = this.spawnUnit('kongming', 'kongming', K.x, K.y);
@@ -109,7 +111,10 @@ export class Sim {
 
   // ---------------- 事件 / 命令 / 特效 ----------------
   on(evt, fn) { (this.listeners[evt] ||= []).push(fn); }
-  emit(evt, data) { const ls = this.listeners[evt]; if (ls) for (const f of ls) f(data, this); }
+  emit(evt, data) {
+    const ls = this.listeners[evt]; if (ls) for (const f of ls) f(data, this);
+    const any = this.listeners['*']; if (any) for (const f of any) f(evt, data, this);
+  }
   command(cmd) {
     if (this.over) return { ok: false, reason: '本局已结束' };
     const h = this.handlers[cmd.type];
@@ -150,7 +155,7 @@ export class Sim {
       skillLvs: kind === 'hero' ? { q: 0, e: 0, r: 0, f: 0, u: 0 } : null,
       awakened: false,
       alive: true, downT: 0, face: 1, ctrl: false, buffs: [], shield: 0, invuln: 0, st: {}, tgt: null, aiT: 0, moving: false,
-      flying: !!def.flying, realm: null, home: { x, y }, dirty: true, castAnim: 0, order: null, recall: null, deadAnimT: 0, _actionSeq: 0,
+      flying: !!def.flying, realm: null, home: { x, y }, dirty: true, castAnim: 0, order: null, recall: null, dash: null, deadAnimT: 0, _actionSeq: 0,
       action: { state: 'idle', t: 0, dur: 0, slot: null, ang: 0, seq: 0 }, ...extra,
     };
     this.calcStats(u);
@@ -373,6 +378,37 @@ export class Sim {
     return { ok: true, slot, lv: cur + 1, learned: cur === 0, skillPoints: u.skillPoints };
   }
 
+  // 保证不同 BOSS / 精英首领各自拥有唯一不重复名字（读档可持久化）
+  pickUniqueBossName(baseName, roster = [], fallbackPrefix = '冥界煞将') {
+    const used = (this.usedBossNames ||= {});
+    if (Array.isArray(roster)) {
+      for (const cand of roster) {
+        if (cand && !used[cand]) {
+          used[cand] = 1;
+          return cand;
+        }
+      }
+    }
+    if (baseName && !used[baseName]) {
+      used[baseName] = 1;
+      return baseName;
+    }
+    const titles = ['九幽', '天煞', '玄阴', '劫火', '镇魂', '赤冥', '沧渊', '断魄', '幽都', '蚀月', '焚空', '无常'];
+    const roots = ['典军', '鬼帅', '魔校', '煞魁', '妖督', '战灵', '夜叉', '罗刹', '阎将', '冥侯', '暗卫', '冥尊'];
+    for (let i = 0; i < titles.length * roots.length; i++) {
+      const name = `${titles[i % titles.length]}${roots[Math.floor(i / titles.length) % roots.length]}·${baseName || fallbackPrefix}`;
+      if (!used[name]) {
+        used[name] = 1;
+        return name;
+      }
+    }
+    let idx = 2;
+    while (used[`${baseName || fallbackPrefix}·${idx}号`]) idx++;
+    const finalName = `${baseName || fallbackPrefix}·${idx}号`;
+    used[finalName] = 1;
+    return finalName;
+  }
+
   // ---------------- 妖物 ----------------
   spawnEnemy(type, x, y, o = {}) {
     const d = o.def || ENEMIES[type];
@@ -384,6 +420,7 @@ export class Sim {
       hp: d.hp * hpMul, maxHp: d.hp * hpMul, atk: d.atk * atkMul, armor: (d.def || 0) * (o.armorMul || 1) + (o.armorBonus || 0), spd: d.spd, range: d.range, cdMax: d.cd, cd: this.rng() * 0.5,
       ai: d.ai, lane: o.lane || null, wp: 1, tgt: null, tgtT: 0, alive: true, st: {}, flying: !!d.flying, copper: o.copper ?? (d.copper || 0), xp: o.xp ?? (d.xp || 0),
       aggro: d.aggro || 200, elite: !!o.elite, boss: o.boss || null, realm: o.realm || null, home: o.home || null, charge: 0, fuse: 0,
+      mobSkCd: d.skill ? (2.2 + this.rng() * d.skill.cd) : 0,
       tint: o.tint || null, wave: this.wave.n, face: 1, hitT: 0, ...(o.extra || {}),
     };
     this.enemies.push(e);
@@ -667,6 +704,7 @@ export class Sim {
   addZone(z) {
     z.id = this.uid++;
     z.alive = true;
+    if (z.t === undefined) z.t = z.life ?? 0.5;
     z.tickT = z.tickT ?? 0;
     z.age = 0;
     this.zones.push(z);
@@ -737,7 +775,12 @@ export class Sim {
       for (let i = u.buffs.length - 1; i >= 0; i--) {
         const b = u.buffs[i];
         b.t -= dt;
-        if (b.t <= 0) { u.buffs.splice(i, 1); u.dirty = true; if (b.onEnd) b.onEnd(this, u); }
+        if (b.t <= 0) {
+          u.buffs.splice(i, 1);
+          u.dirty = true;
+          if (b.shieldRemove) u.shield = Math.max(0, (u.shield || 0) - b.shieldRemove);
+          if (b.onEnd) b.onEnd(this, u);
+        }
       }
       for (const k in u.cds) if (u.cds[k] > 0) u.cds[k] -= dt;
       if (u.invuln > 0) u.invuln -= dt;
@@ -997,6 +1040,17 @@ export class Sim {
         u.tgt = this.nearestEnemy(u.x, u.y, 750, rFilter)
           || (owner && owner.alive ? this.nearestEnemy(owner.x, owner.y, 750, rFilter) : null);
       }
+      const summonKit = KITS[u.key];
+      if (summonKit) {
+        for (const slot of ['u', 'q', 'e', 'r', 'f']) {
+          const k = summonKit[slot];
+          if (!k || !k.ai) continue;
+          if (slot === 'u' ? u.energy < BAL.hero.ultEnergy : u.cds[slot] > 0) continue;
+          const aim = k.ai(this, u);
+          if (aim && this.castSkill(u, slot, aim)) break;
+        }
+        if (u.dash) return;
+      }
       const range = (u.def.basic && u.def.basic.range) || 120;
       let gx;
       let gy;
@@ -1032,7 +1086,7 @@ export class Sim {
       u.tgt = t;
     }
     const kit = KITS[u.key];
-    if (kit && u.tgt) {
+    if (kit) {
       for (const slot of ['u', 'q', 'e', 'r', 'f']) {
         const k = kit[slot];
         if (!k || !k.ai) continue;
@@ -1095,13 +1149,79 @@ export class Sim {
       if (e.st.silence > 0) {
         if (e.skT !== undefined && e.skT < dt + 0.05) e.skT = dt + 0.05;
         if (e.eliteT !== undefined && e.eliteT < dt + 0.05) e.eliteT = dt + 0.05;
+        if (e.mobSkCd !== undefined && e.mobSkCd < dt + 0.05) e.mobSkCd = dt + 0.05;
         if (e.mcd) for (const k in e.mcd) if (e.mcd[k] < dt + 0.05) e.mcd[k] = dt + 0.05;
       }
       if (e.update) { e.update(this, e, dt, frozen); continue; } // BOSS/特殊妖物自带逻辑
       if (frozen) continue;
       this.enemyThink(e, dt, K);
+      if (this.tryEnemySkill(e, dt)) continue;
       this.enemyMove(e, dt, K, blockers);
     }
+  }
+
+  // 普通怪物与营地小怪主动技能（遵守沉默/眩晕、秘境隔离与群怪节流，避免刷屏卡顿或破坏数值）
+  tryEnemySkill(e, dt) {
+    const sk = e.def && e.def.skill;
+    if (!sk || e.boss || e.training) return false;
+    if (this.map && this.map.trainingRoom && e.realm === this.map.trainingRoom.id) return false;
+    if (e.st.silence > 0 || e.st.stun > 0 || e.st.freeze > 0) return false;
+    if (e.mobSkCd > 0) { e.mobSkCd -= dt; return false; }
+    const t = e.tgt;
+    if (!t || !t.alive) return false;
+    if (e.openCamp && t.kind === 'kongming') return false;
+    const range = sk.range || 200;
+    if (dist2(e, t) > range * range) return false;
+    // 群怪按类型节流：主线普通群怪每种每 2.5 秒最多 1 次施法（精英/营地怪不受限），既清晰展示各类怪物技能，又不因群怪刷屏破坏数值或卡顿
+    if (!e.openCamp && !e.elite && !e.realm) {
+      if (sk.kind === 'pounce' && t.kind === 'kongming') return false;
+      const lastByType = (this._mobSkillLast ||= {});
+      const prev = lastByType[e.type] ?? -99;
+      if (this.t - prev < 4.5) { e.mobSkCd = 1.2 + this.rng() * 0.8; return false; }
+      lastByType[e.type] = this.t;
+    }
+    e.mobSkCd = sk.cd * (0.9 + this.rng() * 0.25);
+    e.face = t.x >= e.x ? 1 : -1;
+    const dmg = e.atk * (sk.coef || 1.2);
+    if (sk.kind === 'proj') {
+      const a = Math.atan2(t.y - e.y, t.x - e.x);
+      this.addProj({ side: 'enemy', src: e, x: e.x, y: e.y - e.h * 0.5, a, speed: sk.speed || 320, life: 1.3, dmg, r: 11, tex: sk.tex || 'proj_ghostfire', tint: sk.tint || 0xffd36a });
+      return true;
+    }
+    if (sk.kind === 'fan') {
+      const a0 = Math.atan2(t.y - e.y, t.x - e.x);
+      const n = sk.n || 3;
+      const spread = sk.spread || 0.6;
+      for (let i = 0; i < n; i++) {
+        const a = a0 - spread * 0.5 + (spread * i) / Math.max(1, n - 1);
+        this.addProj({ side: 'enemy', src: e, x: e.x, y: e.y - e.h * 0.5, a, speed: sk.speed || 300, life: 1.25, dmg, r: 10, tex: sk.tex || 'proj_ghostfire', tint: sk.tint || 0xff5ad0 });
+      }
+      return true;
+    }
+    if (sk.kind === 'slam' || sk.kind === 'pounce') {
+      const tx = t.x; const ty = t.y;
+      const r = sk.r || 80;
+      const warn = Math.max(0.55, sk.warn || 0.55);
+      const color = sk.color || 0xff8a5a;
+      this.pushFx({ t: 'warnRing', x: tx, y: ty, r, dur: warn, color });
+      this.addZone({
+        vis: 'mobWarn', side: 'enemyMob', x: tx, y: ty, r, t: warn, total: warn, color,
+        mobSkill: { kind: sk.kind, srcId: e.id, dmg, bldMul: sk.bldMul || 1, color },
+      });
+      return true;
+    }
+    if (sk.kind === 'nova') {
+      const r = sk.r || 100;
+      const warn = Math.max(0.55, sk.warn || 0.55);
+      const color = sk.color || 0x80e8ff;
+      this.pushFx({ t: 'warnRing', x: e.x, y: e.y, r, dur: warn, color });
+      this.addZone({
+        vis: 'mobWarn', side: 'enemyMob', x: e.x, y: e.y, r, t: warn, total: warn, color,
+        mobSkill: { kind: 'nova', srcId: e.id, dmg, bldMul: sk.bldMul || 1, color },
+      });
+      return true;
+    }
+    return false;
   }
 
   enemyThink(e, dt, K) {
@@ -1284,6 +1404,33 @@ export class Sim {
     this.pushFx({ t: 'boom', x, y, r: p.splash, small: true });
   }
 
+  finishMobSkillZone(z) {
+    const ms = z.mobSkill;
+    if (!ms || this.over) return;
+    const e = this.enemies.find((en) => en.id === ms.srcId);
+    if (!e || !e.alive) return;
+    const eRealm = e.openCamp ? null : (e.realm || null);
+    const hitFilter = (u) => {
+      if (!u.alive) return false;
+      if (e.openCamp && u.kind === 'kongming') return false;
+      return (u.realm || null) === eRealm;
+    };
+    const cx = ms.kind === 'nova' ? e.x : z.x;
+    const cy = ms.kind === 'nova' ? e.y : z.y;
+    if (ms.kind === 'pounce') {
+      e.x = cx; e.y = cy; e.prevX = cx; e.prevY = cy;
+      pushOutOfWalls(e, e.r, this.walls, { flying: e.flying });
+    }
+    for (const u of this.alliesIn(cx, cy, z.r, true)) {
+      if (hitFilter(u)) this.damage(e, u, ms.dmg, { bldMul: ms.bldMul || 1 });
+    }
+    if (ms.kind === 'nova') {
+      this.pushFx({ t: 'ring', x: cx, y: cy, r: z.r, color: ms.color, dur: 0.4 });
+    } else {
+      this.pushFx({ t: 'boom', x: cx, y: cy, r: z.r, small: true, color: ms.color });
+    }
+  }
+
   updateZones(dt) {
     for (const z of this.zones) {
       if (!z.alive) continue;
@@ -1296,7 +1443,11 @@ export class Sim {
         if (z.tickT <= 0) { z.tickT += z.tick; z.onTick(this, z); }
       }
       if (z.block && z.hp !== undefined && z.hp <= 0) z.t = 0;
-      if (z.t <= 0) { z.alive = false; if (z.onEnd) z.onEnd(this, z); }
+      if (z.t <= 0) {
+        z.alive = false;
+        if (z.mobSkill) this.finishMobSkillZone(z);
+        if (z.onEnd) z.onEnd(this, z);
+      }
     }
   }
 }

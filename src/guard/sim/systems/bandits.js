@@ -63,7 +63,7 @@ function banditUnitUpdate(sim, e, dt, frozen) {
   e.face = t.x >= e.x ? 1 : -1;
   const dist = Math.hypot(t.x - e.x, t.y - e.y);
 
-  // 吕达首领技能（沉默时禁止施放）
+  // 首领技能（沉默时禁止施放）；山贼喽啰亦可释放自身技能
   if (!(e.st.silence > 0) && e.def && e.def.moves && e.mcd) {
     for (const m of e.def.moves) {
       if (e.mcd[m.id] > 0) continue;
@@ -90,6 +90,8 @@ function banditUnitUpdate(sim, e, dt, frozen) {
         return;
       }
     }
+  } else if (!e.banditBoss && sim.tryEnemySkill && sim.tryEnemySkill(e, dt)) {
+    return;
   }
 
   const reach = e.range + e.r + (t.r || 20);
@@ -190,12 +192,18 @@ function spawnCamp(sim, cfg) {
       });
     }
   }
-  // 刷首领吕达
+  // 刷首领（首次固定为强盗头目·吕达，之后重生轮换不同名号的匪首）
   const bd = cfg.boss;
   const bossDef = { ...bd, ai: 'melee' };
+  let bossName = bd.name || '强盗头目·吕达';
+  if (B.clears === 0) {
+    if (sim.usedBossNames) sim.usedBossNames[bossName] = 1;
+  } else if (sim.pickUniqueBossName) {
+    bossName = sim.pickUniqueBossName(bossName, bd.bossRoster || [], '黑风匪首');
+  }
   const boss = sim.spawnEnemy('boss_lvda', cfg.x, cfg.y, {
     def: bossDef,
-    name: bd.name || '强盗头目·吕达',
+    name: bossName,
     boss: null,
     elite: true,
     realm: 'bandit_camp',
@@ -294,9 +302,9 @@ export default {
     const B = sim.bandits;
     if (!B) return;
     if (B.state === 'respawning' && B.respawnAt > 0 && sim.t >= B.respawnAt) {
-      spawnCamp(sim, B.cfg);
-      sim.banner(`左上强盗营寨重聚 · 【${B.cfg.boss.name}】再度现身，可重复讨伐！`, '#ff9a5a');
-      sim.emit('banditRespawn', { camp: B.cfg.id, clears: B.clears });
+      const nb = spawnCamp(sim, B.cfg);
+      sim.banner(`左上强盗营寨重聚 · 新匪首【${nb.name}】率众再袭，可重复讨伐！`, '#ff9a5a');
+      sim.emit('banditRespawn', { camp: B.cfg.id, clears: B.clears, bossName: nb.name });
     }
   },
   commands: {

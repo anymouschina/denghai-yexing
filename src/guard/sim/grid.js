@@ -2,15 +2,35 @@
 export const CELL = 96;
 
 export class Grid {
-  constructor() { this.map = new Map(); }
+  constructor() {
+    this.map = new Map();
+    this._usedKeys = [];
+    this._pool = [];
+  }
 
   rebuild(list) {
-    this.map.clear();
-    for (const e of list) {
+    // 复用桶数组，避免 30Hz × 850 怪潮下每 tick 分配数百个临时数组造成 GC 抖动
+    const used = this._usedKeys;
+    for (let i = 0; i < used.length; i++) {
+      const k = used[i];
+      const arr = this.map.get(k);
+      if (arr) {
+        arr.length = 0;
+        this._pool.push(arr);
+        this.map.delete(k);
+      }
+    }
+    used.length = 0;
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
       if (!e.alive) continue;
       const k = ((e.x / CELL) | 0) * 8192 + ((e.y / CELL) | 0);
       let arr = this.map.get(k);
-      if (!arr) this.map.set(k, (arr = []));
+      if (!arr) {
+        arr = this._pool.length ? this._pool.pop() : [];
+        this.map.set(k, arr);
+        used.push(k);
+      }
       arr.push(e);
     }
   }
@@ -22,10 +42,14 @@ export class Grid {
     const y0 = ((y - r) / CELL) | 0;
     const y1 = ((y + r) / CELL) | 0;
     for (let cx = x0; cx <= x1; cx++) {
+      const row = cx * 8192;
       for (let cy = y0; cy <= y1; cy++) {
-        const arr = this.map.get(cx * 8192 + cy);
+        const arr = this.map.get(row + cy);
         if (!arr) continue;
-        for (const e of arr) if (e.alive && cb(e) === false) return;
+        for (let i = 0; i < arr.length; i++) {
+          const e = arr[i];
+          if (e.alive && cb(e) === false) return;
+        }
       }
     }
   }

@@ -2,8 +2,8 @@
 // 纹理键：public/assets/guard/x.png → g_x；eq/x.png → g_eq_x；sk/x.png → g_sk_x
 // 原生多姿态 16 帧精灵图清单：public/assets/guard/sheets/manifest.json（任意单位放入 sheets/<key>.png + .json 即可自动原生加载）
 const MAIN = ['altar', 'beast_baihu', 'beast_qilin', 'beast_qinglong', 'beast_xuanwu', 'beast_zhuque', 'bld_arrow', 'bld_foundation', 'bld_fu', 'bld_lamp',
-  'bld_lei', 'bld_wall', 'boss_hanba', 'boss_yedi', 'deco_rock', 'deco_tree', 'enemy_guiche', 'enemy_yeya', 'hero_huoqing', 'hero_xuanshuang', 'hero_yunque',
-  'kongming', 'merc_dao', 'merc_nu', 'merc_tong', 'realm_gate', 'ui_save_lantern'];
+  'bld_lei', 'bld_wall', 'boss_hanba', 'boss_simayi', 'boss_yedi', 'deco_rock', 'deco_tree', 'enemy_bandit', 'enemy_guiche', 'enemy_hunbing', 'enemy_wolf', 'enemy_yeya',
+  'hero_guanyu', 'hero_huoqing', 'hero_xuanshuang', 'hero_yunque', 'kongming', 'merc_dao', 'merc_nu', 'merc_tong', 'npc_hunter', 'npc_nanhua', 'realm_gate', 'ui_save_lantern'];
 const EQ = ['baihu_a', 'baihu_j', 'baihu_t', 'baihu_w', 'legend_fangtian_halberd', 'legend_qilin_seal', 'legend_qinglong_blade', 'legend_wolong_scroll', 'legend_xuanwu_armor', 'legend_xuanyuan_sword', 'legend_zhuque_fan', 'oil', 'pill', 'plain_a', 'plain_j', 'plain_t', 'plain_w', 'purse', 'qinglong_a', 'qinglong_j', 'qinglong_t',
   'qinglong_w', 'swift', 'wolong_a', 'wolong_j', 'wolong_t', 'wolong_w', 'xuanwu_a', 'xuanwu_j', 'xuanwu_t', 'xuanwu_w', 'zhuque_a', 'zhuque_j', 'zhuque_t', 'zhuque_w'];
 const SK = ['hq_e', 'hq_f', 'hq_q', 'hq_r', 'hq_u', 'xs_e', 'xs_f', 'xs_q', 'xs_r', 'xs_u', 'yq_e', 'yq_f', 'yq_q', 'yq_r', 'yq_u'];

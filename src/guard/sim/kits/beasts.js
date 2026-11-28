@@ -7,6 +7,7 @@ export const baihu = {
       const c = cfg(u, 'q');
       const p = clampAim(u, aim, c.range);
       const dist = Math.sqrt(d2(u, p));
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 155, text: '虎扑！', color: '#f0ece0', size: 22 });
       dash(u, angTo(u, p), Math.max(40, dist), c.dur, {
         onEnd(s, uu) {
           hitCircle(s, uu, uu.x, uu.y, c.r, atk(uu) * c.coef, { knock: 40, tag: 'q' });
@@ -23,8 +24,9 @@ export const baihu = {
       sim.addZone({ x: u.x, y: u.y, r: c.r, t: c.dur, total: c.dur, vis: 'wind', follow: u.id, tick: c.tick, side: 'ally',
         onTick(s, z) { if (u.alive) hitCircle(s, u, z.x, z.y, z.r, atk(u) * c.coef, { tag: 'e' }); } });
       sim.pushFx({ t: 'ring', x: u.x, y: u.y, r: c.r, color: 0xe8f4ff, dur: 0.45 });
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 160, text: '啸风！', color: '#e8f4ff', size: 22 });
     },
-    ai(sim, u) { return countNear(sim, u.x, u.y, cfg(u, 'e').r) >= 3 ? { x: u.x, y: u.y } : null; },
+    ai(sim, u) { return (countNear(sim, u.x, u.y, cfg(u, 'e').r) >= 2 || (u.tgt && isBig(u.tgt) && d2(u, u.tgt) <= cfg(u, 'e').r ** 2)) ? { x: u.x, y: u.y } : null; },
   },
 };
 
@@ -37,6 +39,7 @@ export const zhuque = {
       hitCone(sim, u, a, c.r, c.arc, atk(u) * c.coef, { burn: atk(u) * c.burn * burnMul, burnT: c.burnT, tag: 'q' });
       sim.pushFx({ t: 'cone', x: u.x, y: u.y - 50, a, r: c.r, arc: c.arc, color: 0xff7a30, dur: 0.35 });
       sim.pushFx({ t: 'ring', x: u.x, y: u.y, r: 80, color: 0xff7a30, dur: 0.3 });
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 160, text: '离火吐息！', color: '#ff9a5a', size: 22 });
     },
     ai(sim, u) { const t = tgtIn(u, cfg(u, 'q').r * 0.9); return t ? { x: t.x, y: t.y } : null; },
   },
@@ -46,6 +49,7 @@ export const zhuque = {
       const p = clampAim(u, aim, c.range);
       const burnMul = (1 + (u.stats?.dmg || 0)) * (1 + (u.stats?.skillDmg || 0));
       sim.pushFx({ t: 'ring', x: p.x, y: p.y, r: c.r, color: 0xff7a30, dur: 0.45, rune: true });
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 165, text: '焚天！', color: '#ff7a30', size: 24 });
       sim.addZone({ x: p.x, y: p.y, r: c.r, t: c.dur, total: c.dur, vis: 'fire', tick: c.tick, side: 'ally',
         onTick(s, z) {
           hitCircle(s, u, z.x, z.y, z.r, atk(u) * c.coef, { burn: atk(u) * c.burn * burnMul, burnT: 2, tag: 'e' });
@@ -64,10 +68,10 @@ export const xuanwu = {
       for (const a of sim.alliesIn(u.x, u.y, c.r)) {
         const add = Math.max(0, v - (a.shield || 0));
         a.shield = (a.shield || 0) + add;
-        if (a.kind !== 'building') sim.addBuff(a, 'guijia', c.dur, [], { onEnd(s, uu) { uu.shield = Math.max(0, uu.shield - add); } });
+        if (a.kind !== 'building') sim.addBuff(a, 'guijia', c.dur, [], { shieldRemove: add });
         sim.pushFx({ t: 'ring', x: a.x, y: a.y, r: (a.r || 20) + 30, color: 0x7fd8ff, dur: 0.6, rune: true });
       }
-      sim.pushFx({ t: 'text', x: u.x, y: u.y - 160, text: '龟甲阵', color: '#7fd8ff', size: 22 });
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 160, text: '龟甲阵！', color: '#7fd8ff', size: 22 });
     },
     ai(sim, u) {
       const c = cfg(u, 'q');
@@ -79,8 +83,9 @@ export const xuanwu = {
       const c = cfg(u, 'e');
       for (const e of hitCircle(sim, u, u.x, u.y, c.r, atk(u) * c.coef, { slow: c.slow, slowT: c.tauntT, tag: 'e' })) if (!e.boss) e.st.taunt = { id: u.id, t: c.tauntT };
       sim.pushFx({ t: 'ring', x: u.x, y: u.y, r: c.r, color: 0x5fe08a, dur: 0.5, rune: true });
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 160, text: '蛇缠！', color: '#5fe08a', size: 22 });
     },
-    ai(sim, u) { return countNear(sim, u.x, u.y, cfg(u, 'e').r) >= 3 ? { x: u.x, y: u.y } : null; },
+    ai(sim, u) { return (countNear(sim, u.x, u.y, cfg(u, 'e').r) >= 2 || (u.tgt && isBig(u.tgt) && d2(u, u.tgt) <= cfg(u, 'e').r ** 2)) ? { x: u.x, y: u.y } : null; },
   },
 };
 
@@ -92,6 +97,7 @@ export const qinglong = {
       hitCircle(sim, u, p.x, p.y, c.r, atk(u) * c.coef, { stun: c.stun, tag: 'q' });
       sim.pushFx({ t: 'thunder', x: p.x, y: p.y, r: c.r, color: 0x5fe0b8, rune: true });
       sim.pushFx({ t: 'bolt', x1: p.x, y1: p.y - 520, x2: p.x, y2: p.y, color: 0x5fe0b8, rune: true });
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 165, text: '惊雷！', color: '#5fe0b8', size: 22 });
     },
     ai(sim, u) { const c = cfg(u, 'q'); return clusterAim(sim, u, c.range, c.r, 3); },
   },
@@ -100,6 +106,7 @@ export const qinglong = {
       const c = cfg(u, 'e');
       let cur = sim.nearestEnemy(u.x, u.y, c.range);
       if (!cur) return false;
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 170, text: '龙吟！', color: '#7fe3ff', size: 24 });
       const hit = new Set();
       let px = u.x; let py = u.y - (u.h || 60) * 0.5;
       for (let i = 0; i < c.n && cur; i++) {
@@ -123,6 +130,7 @@ export const qilin = {
       if (km.alive) healUnit(sim, u, km, c);
       sim.addZone({ x: u.x, y: u.y, r: c.r, t: 1, vis: 'heal', side: 'ally' });
       sim.pushFx({ t: 'ring', x: u.x, y: u.y, r: c.r * 0.72, color: 0xffd36a, dur: 0.65, rune: true });
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 165, text: '祥瑞降福！', color: '#ffd36a', size: 22 });
       sim.pushFx({ t: 'sfx', name: 'heal', vol: 0.7 });
     },
     ai(sim, u) {
@@ -134,10 +142,11 @@ export const qilin = {
     cast(sim, u, aim) {
       const c = cfg(u, 'e');
       const a = angTo(u, aim);
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 160, text: '麟角冲！', color: '#ffd36a', size: 22 });
       sim.pushFx({ t: 'beam', x1: u.x, y1: u.y - 50, x2: u.x + Math.cos(a) * c.dist, y2: u.y - 50 + Math.sin(a) * c.dist, w: 18, color: 0xffd36a, dur: 0.3, sonic: true });
       dash(u, a, c.dist, c.dur, {
         hitR: c.hitR,
-        onHit(s, uu, e) { s.damage(uu, e, atk(uu) * c.coef, { skill: true, tag: 'e' }); knock(e, uu.x, uu.y, c.knock); },
+        onHit(s, uu, e) { s.damage(uu, e, atk(uu) * c.coef, { skill: true, tag: 'e' }); knock(e, uu.x, uu.y, c.knock, s.walls); },
       });
       sim.pushFx({ t: 'sfx', name: 'dash', vol: 0.6 });
     },
@@ -202,5 +211,33 @@ export const xingtian = {
       sim.pushFx({ t: 'text', x: u.x, y: u.y - 165, text: '战意不灭！', color: '#ffd36a', size: 24 });
     },
     ai(sim, u) { return (u.hp / u.maxHp < 0.72 || countNear(sim, u.x, u.y, cfg(u, 'e').r) >= 4) ? { x: u.x, y: u.y } : null; },
+  },
+};
+
+export const guanyu = {
+  q: { // 青龙偃月斩：大范围破甲刀气 + 眩晕
+    cast(sim, u, aim) {
+      const c = cfg(u, 'q');
+      const a = angTo(u, aim);
+      hitCone(sim, u, a, c.r, c.arc, atk(u) * c.coef, { stun: c.stun, pierceArmor: true, tag: 'q' });
+      sim.pushFx({ t: 'slash', x: u.x, y: u.y - 46, a, r: c.r, arc: c.arc, id: u.id, color: 0x5fe0b8, sparks: true });
+      sim.pushFx({ t: 'ring', x: u.x, y: u.y, r: c.r * 0.72, color: 0xffd36a, dur: 0.45, rune: true });
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 155, text: '青龙偃月斩！', color: '#5fe0b8', size: 24 });
+    },
+    ai(sim, u) { const t = tgtIn(u, cfg(u, 'q').r * 0.95); return t ? { x: t.x, y: t.y } : null; },
+  },
+  e: { // 威震华夏：震退周围敌军并鼓舞周围友军攻防大增
+    cast(sim, u) {
+      const c = cfg(u, 'e');
+      hitCircle(sim, u, u.x, u.y, c.r, atk(u) * c.coef, { knock: c.knock, tag: 'e' });
+      for (const a of sim.alliesIn(u.x, u.y, c.buffR)) {
+        if (a.kind === 'building') continue;
+        sim.addBuff(a, 'guanyu_might', c.dur, [{ stat: 'atk', mul: 0.25 }, { stat: 'def', add: 20 }]);
+        sim.pushFx({ t: 'ring', x: a.x, y: a.y, r: (a.r || 22) + 32, color: 0xffd36a, dur: 0.5 });
+      }
+      sim.pushFx({ t: 'ring', x: u.x, y: u.y, r: c.r, color: 0x5fe0b8, dur: 0.6, rune: true });
+      sim.pushFx({ t: 'text', x: u.x, y: u.y - 165, text: '威震华夏！', color: '#ffd36a', size: 24 });
+    },
+    ai(sim, u) { return countNear(sim, u.x, u.y, cfg(u, 'e').r) >= 2 ? { x: u.x, y: u.y } : null; },
   },
 };

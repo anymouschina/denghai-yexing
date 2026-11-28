@@ -14,7 +14,7 @@ import { loadFeelSettings, saveFeelSettings } from '../render/gameFeel.js';
 
 const INK_N = 0x0b0d18;
 const KEYN = { q: 'Q', e: 'E', r: 'R', f: 'F', u: '空格' };
-const PAUSE_PANELS = new Set(['bag', 'shop', 'realms', 'nanhua']);
+const PAUSE_PANELS = new Set(['bag', 'shop', 'realms', 'nanhua', 'story']);
 const st = (size, color = '#f3e6c8', font = BF, extra = {}) => ({ fontFamily: font, fontSize: `${size}px`, color, stroke: INK, strokeThickness: 4, ...extra });
 
 export function unitPortrait(u) {
@@ -40,8 +40,19 @@ export class GuardHUD extends Phaser.Scene {
       this._consumedPtrId = p.id;
       this._consumedAt = this.time.now;
     });
+    this.staticG = this.add.graphics().setDepth(4);
     this.g = this.add.graphics().setDepth(5);
+    this.miniBg = this.add.graphics().setDepth(11);
     this.mini = this.add.graphics().setDepth(12);
+    this._avatarMasks = [];
+    this._skillMasks = [];
+    this._hudFrame = 0;
+    this._miniStaticSig = '';
+    this._lastCamX = -1;
+    this._lastCamY = -1;
+    // 静态底框只画一次，避免 60fps 重复绘制不变的圆角背景
+    this.staticG.fillStyle(0x0f1128, 0.82).fillRoundedRect(16, 12, 340, 94, 12).lineStyle(3, INK_N).strokeRoundedRect(16, 12, 340, 94, 12);
+    this.staticG.fillStyle(0x0f1128, 0.82).fillRoundedRect(1050, 12, 216, 220, 12).lineStyle(3, INK_N).strokeRoundedRect(1050, 12, 216, 220, 12);
     this.buildTop();
     this.buildTrainingBar();
     this.buildBossRoomBar();
@@ -64,6 +75,10 @@ export class GuardHUD extends Phaser.Scene {
     this.events.once('shutdown', () => {
       document.removeEventListener('visibilitychange', onVis);
       touch.onPause = null;
+      for (const m of (this._avatarMasks || [])) { if (m && m.scene) m.destroy(); }
+      for (const m of (this._skillMasks || [])) { if (m && m.scene) m.destroy(); }
+      this._avatarMasks = [];
+      this._skillMasks = [];
     });
     this.sim.on('kongmingHit', () => {
       const s = this.sim;
@@ -335,6 +350,7 @@ export class GuardHUD extends Phaser.Scene {
       }),
       temper: mk(0, 5, 24, '挨打房', () => this.enterTemperRoom(), { primary: true }),
       nanhua: mk(1, 5, 24, '南华 [O]', () => this.togglePanel('nanhua'), { primary: true }),
+      story: mk(2, 5, 24, '剑阁录 [I]', () => this.togglePanel('story')),
     };
     this.stanceTag = this.add.text(X, Y + 172, '', st(12, '#7fe3ff', BF, { strokeThickness: 3 })).setDepth(18);
   }
@@ -375,6 +391,8 @@ export class GuardHUD extends Phaser.Scene {
   refreshAvatars() {
     const s = this.sim;
     const c = this.avatarC;
+    for (const m of (this._avatarMasks || [])) { if (m && m.scene) m.destroy(); }
+    this._avatarMasks = [];
     c.removeAll(true);
     this.avatars = [];
     const ids = s.party.filter((id) => s.byId(id));
@@ -390,13 +408,14 @@ export class GuardHUD extends Phaser.Scene {
       const img = this.add.image(x + sz / 2, y + 4, unitPortrait(u)).setOrigin(0.5, 0);
       img.setScale(Math.min((sz * 1.65) / img.height, (sz * 1.35) / img.width));
       const m = this.make.graphics({ add: false }).fillRoundedRect(x + 3, y + 3, sz - 6, sz - 6, 9);
+      this._avatarMasks.push(m);
       img.setMask(m.createGeometryMask());
       const num = this.add.text(x + 5, y + 2, String(i + 1), st(12, '#ffffff', NF, { fontStyle: 'bold', strokeThickness: 3 }));
       const down = this.add.text(x + sz / 2, y + sz / 2, '', st(17, '#ff8a7a', NF, { fontStyle: 'bold' })).setOrigin(0.5);
       const hit = this.add.rectangle(x + sz / 2, y + sz / 2, sz, sz, 0, 0.001).setInteractive({ useHandCursor: true });
       hit.on('pointerdown', () => this.gg.cmd({ type: 'switch', id }));
       c.add([g, img, num, down, hit]);
-      this.avatars.push({ id, x, y, sz, g, img, down });
+      this.avatars.push({ id, x, y, sz, g, img, down, lastSig: '' });
     });
     if (!touch.enabled && ids.length > 1) c.add(this.add.text(24, 598, 'Tab 轮换 · 点头像或场上单位切换', st(12, '#9aa3cf')));
   }
@@ -404,6 +423,8 @@ export class GuardHUD extends Phaser.Scene {
   buildSkills() {
     const s = this.sim;
     const c = this.skillC;
+    for (const m of (this._skillMasks || [])) { if (m && m.scene) m.destroy(); }
+    this._skillMasks = [];
     c.removeAll(true);
     this.skillSlots = [];
     this.aimState = null;
@@ -482,6 +503,7 @@ export class GuardHUD extends Phaser.Scene {
       const iconKey = this.textures.exists(sk.icon) ? sk.icon : unitPortrait(u);
       const icon = this.add.image(cx, cy, iconKey).setDisplaySize(size - 6, size - 6);
       const maskG = this.make.graphics({ add: false }).fillCircle(cx, cy, rad - 3);
+      this._skillMasks.push(maskG);
       icon.setMask(maskG.createGeometryMask());
       const cd = this.add.graphics();
       // 清晰的中文技能名底条 + 桌面端快捷键角标
@@ -684,7 +706,10 @@ export class GuardHUD extends Phaser.Scene {
     const last = s.mode === 'story' ? BAL.waves.storyLast : '∞';
     setTxt(this.waveTitle, w.n ? `第 ${w.n} 波 / ${last}` : '布阵中');
     const nextIn = Math.max(0, w.nextAt - s.t);
-    const mainEnemies = s.enemies.reduce((a, e) => a + (e.alive && !e.realm ? 1 : 0), 0);
+    let mainEnemies = 0;
+    for (let i = 0; i < s.enemies.length; i++) { const e = s.enemies[i]; if (e.alive && !e.realm) mainEnemies++; }
+    let aliveAllies = 0;
+    for (let i = 0; i < s.party.length; i++) { if (s.byId(s.party[i])?.alive) aliveAllies++; }
     const laneNames = (s.map && s.map.laneNames) || BAL.laneNames || { N: '北', E: '东', W: '西', S: '南' };
     const lanes = (w.lanes || []).map((l) => laneNames[l] || l).join(' ');
     const canEarly = (s.mode !== 'story' || w.n < BAL.waves.storyLast) && nextIn > 0.5 && !s.over;
@@ -697,11 +722,8 @@ export class GuardHUD extends Phaser.Scene {
     const lines = [];
     if (s.mode !== 'story' || w.n < BAL.waves.storyLast) lines.push(`下一波 ${fmtTime(nextIn)}   来路：${lanes || '—'}`);
     else lines.push('最后一波！击败夜帝·无光即胜');
-    lines.push(`场上妖物 ${mainEnemies}   存活友军 ${s.party.filter((id) => s.byId(id)?.alive).length}`);
+    lines.push(`场上妖物 ${mainEnemies}   存活友军 ${aliveAllies}`);
     setTxt(this.waveInfo, lines.join('\n'));
-    g.fillStyle(0x0f1128, 0.82).fillRoundedRect(16, 12, 340, 94, 12).lineStyle(3, INK_N).strokeRoundedRect(16, 12, 340, 94, 12);
-    // 资源（x: 1050..1266, y: 12..232）
-    g.fillStyle(0x0f1128, 0.82).fillRoundedRect(1050, 12, 216, 220, 12).lineStyle(3, INK_N).strokeRoundedRect(1050, 12, 216, 220, 12);
     const coinStr = fmtNum(s.copper);
     if (this.coinText.text !== coinStr) { if (this.lastCopper !== undefined && s.copper > this.lastCopper) bump(this, this.coinText, 1.15); this.lastCopper = s.copper; this.coinText.setText(coinStr); }
     const h = s.hero;
@@ -858,55 +880,81 @@ export class GuardHUD extends Phaser.Scene {
 
   drawMinimap() {
     const s = this.sim;
-    const m = this.mini.clear();
     const x = this.miniX; const y = this.miniY; const w = this.miniW; const h = this.miniH;
     const sx = w / BAL.world.w; const sy = h / BAL.world.h;
-    m.fillStyle(0x12173a).fillRect(x, y, w, h);
-    for (const r of [...REALMS, HIDDEN, ...EXTRA_REALMS]) {
-      if (r.hidden && !s.realms?.hiddenOpen) continue;
-      const [a, b, c, d] = r.rect;
-      const done = s.realms && s.realms.state[r.id] === 'cleared';
-      m.fillStyle(r.color, done ? 0.18 : 0.4).fillRect(x + a * sx, y + b * sy, (c - a) * sx, (d - b) * sy);
+
+    // 静态地形底图（秘境区块/路线/营地/复活泉）：只在秘境开启/通关状态变化时重绘
+    const R = s.realms;
+    const staticSig = `${R ? R.hiddenOpen : 0}|${R ? Object.values(R.state).join('') : ''}`;
+    if (staticSig !== this._miniStaticSig && this.miniBg) {
+      this._miniStaticSig = staticSig;
+      const bg = this.miniBg.clear();
+      bg.fillStyle(0x12173a).fillRect(x, y, w, h);
+      for (const r of [...REALMS, HIDDEN, ...EXTRA_REALMS]) {
+        if (r.hidden && !R?.hiddenOpen) continue;
+        const [a, b, c, d] = r.rect;
+        const done = R && R.state[r.id] === 'cleared';
+        bg.fillStyle(r.color, done ? 0.18 : 0.4).fillRect(x + a * sx, y + b * sy, (c - a) * sx, (d - b) * sy);
+      }
+      if (s.map.trainingRoom) {
+        const [a, b, c, d] = s.map.trainingRoom.rect;
+        bg.fillStyle(0x5fe08a, 0.38).fillRect(x + a * sx, y + b * sy, (c - a) * sx, (d - b) * sy);
+      }
+      if (s.map.bossRoom) {
+        const [a, b, c, d] = s.map.bossRoom.rect;
+        bg.fillStyle(0xff6a5a, 0.42).fillRect(x + a * sx, y + b * sy, (c - a) * sx, (d - b) * sy);
+      }
+      if (s.map.banditCamp) {
+        const bc = s.map.banditCamp;
+        bg.fillStyle(0xff7a3a, 0.85).fillCircle(x + bc.x * sx, y + bc.y * sy, 4);
+      }
+      if (s.map.hunterCamp) {
+        const hc = s.map.hunterCamp;
+        bg.fillStyle(0x5fe08a, 0.85).fillCircle(x + hc.x * sx, y + hc.y * sy, 4);
+      }
+      bg.lineStyle(3, 0x6b5640, 0.8);
+      for (const p of Object.values(s.map.lanes)) { bg.beginPath(); bg.moveTo(x + p[0][0] * sx, y + p[0][1] * sy); for (const q of p) bg.lineTo(x + q[0] * sx, y + q[1] * sy); bg.strokePath(); }
+      const rp = s.getRevivePoint();
+      if (rp) {
+        const rx = x + rp.x * sx; const ry = y + rp.y * sy;
+        bg.fillStyle(0x7fe3ff, 0.85).fillCircle(rx, ry, 3.2);
+        bg.lineStyle(1, 0xffffff, 0.9).strokeCircle(rx, ry, 5);
+      }
+      if (s.nanhua) bg.fillStyle(0x7fe3ff).fillCircle(x + s.nanhua.x * sx, y + s.nanhua.y * sy, 3.2);
+      bg.fillStyle(0xffc977).fillCircle(x + s.kongming.x * sx, y + s.kongming.y * sy, 4);
+      bg.lineStyle(2, INK_N).strokeRect(x, y, w, h);
     }
-    if (s.map.trainingRoom) {
-      const [a, b, c, d] = s.map.trainingRoom.rect;
-      m.fillStyle(0x5fe08a, 0.38).fillRect(x + a * sx, y + b * sy, (c - a) * sx, (d - b) * sy);
+
+    // 动态实体层：每 3 帧或镜头移动明显时刷新（60fps -> ~20Hz，视觉无感、CPU 大幅减负）
+    const cam = this.gg.cameras.main.worldView;
+    this._hudFrame = (this._hudFrame || 0) + 1;
+    const camMoved = Math.abs(cam.x - this._lastCamX) > 32 || Math.abs(cam.y - this._lastCamY) > 32;
+    if (this._hudFrame % 3 !== 0 && !camMoved && this._hudFrame > 2) return;
+    this._lastCamX = cam.x;
+    this._lastCamY = cam.y;
+
+    const m = this.mini.clear();
+    const gItems = s.groundItems || [];
+    for (let i = 0; i < gItems.length; i++) {
+      const gd = gItems[i];
+      m.fillStyle(gd.unique ? 0xffd36a : 0x9ff0b8).fillCircle(x + gd.x * sx, y + gd.y * sy, gd.unique ? 2.4 : 1.5);
     }
-    if (s.map.bossRoom) {
-      const [a, b, c, d] = s.map.bossRoom.rect;
-      m.fillStyle(0xff6a5a, 0.42).fillRect(x + a * sx, y + b * sy, (c - a) * sx, (d - b) * sy);
+    for (let i = 0; i < s.buildings.length; i++) {
+      const b = s.buildings[i];
+      if (b.alive) m.fillStyle(0x7fe3ff).fillRect(x + b.x * sx - 1.5, y + b.y * sy - 1.5, 3, 3);
     }
-    if (s.map.banditCamp) {
-      const bc = s.map.banditCamp;
-      m.fillStyle(0xff7a3a, 0.85).fillCircle(x + bc.x * sx, y + bc.y * sy, 4);
-    }
-    if (s.map.hunterCamp) {
-      const hc = s.map.hunterCamp;
-      m.fillStyle(0x5fe08a, 0.85).fillCircle(x + hc.x * sx, y + hc.y * sy, 4);
-    }
-    m.lineStyle(3, 0x6b5640, 0.8);
-    for (const p of Object.values(s.map.lanes)) { m.beginPath(); m.moveTo(x + p[0][0] * sx, y + p[0][1] * sy); for (const q of p) m.lineTo(x + q[0] * sx, y + q[1] * sy); m.strokePath(); }
-    const rp = s.getRevivePoint();
-    if (rp) {
-      const rx = x + rp.x * sx; const ry = y + rp.y * sy;
-      m.fillStyle(0x7fe3ff, 0.85).fillCircle(rx, ry, 3.2);
-      m.lineStyle(1, 0xffffff, 0.9).strokeCircle(rx, ry, 5);
-    }
-    for (const gd of (s.groundItems || [])) m.fillStyle(gd.unique ? 0xffd36a : 0x9ff0b8).fillCircle(x + gd.x * sx, y + gd.y * sy, gd.unique ? 2.4 : 1.5);
-    for (const b of s.buildings) if (b.alive) m.fillStyle(0x7fe3ff).fillRect(x + b.x * sx - 1.5, y + b.y * sy - 1.5, 3, 3);
-    const eStride = s.enemies.length > 350 ? 2 : 1;
+    const eStride = s.enemies.length > 350 ? 3 : s.enemies.length > 150 ? 2 : 1;
     for (let i = 0; i < s.enemies.length; i++) {
       const e = s.enemies[i];
       if (!e.alive) continue;
       if (eStride > 1 && !e.boss && !e.elite && (i % eStride !== 0)) continue;
       m.fillStyle(e.boss ? 0xb05aff : 0xe0463a).fillRect(x + e.x * sx - 1, y + e.y * sy - 1, e.boss ? 5 : 2, e.boss ? 5 : 2);
     }
-    for (const u of s.units) if (u.alive && u.kind !== 'kongming') m.fillStyle(u.ctrl ? 0xffffff : (u.kind === 'summon' ? 0x5fe0b8 : 0x5fe08a)).fillCircle(x + u.x * sx, y + u.y * sy, u.ctrl ? 3 : 2);
-    if (s.nanhua) m.fillStyle(0x7fe3ff).fillCircle(x + s.nanhua.x * sx, y + s.nanhua.y * sy, 3.2);
-    m.fillStyle(0xffc977).fillCircle(x + s.kongming.x * sx, y + s.kongming.y * sy, 4);
-    const cam = this.gg.cameras.main.worldView;
+    for (let i = 0; i < s.units.length; i++) {
+      const u = s.units[i];
+      if (u.alive && u.kind !== 'kongming') m.fillStyle(u.ctrl ? 0xffffff : (u.kind === 'summon' ? 0x5fe0b8 : 0x5fe08a)).fillCircle(x + u.x * sx, y + u.y * sy, u.ctrl ? 3 : 2);
+    }
     m.lineStyle(1, 0xffffff, 0.6).strokeRect(x + cam.x * sx, y + cam.y * sy, cam.width * sx, cam.height * sy);
-    m.lineStyle(2, INK_N).strokeRect(x, y, w, h);
   }
 
   updateAvatars(g) {
@@ -917,16 +965,25 @@ export class GuardHUD extends Phaser.Scene {
       const on = u.id === s.ctrlId;
       const sz = a.sz || 66;
       const hpRatio = u.alive ? Math.max(0, u.hp / u.maxHp) : 0;
-      a.g.clear();
-      a.g.fillStyle(INK_N).fillRoundedRect(a.x, a.y + 4, sz, sz, 11);
-      a.g.fillStyle(u.kind === 'beast' ? 0x3a2f60 : u.kind === 'merc' ? 0x23304e : 0x262b5e).fillRoundedRect(a.x, a.y, sz, sz, 11);
-      a.g.lineStyle(on ? 4 : 2, on ? 0xffc977 : 0x343a66).strokeRoundedRect(a.x, a.y, sz, sz, 11);
-      if (on) a.g.lineStyle(7, 0xff9a3c, 0.25).strokeRoundedRect(a.x - 4, a.y - 4, sz + 8, sz + 8, 13);
-      a.g.fillStyle(0x2a0f14).fillRect(a.x + 5, a.y + sz - 8, sz - 10, 5);
-      a.g.fillStyle(hpRatio < 0.35 ? 0xff5a4a : 0x5fe08a).fillRect(a.x + 5, a.y + sz - 8, (sz - 10) * hpRatio, 5);
-      if (u.kind === 'hero' && u.energy >= BAL.hero.ultEnergy) a.g.lineStyle(3, 0xffd36a, 0.5 + Math.sin(s.t * 6) * 0.4).strokeRoundedRect(a.x - 2, a.y - 2, sz + 4, sz + 4, 12);
-      a.img.setAlpha(u.alive ? 1 : 0.3);
-      a.down.setText(u.alive ? '' : `${Math.ceil(u.downT)}`);
+      const hpBin = Math.round(hpRatio * 40);
+      const ultReady = u.kind === 'hero' && u.energy >= BAL.hero.ultEnergy;
+      const pulseBin = ultReady ? Math.floor(s.t * 8) : 0;
+      const sig = `${on ? 1 : 0}|${u.alive ? 1 : 0}|${hpBin}|${ultReady ? 1 : 0}|${pulseBin}`;
+      if (sig !== a.lastSig) {
+        a.lastSig = sig;
+        a.g.clear();
+        a.g.fillStyle(INK_N).fillRoundedRect(a.x, a.y + 4, sz, sz, 11);
+        a.g.fillStyle(u.kind === 'beast' ? 0x3a2f60 : u.kind === 'merc' ? 0x23304e : 0x262b5e).fillRoundedRect(a.x, a.y, sz, sz, 11);
+        a.g.lineStyle(on ? 4 : 2, on ? 0xffc977 : 0x343a66).strokeRoundedRect(a.x, a.y, sz, sz, 11);
+        if (on) a.g.lineStyle(7, 0xff9a3c, 0.25).strokeRoundedRect(a.x - 4, a.y - 4, sz + 8, sz + 8, 13);
+        a.g.fillStyle(0x2a0f14).fillRect(a.x + 5, a.y + sz - 8, sz - 10, 5);
+        a.g.fillStyle(hpRatio < 0.35 ? 0xff5a4a : 0x5fe08a).fillRect(a.x + 5, a.y + sz - 8, (sz - 10) * hpRatio, 5);
+        if (ultReady) a.g.lineStyle(3, 0xffd36a, 0.5 + Math.sin(s.t * 6) * 0.4).strokeRoundedRect(a.x - 2, a.y - 2, sz + 4, sz + 4, 12);
+      }
+      const alpha = u.alive ? 1 : 0.3;
+      if (a.img.alpha !== alpha) a.img.setAlpha(alpha);
+      const downTxt = u.alive ? '' : `${Math.ceil(u.downT)}`;
+      if (a.down.text !== downTxt) a.down.setText(downTxt);
     }
   }
 
@@ -964,13 +1021,11 @@ export class GuardHUD extends Phaser.Scene {
       if (this.sumRecall.cdTxt.text !== rcd) this.sumRecall.cdTxt.setText(rcd);
     }
     for (const sl of this.skillSlots) {
-      const cg = sl.cd.clear();
       const skLv = u.kind === 'hero' && u.skillLvs ? (u.skillLvs[sl.slot] ?? 0) : 1;
       const locked = u.kind === 'hero' && skLv <= 0;
       let k = 0;
       let label = '';
       if (locked) {
-        cg.fillStyle(0x05061a, 0.72).fillCircle(sl.cx, sl.cy, sl.size / 2 - 1);
         label = sl.slot === 'u' ? '6级' : '未学';
       } else if (sl.slot === 'u') {
         k = 1 - u.energy / BAL.hero.ultEnergy;
@@ -979,22 +1034,35 @@ export class GuardHUD extends Phaser.Scene {
         k = u.cds[sl.slot] / (sl.sk.cd * (1 - u.stats.cdr));
         label = u.cds[sl.slot] >= 1 ? String(Math.ceil(u.cds[sl.slot])) : u.cds[sl.slot].toFixed(1);
       }
-      if (!locked && k > 0) {
-        cg.fillStyle(0x05061a, 0.72);
-        cg.slice(sl.cx, sl.cy, sl.size / 2 - 1, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, k), false).fillPath();
-      } else if (!locked && sl.slot === 'u') {
-        const aw = !!u.awakened;
-        cg.lineStyle(aw ? 5 : 4, aw ? 0xff9a3c : 0xffd36a, 0.65 + Math.sin(s.t * 6) * 0.35).strokeCircle(sl.cx, sl.cy, sl.size / 2 + 4);
+      const kBin = Math.round(Math.min(1, Math.max(0, k)) * 36);
+      const ultPulse = (!locked && sl.slot === 'u' && k <= 0) ? Math.floor(s.t * 8) : 0;
+      const cdSig = `${locked ? 1 : 0}|${kBin}|${u.awakened ? 1 : 0}|${ultPulse}`;
+      if (cdSig !== sl._cdSig) {
+        sl._cdSig = cdSig;
+        const cg = sl.cd.clear();
+        if (locked) {
+          cg.fillStyle(0x05061a, 0.72).fillCircle(sl.cx, sl.cy, sl.size / 2 - 1);
+        } else if (k > 0) {
+          cg.fillStyle(0x05061a, 0.72);
+          cg.slice(sl.cx, sl.cy, sl.size / 2 - 1, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, k), false).fillPath();
+        } else if (sl.slot === 'u') {
+          const aw = !!u.awakened;
+          cg.lineStyle(aw ? 5 : 4, aw ? 0xff9a3c : 0xffd36a, 0.65 + Math.sin(s.t * 6) * 0.35).strokeCircle(sl.cx, sl.cy, sl.size / 2 + 4);
+        }
       }
-      sl.cdt.setText(label).setColor(locked ? '#9aa3cf' : '#ffffff');
-      sl.icon.setAlpha(!u.alive ? 0.35 : locked ? 0.25 : 1);
+      if (sl.cdt.text !== label) sl.cdt.setText(label);
+      const lblCol = locked ? '#9aa3cf' : '#ffffff';
+      if (sl.cdt.style.color !== lblCol) sl.cdt.setColor(lblCol);
+      const icAlpha = !u.alive ? 0.35 : locked ? 0.25 : 1;
+      if (sl.icon.alpha !== icAlpha) sl.icon.setAlpha(icAlpha);
       if (sl.slot === 'u' && sl.nameTag) {
         const nm = u.awakened ? `觉醒·${sl.sk.name.slice(0, 2)}` : `大·${sl.sk.name.slice(0, 2)}`;
         if (sl.nameTag.text !== nm) sl.nameTag.setText(nm).setColor(u.awakened ? '#ff9a3c' : '#ffd36a');
       }
-      if (sl.lvTxt) sl.lvTxt.setText(skLv > 0 ? `L${skLv}` : '');
+      const lvStr = skLv > 0 ? `L${skLv}` : '';
+      if (sl.lvTxt && sl.lvTxt.text !== lvStr) sl.lvTxt.setText(lvStr);
       const canUp = u.kind === 'hero' && s.canUpgradeSkill && s.canUpgradeSkill(u, sl.slot);
-      if (sl.upBg) {
+      if (sl.upBg && sl.upBg.visible !== canUp) {
         sl.upBg.setVisible(canUp);
         sl.upTxt.setVisible(canUp);
         sl.upHit.setVisible(canUp);

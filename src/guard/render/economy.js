@@ -7,20 +7,22 @@ import { canReach } from '../sim/systems/buildings.js';
 import { touch } from '../../touch.js';
 
 registerFx('build', (sc, f) => {
-  sc.pGold.explode(f.up ? 26 : 18, f.x, f.y - 40);
-  const img = sc.add.image(f.x, f.y, 'glow').setTint(f.merc ? 0x7fe3ff : 0xffc977).setBlendMode('ADD').setDepth(9000).setScale(0.4).setAlpha(0.9);
-  sc.tweens.add({ targets: img, scale: f.up ? 3.2 : 2.4, alpha: 0, duration: 520, ease: 'Cubic.easeOut', onComplete: () => img.destroy() });
-  sc.fxItems.push({ k: 'ring', x: f.x, y: f.y, r: f.up ? 110 : 80, color: f.merc ? 0x7fe3ff : 0xffc977, life: 0.5, max: 0.5 });
-  if (f.up) sc.floatText(f.x, f.y - 130, `Lv ${f.lv}`, '#ffd36a', 24);
-  else if (f.merc) sc.floatText(f.x, f.y - 100, '应募！', '#7fe3ff', 20);
+  sc.pGold?.explode(f.up ? 26 : 18, f.x, f.y - 40);
+  if (sc.add && sc.tweens) {
+    const img = sc.add.image(f.x, f.y, 'glow').setTint(f.merc ? 0x7fe3ff : 0xffc977).setBlendMode('ADD').setDepth(9000).setScale(0.4).setAlpha(0.9);
+    sc.tweens.add({ targets: img, scale: f.up ? 3.2 : 2.4, alpha: 0, duration: 520, ease: 'Cubic.easeOut', onComplete: () => { if (img && img.scene) img.destroy(); } });
+  }
+  sc.fxItems?.push({ k: 'ring', x: f.x, y: f.y, r: f.up ? 110 : 80, color: f.merc ? 0x7fe3ff : 0xffc977, life: 0.5, max: 0.5 });
+  if (f.up) sc.floatText?.(f.x, f.y - 130, `Lv ${f.lv}`, '#ffd36a', 24);
+  else if (f.merc) sc.floatText?.(f.x, f.y - 100, '应募！', '#7fe3ff', 20);
   sfx(f.up ? 'levelup' : 'chest', 0.5);
 });
 
-registerFx('thorns', (sc, f) => { sc.pSpark.explode(6, f.x, f.y); });
+registerFx('thorns', (sc, f) => { sc.pSpark?.explode(6, f.x, f.y); });
 
 registerFx('lampPulse', (sc, f) => {
-  sc.fxItems.push({ k: 'ring', x: f.x, y: f.y, r: f.r * 0.9, color: 0x5fe08a, life: 0.7, max: 0.7 });
-  sc.pHeal.explode(4, f.x, f.y - 60);
+  sc.fxItems?.push({ k: 'ring', x: f.x, y: f.y, r: f.r * 0.9, color: 0x5fe08a, life: 0.7, max: 0.7 });
+  sc.pHeal?.explode(4, f.x, f.y - 60);
 });
 
 const R = BD.buildRange;

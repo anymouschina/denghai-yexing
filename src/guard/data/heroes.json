@@ -1,7 +1,7 @@
 {
   "azhu": {
     "name": "阿烛", "role": "远程术士", "tex": "hero_run", "frame": 0, "scale": 0.44, "h": 84, "r": 18,
-    "portrait": "hero", "hp": 520, "atk": 26, "def": 6, "spd": 230,
+    "portrait": "hero", "hp": 560, "atk": 30, "def": 6, "spd": 230,
     "basic": { "type": "proj", "range": 440, "cd": 0.42, "coef": 1.0, "speed": 620, "tex": "proj_talisman", "life": 0.9 },
     "skills": {
       "q": { "name": "三连符", "icon": "icon_fu", "cd": 5, "desc": "扇形掷出 5 张符箓", "coef": 1.4, "n": 5, "spread": 0.6, "speed": 700, "range": 520, "pierce": 1 },
@@ -13,7 +13,7 @@
   },
   "huoqing": {
     "name": "霍青", "role": "近战枪客", "tex": "g_hero_huoqing", "scale": 0.5, "h": 110, "r": 22,
-    "portrait": "g_hero_huoqing", "hp": 820, "atk": 38, "def": 22, "spd": 225,
+    "portrait": "g_hero_huoqing", "hp": 880, "atk": 44, "def": 24, "spd": 225,
     "basic": { "type": "melee", "range": 125, "arc": 2.1, "cd": 0.48, "coef": 1.0 },
     "skills": {
       "q": { "name": "突刺", "icon": "g_sk_hq_q", "cd": 6, "desc": "向前冲锋，贯穿伤害", "coef": 2.4, "dist": 320, "dur": 0.3, "hitR": 70 },
@@ -25,8 +25,8 @@
   },
   "yunque": {
     "name": "云鹊", "role": "远程射手", "tex": "g_hero_yunque", "scale": 0.48, "h": 104, "r": 18,
-    "portrait": "g_hero_yunque", "hp": 480, "atk": 30, "def": 5, "spd": 235,
-    "basic": { "type": "proj", "range": 560, "cd": 0.6, "coef": 1.0, "speed": 820, "tex": "g_arrow", "pierce": 1, "life": 0.8 },
+    "portrait": "g_hero_yunque", "hp": 520, "atk": 34, "def": 5, "spd": 235,
+    "basic": { "type": "proj", "range": 560, "cd": 0.54, "coef": 1.0, "speed": 820, "tex": "g_arrow", "pierce": 1, "life": 0.8 },
     "skills": {
       "q": { "name": "散射", "icon": "g_sk_yq_q", "cd": 5, "desc": "扇形射出 7 箭", "coef": 1.1, "n": 7, "spread": 0.8, "speed": 860, "range": 560, "pierce": 1 },
       "e": { "name": "穿云箭", "icon": "g_sk_yq_e", "cd": 8, "desc": "长直线贯穿重箭", "coef": 4.2, "speed": 1300, "range": 1200, "r": 28 },
@@ -37,8 +37,8 @@
   },
   "xuanshuang": {
     "name": "玄霜", "role": "辅助治疗", "tex": "g_hero_xuanshuang", "scale": 0.48, "h": 104, "r": 18,
-    "portrait": "g_hero_xuanshuang", "hp": 560, "atk": 26, "def": 7, "spd": 225,
-    "basic": { "type": "proj", "range": 420, "cd": 0.44, "coef": 1.0, "speed": 560, "tex": "proj_ghostfire", "tint": 10479615, "slow": 0.25, "slowT": 1.5, "life": 0.9 },
+    "portrait": "g_hero_xuanshuang", "hp": 600, "atk": 31, "def": 7, "spd": 225,
+    "basic": { "type": "proj", "range": 420, "cd": 0.4, "coef": 1.0, "speed": 560, "tex": "proj_ghostfire", "tint": 10479615, "slow": 0.25, "slowT": 1.5, "life": 0.9 },
     "skills": {
       "q": { "name": "寒霜环", "icon": "g_sk_xs_q", "cd": 6, "desc": "范围减速并伤害", "coef": 2.0, "r": 160, "range": 460, "slow": 0.5, "slowT": 2.5 },
       "e": { "name": "回春铃", "icon": "g_sk_xs_e", "cd": 10, "desc": "治疗周围友军与孔明", "coef": 5, "pct": 0.06, "r": 440, "kmMul": 0.7 },

@@ -20,5 +20,6 @@ import bossRoom from './bossRoom.js';
 import mirror from './mirror.js';
 import temper from './temper.js';
 import nanhua from './nanhua.js';
+import story from './story.js';
 
-export const SYSTEMS = [waves, loot, craft, realms, training, bossRoom, bandits, hunter, mirror, temper, nanhua, buildings, mercs, quests, bosses, recall, blink, shop, groundDrops, escalation];
+export const SYSTEMS = [waves, loot, craft, realms, training, bossRoom, bandits, hunter, mirror, temper, nanhua, buildings, mercs, quests, bosses, recall, blink, shop, groundDrops, escalation, story];

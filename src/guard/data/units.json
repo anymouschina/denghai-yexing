@@ -37,16 +37,19 @@
   "summons": {
     "guanyu": {
       "name": "武圣·关羽",
-      "tex": "g_hero_huoqing",
-      "scale": 0.56,
+      "tex": "g_hero_guanyu",
+      "scale": 0.54,
       "h": 124,
       "r": 26,
       "hp": 2200,
       "atk": 95,
       "def": 32,
       "spd": 260,
-      "tint": 6283448,
-      "basic": { "type": "melee", "range": 135, "arc": 2.3, "cd": 0.65, "coef": 1.3 }
+      "basic": { "type": "melee", "range": 135, "arc": 2.3, "cd": 0.65, "coef": 1.3 },
+      "skills": {
+        "q": { "name": "青龙偃月斩", "icon": "g_eq_legend_qinglong_blade", "cd": 7, "desc": "挥刀劈出青龙刀气，大范围破甲重伤并眩晕" },
+        "e": { "name": "威震华夏", "icon": "g_eq_qinglong_w", "cd": 12, "desc": "武圣怒喝震退群敌，并鼓舞周围友军攻防大增" }
+      }
     }
   }
 }

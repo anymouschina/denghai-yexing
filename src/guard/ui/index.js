@@ -13,5 +13,7 @@ import shopPanel from './shop.js';
 import quickbar from './quickbar.js';
 // v3.6 南华仙人（O）：金币强化装备 & 金币渡劫飞升
 import nanhuaPanel from './nanhua.js';
+// 守卫剑阁完整剧情与设定：剑阁录（I）+ 常驻非阻塞剧情对白条
+import storyPanel, { storyStrip } from './story.js';
 
-export const PANELS = [bag, bagWidget, realms, realmsPanel, buildPanel, hirePanel, questsPanel, questTracker, shopPanel, quickbar, nanhuaPanel];
+export const PANELS = [bag, bagWidget, realms, realmsPanel, buildPanel, hirePanel, questsPanel, questTracker, shopPanel, quickbar, nanhuaPanel, storyPanel, storyStrip];

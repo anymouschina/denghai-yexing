@@ -152,7 +152,7 @@ function registerSheetAnims(scene, sheetKey, animsSpec) {
 export function ensureUnitSpriteSheet(scene, texKey, unitKey = null) {
   const native = resolveNativeSheet(scene, texKey, unitKey);
   if (native) {
-    if (!SHEET_CACHE.has(native.sheetKey)) {
+    if (!SHEET_CACHE.has(native.sheetKey) || !scene.anims?.exists(`${native.sheetKey}_idle`)) {
       registerSheetAnims(scene, native.sheetKey, native.meta?.anims || DEFAULT_NATIVE_ANIMS);
       SHEET_CACHE.add(native.sheetKey);
     }
@@ -160,7 +160,20 @@ export function ensureUnitSpriteSheet(scene, texKey, unitKey = null) {
   }
 
   const sheetKey = `anim_${texKey}`;
-  if (scene.textures.exists(sheetKey)) return sheetKey;
+  if (scene.textures.exists(sheetKey)) {
+    if (!scene.anims?.exists(`${sheetKey}_idle`)) {
+      registerSheetAnims(scene, sheetKey, {
+        idle: { start: 0, end: 1, frameRate: 5, repeat: -1 },
+        walk: { start: 2, end: 5, frameRate: 12, repeat: -1 },
+        attack: { start: 6, end: 7, frameRate: 14, repeat: 0 },
+        cast: { start: 8, end: 9, frameRate: 12, repeat: 0 },
+        ult: { start: 10, end: 11, frameRate: 12, repeat: 0 },
+        hurt: { start: 12, end: 13, frameRate: 12, repeat: 0 },
+        dead: { start: 14, end: 15, frameRate: 8, repeat: 0 },
+      });
+    }
+    return sheetKey;
+  }
   if (!scene.textures.exists(texKey)) return texKey;
 
   const srcTex = scene.textures.get(texKey);
@@ -219,7 +232,7 @@ export function playUnitActionAnim(sp, sheetKey, actionState, actionSeq = 0) {
   const fullKey = `${sheetKey}_${animName}`;
   const isOneShot = animName === 'attack' || animName === 'cast' || animName === 'ult' || animName === 'hurt' || animName === 'dead';
   const seqChanged = isOneShot && actionSeq > 0 && sp._lastActionSeq !== actionSeq;
-  if (sp.anims && (sp.anims.currentAnim?.key !== fullKey || seqChanged)) {
+  if (sp && sp.anims && sp.scene?.anims?.exists(fullKey) && (sp.anims.currentAnim?.key !== fullKey || seqChanged)) {
     sp._lastActionSeq = actionSeq;
     sp.play(fullKey, !seqChanged);
   }

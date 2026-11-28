@@ -60,6 +60,15 @@
     "boss": {
       "id": "lvda",
       "name": "强盗头目·吕达",
+      "bossRoster": [
+        "强盗头目·吕达",
+        "黑风二当家·杜远",
+        "断脊盗魁·胡才",
+        "血手寨主·波才",
+        "赤眉渠帅·杨奉",
+        "幽林巨寇·李乐",
+        "剑阁悍匪·白绕"
+      ],
       "tex": "g_boss_hanba",
       "sheetKey": "boss_lvda",
       "hp": 16000,
@@ -103,6 +112,14 @@
     "mobType": "wolf",
     "mobName": "苍原野狼",
     "alphaName": "银背狼王",
+    "alphaRoster": [
+      "银背狼王",
+      "苍月头狼·霜牙",
+      "幽谷血狼·赤瞳",
+      "寒林孤狼·裂风",
+      "残夜妖狼·黑脊",
+      "噬星狼尊·白煞"
+    ],
     "reward": {
       "copper": 160,
       "copperPerWave": 10,
@@ -125,6 +142,7 @@
     "tiers": {
       "low": {
         "id": "low", "name": "初阶BOSS", "bossName": "黑风鬼将", "tex": "g_boss_hanba",
+        "roster": ["黑风鬼将·程远志", "铁斧妖校·管亥", "阴山寨主·裴元绍", "幽谷刀魁·周仓影", "断桥鬼卒·廖化骸", "寒林煞将·张燕"],
         "tierMul": 1.2, "hp": 18000, "atk": 145, "def": 55, "spd": 118, "range": 74, "cd": 1.1, "r": 38, "h": 158,
         "copper": 300, "xp": 260, "minQ": 2, "equipCount": 2, "bonusTomes": 0, "tome": "tome_atk", "waveBase": 6,
         "moves": [
@@ -134,6 +152,7 @@
       },
       "mid": {
         "id": "mid", "name": "中阶BOSS", "bossName": "血煞妖王", "tex": "g_boss_yedi",
+        "roster": ["血煞妖王·华雄骸", "毒瘴魔将·李儒魂", "噬骨悍将·纪灵煞", "血瞳校尉·颜良影", "黑莲妖师·张宝魂", "幽冥督军·高顺骸"],
         "tierMul": 2.8, "hp": 75000, "atk": 350, "def": 110, "spd": 128, "range": 80, "cd": 1.0, "r": 42, "h": 172,
         "copper": 800, "xp": 750, "minQ": 3, "equipCount": 3, "bonusTomes": 1, "tome": "tome_hp", "waveBase": 14,
         "moves": [
@@ -143,6 +162,7 @@
       },
       "high": {
         "id": "high", "name": "高阶BOSS", "bossName": "太古魔尊", "tex": "g_boss_yedi",
+        "roster": ["太古魔尊·吕布影", "冥府天师·张角魂", "九幽魔皇·董卓煞", "绝夜龙将·文丑骸", "太虚妖帝·左慈影", "天煞鬼王·于吉魂"],
         "tierMul": 5.5, "hp": 280000, "atk": 720, "def": 185, "spd": 136, "range": 88, "cd": 0.9, "r": 46, "h": 188,
         "copper": 2000, "xp": 1900, "minQ": 4, "equipCount": 4, "bonusTomes": 2, "tome": "tome_omni", "waveBase": 24,
         "moves": [
@@ -214,7 +234,7 @@
   "kongming": { "x": 2000, "y": 1990, "hp": 2400, "def": 10, "atk": 22, "range": 320, "cd": 1.25, "r": 46, "alertCd": 3, "alertRange": 600 },
   "respawn": { "heroBase": 8, "heroPerWave": 0.4, "beast": 20 },
   "party": { "maxMercs": 6, "leash": 1100 },
-  "hero": { "hpPerLv": 0.06, "atkPerLv": 0.05, "defPerLv": 0.04, "maxLv": 50, "awakenLv": 30, "xpBase": 30, "xpGrowth": 1.16, "ultEnergy": 100, "ultPerDmg": 0.02, "ultPerKill": 1.2, "skillMaxLv": 5, "ultMaxLv": 3, "ultReqLv": [6, 12, 18], "skillDmgPerLv": 0.2, "skillCdCutPerLv": 0.05, "awakenBonus": { "atk": 300, "maxHp": 2500, "def": 60, "skillDmg": 0.35 } },
+  "hero": { "hpPerLv": 0.09, "atkPerLv": 0.095, "defPerLv": 0.06, "maxLv": 50, "awakenLv": 30, "xpBase": 30, "xpGrowth": 1.16, "ultEnergy": 100, "ultPerDmg": 0.02, "ultPerKill": 1.2, "skillMaxLv": 5, "ultMaxLv": 3, "ultReqLv": [6, 12, 18], "skillDmgPerLv": 0.25, "skillCdCutPerLv": 0.05, "awakenBonus": { "atk": 300, "maxHp": 2500, "def": 60, "skillDmg": 0.35 } },
   "bossEscalations": [
     {
       "id": "simayi_hunbing_10",
@@ -224,8 +244,8 @@
       "unitName": "司马懿·魂兵",
       "count": 12,
       "lanes": ["N", "E", "W"],
-      "hpMul": 2.8,
-      "atkMul": 2.2,
+      "hpMul": 1.4,
+      "atkMul": 1.3,
       "tint": "0x80e8ff",
       "banner": "司马懿震怒：竟敢斩我先锋！派出《魂兵》三路总攻剑阁！"
     },
@@ -237,8 +257,8 @@
       "unitName": "司马懿·精锐魂兵",
       "count": 18,
       "lanes": ["N", "E", "W"],
-      "hpMul": 4.5,
-      "atkMul": 3.2,
+      "hpMul": 1.7,
+      "atkMul": 1.5,
       "tint": "0xb07cff",
       "banner": "司马懿大怒：全军压上！《魂兵》精锐三路合围！"
     }
@@ -249,7 +269,7 @@
   "aimIdle": 3.0,
   "waves": {
     "storyLast": 30, "interval": 48, "bossInterval": 70, "spawnDur": 35, "firstDelay": 8,
-    "earlyBonusPerSec": 2, "hpGrowth": 1.23, "atkGrowth": 1.13, "armorPerWave": 2.2,
+    "earlyBonusPerSec": 2, "hpGrowth": 1.168, "atkGrowth": 1.095, "armorPerWave": 2.2,
     "countBase": 200, "countPerWave": 44,
     "swarmHpMul": 0.056, "swarmAtkMul": 0.0135, "swarmCopperMul": 0.08, "swarmXpMul": 0.08,
     "lanesAt": [[1, 1], [4, 2], [8, 3]],

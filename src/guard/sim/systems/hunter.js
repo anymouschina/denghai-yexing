@@ -16,6 +16,8 @@ function nearestAllyNear(sim, e, range) {
 }
 
 function wolfUpdate(sim, e, dt, frozen) {
+  if (e.mcd) for (const k in e.mcd) if (e.mcd[k] > 0) e.mcd[k] -= dt;
+  if (e.castT > 0) { e.castT -= dt; return; }
   if (frozen) return;
   const home = e.home || { x: e.x, y: e.y };
   const leash = e.leash || 460;
@@ -35,6 +37,38 @@ function wolfUpdate(sim, e, dt, frozen) {
   e.tgt = t;
   e.face = t.x >= e.x ? 1 : -1;
   const dist = Math.hypot(t.x - e.x, t.y - e.y);
+
+  // 狼王主动技能（群狼狂嚎 / 裂喉扑杀），普通野狼放恶狼扑咬（均遵守沉默）
+  if (e.alphaWolf && e.mcd && !(e.st.silence > 0)) {
+    if (e.mcd.howl <= 0 && dist < 240) {
+      e.mcd.howl = 10;
+      e.castT = 0.6;
+      sim.telegraph(e.x, e.y, 165, 0.6, () => {
+        if (!e.alive || sim.over) return;
+        for (const u of sim.alliesIn(e.x, e.y, 165)) if (u.kind !== 'kongming') sim.damage(e, u, e.atk * 1.65, { tag: 'hunter' });
+        sim.pushFx({ t: 'ring', x: e.x, y: e.y, r: 165, color: 0x9fd8ff, dur: 0.45 });
+      }, 0x9fd8ff);
+      sim.pushFx({ t: 'text', x: e.x, y: e.y - e.h - 14, text: '群狼狂嚎！', color: '#9fd8ff', size: 22 });
+      return;
+    }
+    if (e.mcd.pounce <= 0 && dist < 320 && dist > 80) {
+      e.mcd.pounce = 6.5;
+      e.castT = 0.5;
+      const px = t.x; const py = t.y;
+      sim.telegraph(px, py, 95, 0.5, () => {
+        if (!e.alive || sim.over) return;
+        e.x = px; e.y = py; e.prevX = px; e.prevY = py;
+        pushOutOfWalls(e, e.r, sim.walls);
+        for (const u of sim.alliesIn(px, py, 95)) if (u.kind !== 'kongming') sim.damage(e, u, e.atk * 1.8, { tag: 'hunter' });
+        sim.pushFx({ t: 'boom', x: px, y: py, r: 95, small: true, color: 0xd8ecff });
+      }, 0xd8ecff);
+      sim.pushFx({ t: 'text', x: e.x, y: e.y - e.h - 14, text: '裂喉扑杀！', color: '#d8ecff', size: 20 });
+      return;
+    }
+  } else if (!e.alphaWolf && sim.tryEnemySkill && sim.tryEnemySkill(e, dt)) {
+    return;
+  }
+
   const reach = e.range + e.r + (t.r || 20);
   if (dist <= reach) {
     if (e.cd <= 0) {
@@ -66,8 +100,19 @@ function spawnPack(sim, cfg) {
     const rad = 85 + sim.rng() * 145;
     const wx = cfg.x + Math.cos(ang) * rad;
     const wy = cfg.y + Math.sin(ang) * rad;
+    let mobName = cfg.mobName || '苍原野狼';
+    if (isAlpha) {
+      const baseAlpha = cfg.alphaName || '银背狼王';
+      if ((H.alphaSpawns || 0) === 0) {
+        mobName = baseAlpha;
+        if (sim.usedBossNames) sim.usedBossNames[baseAlpha] = 1;
+      } else if (sim.pickUniqueBossName) {
+        mobName = sim.pickUniqueBossName(baseAlpha, cfg.alphaRoster || [], '苍原狼王');
+      }
+      H.alphaSpawns = (H.alphaSpawns || 0) + 1;
+    }
     sim.spawnEnemy(cfg.mobType || 'wolf', wx, wy, {
-      name: isAlpha ? (cfg.alphaName || '银背狼王') : (cfg.mobName || '苍原野狼'),
+      name: mobName,
       hpMul: scale * (isAlpha ? 2.2 : 1),
       atkMul: (1 + 0.035 * Math.max(0, (sim.wave.n || 1) - 1)) * (isAlpha ? 1.35 : 1),
       elite: isAlpha,
@@ -78,6 +123,9 @@ function spawnPack(sim, cfg) {
         hunterCamp: cfg.id,
         openCamp: true,
         hunterMob: true,
+        alphaWolf: isAlpha,
+        mcd: isAlpha ? { howl: 4.5, pounce: 3 } : null,
+        castT: 0,
         update: wolfUpdate,
         leash: 480,
         aggro: 360,

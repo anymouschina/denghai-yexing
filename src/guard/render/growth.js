@@ -5,39 +5,48 @@ import { sfx } from '../../audio.js';
 import { SET_IDS, setHex } from '../sim/systems/loot.js';
 
 function burstRing(sc, x, y, color, r0, r1, dur, width = 6, depth = 9050) {
+  if (!sc || !sc.sys || !sc.sys.isActive() || !sc.add) return;
   const g = sc.add.graphics().setDepth(depth).setBlendMode('ADD');
   const o = { k: 0 };
   sc.tweens.add({
     targets: o, k: 1, duration: dur, ease: 'Cubic.easeOut',
     onUpdate: () => {
+      if (!g || !g.scene) return;
       const r = r0 + (r1 - r0) * o.k;
       g.clear().lineStyle(width * (1 - o.k) + 1, color, 1 - o.k).strokeEllipse(x, y, r * 2, r);
       g.fillStyle(color, 0.18 * (1 - o.k)).fillEllipse(x, y, r * 2, r);
     },
-    onComplete: () => g.destroy(),
+    onComplete: () => { if (g && g.scene) g.destroy(); },
   });
 }
 
 registerFx('loot', (sc, f) => {
-  sc.floatText(f.x, f.y - 70, f.text, f.color, f.q >= 3 ? 24 : 18);
-  if (f.q >= 2) { sc.pGold.explode(f.q >= 4 ? 40 : f.q * 6, f.x, f.y - 30); sfx('levelup', 0.4); } else sfx('coin', 0.5);
+  sc.floatText?.(f.x, f.y - 70, f.text, f.color, f.q >= 3 ? 24 : 18);
+  if (f.q >= 2) { sc.pGold?.explode(f.q >= 4 ? 40 : f.q * 6, f.x, f.y - 30); sfx('levelup', 0.4); } else sfx('coin', 0.5);
 });
 
 registerFx('setAura', (sc, f) => {
   const u = sc.sim.byId(f.id);
   const x = u ? u.x : f.x; const y = u ? u.y : f.y;
-  for (let i = 0; i < (f.pieces === 4 ? 3 : 2); i++) sc.time.delayedCall(i * 160, () => burstRing(sc, x, y, f.color, 30, f.pieces === 4 ? 260 : 170, 700, 10));
-  sc.pGold.explode(f.pieces === 4 ? 50 : 24, x, y - 50);
-  if (f.pieces === 4) sc.cameras.main.shake(180, 0.004);
+  for (let i = 0; i < (f.pieces === 4 ? 3 : 2); i++) {
+    sc.time?.delayedCall(i * 160, () => {
+      if (!sc || !sc.sys || !sc.sys.isActive()) return;
+      burstRing(sc, x, y, f.color, 30, f.pieces === 4 ? 260 : 170, 700, 10);
+    });
+  }
+  sc.pGold?.explode(f.pieces === 4 ? 50 : 24, x, y - 50);
+  if (f.pieces === 4) sc.cameras?.main?.shake(180, 0.004);
   sfx('levelup', 0.8);
 });
 
 registerFx('bazhen', (sc, f) => {
+  if (!sc || !sc.sys || !sc.sys.isActive() || !sc.add) return;
   const g = sc.add.graphics().setDepth(9040).setBlendMode('ADD');
   const o = { k: 0 };
   sc.tweens.add({
     targets: o, k: 1, duration: 650, ease: 'Sine.easeOut',
     onUpdate: () => {
+      if (!g || !g.scene) return;
       g.clear();
       const a = 1 - o.k;
       const rot = o.k * 0.8;
@@ -52,21 +61,21 @@ registerFx('bazhen', (sc, f) => {
       }
       g.fillStyle(0xffc94a, 0.16 * a).fillEllipse(f.x, f.y, f.r * 2, f.r);
     },
-    onComplete: () => g.destroy(),
+    onComplete: () => { if (g && g.scene) g.destroy(); },
   });
-  sc.floatText(f.x, f.y - 120, '八阵图', '#ffc94a', 24);
+  sc.floatText?.(f.x, f.y - 120, '八阵图', '#ffc94a', 24);
   sfx('thunder', 0.5);
 });
 
 registerFx('setShield', (sc, f) => {
   burstRing(sc, f.x, f.y, 0x5aa8d8, 20, 120, 500, 8);
-  sc.floatText(f.x, f.y - 110, '镇岳护盾', '#9fd8ff', 22);
+  sc.floatText?.(f.x, f.y - 110, '镇岳护盾', '#9fd8ff', 22);
 });
 
-// 常驻：4 件套单位脚下的套装色光环；镇岳护盾存在时画一层护罩
-let g = null;
+// 常驻：4 件套单位脚下的套装色光环；镇岳护盾存在时画一层护罩（挂载在场景实例避免跨重开泄漏）
 registerLayer((sc, sim, inView) => {
-  if (!g || !g.scene) g = sc.add.graphics().setDepth(8990);
+  let g = sc.__growthG;
+  if (!g || !g.scene) g = sc.__growthG = sc.add.graphics().setDepth(8990);
   g.clear();
   if (!sim.inv) return;
   const pulse = 0.5 + 0.5 * Math.sin(sim.t * 4);

@@ -124,6 +124,7 @@ const MOVES = {
     warnThen(sim, e, tp.x, tp.y, s.r, s.warn, () => {
       sim.addZone({ x: tp.x, y: tp.y, r: s.r, t: s.dur, vis: 'dark', side: 'enemy', tick: s.tick,
         onTick(ss, z) {
+          if (!e.alive || ss.over) return;
           for (const u of ss.alliesIn(z.x, z.y, z.r)) {
             if (u.realm) continue;
             ss.damage(e, u, e.atk * s.coef);
@@ -171,7 +172,7 @@ function bossUpdate(sim, e, dt, frozen) {
     e.y += r.vy * dt;
     r.t -= dt;
     for (const u of sim.alliesIn(e.x, e.y, r.r, true)) if (!r.hit.has(u.id) && !u.realm) { r.hit.add(u.id); sim.damage(e, u, r.dmg, { bldMul: 1.5 }); }
-    pushOutOfWalls(e, e.r);
+    pushOutOfWalls(e, e.r, sim.walls, { flying: e.flying });
     if (r.t <= 0) e.rush = null;
     return;
   }
@@ -180,14 +181,15 @@ function bossUpdate(sim, e, dt, frozen) {
   e.tgtT -= dt;
   if (e.tgtT <= 0 || (e.tgt && !e.tgt.alive)) { e.tgtT = 0.4; e.tgt = pickTarget(sim, e); }
   const t = e.tgt;
-  // 招式轮换
+  // 招式轮换（沉默时禁止施放技能）
   e.skT -= dt;
   const dk = (K.x - e.x) ** 2 + (K.y - e.y) ** 2;
-  if (e.skT <= 0 && (t || dk < 700 * 700)) {
+  if (!(e.st.silence > 0) && e.skT <= 0 && (t || dk < 700 * 700)) {
     const list = d.skills.filter((s) => !s.phase2 || e.phase2);
     const s = list[e.skI++ % list.length];
     const tp = t ? { x: t.x, y: t.y } : { x: K.x, y: K.y };
     MOVES[s.id](sim, e, s, tp);
+    sim.pushFx({ t: 'text', x: e.x, y: e.y - e.h - 18, text: `${s.name}！`, color: '#ff9a7a', size: 22 });
     e.skT = s.cd * e.cdMul * 0.6;
     return;
   }
@@ -237,15 +239,23 @@ export function spawnBoss(sim, key, n = sim.wave.n, base = n) {
   const lanes = (sim.map && sim.map.lanes) || BAL.lanes;
   const laneKey = lanes[BD.lane] ? BD.lane : ((sim.map && sim.map.laneOrder && sim.map.laneOrder[0]) || Object.keys(lanes)[0]);
   const p = lanes[laneKey][0];
-  const def = { name: d.name, tex: d.tex, h: d.h, r: d.r, hp: d.hp, atk: d.atk, def: d.def, spd: d.spd, range: d.range, cd: d.cd, ai: 'boss', copper: d.copper, xp: d.xp, aggro: d.aggro };
+  let bossName = d.name;
+  if (steps > 0) {
+    const roster = (BD.endlessRoster && BD.endlessRoster[key]) || [];
+    bossName = sim.pickUniqueBossName ? sim.pickUniqueBossName(d.name, roster, d.name) : `${d.name}·第${n}波`;
+  } else if (sim.usedBossNames) {
+    sim.usedBossNames[d.name] = 1;
+  }
+  const useSimayi = steps > 0 && /司马|贾诩|郭嘉|荀彧|程昱|钟繇/.test(bossName);
+  const def = { name: bossName, tex: useSimayi ? 'g_boss_simayi' : d.tex, h: d.h, r: d.r, hp: d.hp, atk: d.atk, def: d.def, spd: d.spd, range: d.range, cd: d.cd, ai: 'boss', copper: d.copper, xp: d.xp, aggro: d.aggro };
   const e = sim.spawnEnemy(`boss_${key}`, p[0], p[1] + 60, {
-    def, boss: key, lane: laneKey, hpMul: W.hpGrowth ** steps, atkMul: W.atkGrowth ** steps,
-    extra: { sheet: d.sheet || null, sheetScale: d.sheetScale || 1, bdef: d, phase2: false, skI: 0, skT: 3, busy: 0, cdMul: 1, spdMul: 1, rush: null, update: bossUpdate },
+    def, name: bossName, boss: key, lane: laneKey, hpMul: W.hpGrowth ** steps, atkMul: W.atkGrowth ** steps,
+    extra: { sheet: useSimayi ? null : (d.sheet || null), sheetScale: d.sheetScale || 1, bdef: d, phase2: false, skI: 0, skT: 3, busy: 0, cdMul: 1, spdMul: 1, rush: null, update: bossUpdate },
   });
   e.wp = 1;
   sim.wave.boss = e;
   const laneName = ((sim.map && sim.map.laneNames) || BAL.laneNames || { N: '北' })[laneKey] || laneKey;
-  sim.banner(`BOSS · ${d.name} 现身${laneName}路！`, '#ff6a5a', true);
+  sim.banner(`BOSS · ${bossName} 现身${laneName}路！`, '#ff6a5a', true);
   sim.pushFx({ t: 'sfx', name: 'roar' });
   sim.emit('bossSpawn', e);
   return e;
@@ -269,23 +279,42 @@ export function spawnElite(sim, n = sim.wave.n) {
   const lane = lanes[(sim.rng() * lanes.length) | 0];
   const p = (lanesMap[lane] || Object.values(lanesMap)[0])[0];
   const wv = sim.wave;
+  const roster = BD.eliteRoster || [];
+  const used = (sim.usedBossNames ||= {});
+  const picked = roster.find((r) => r && r.name && !used[r.name]) || null;
+  let eliteName;
+  let eliteSkillKind;
+  let eliteSkillName;
+  if (picked) {
+    used[picked.name] = 1;
+    eliteName = picked.name;
+    eliteSkillKind = picked.skillKind || 'slam';
+    eliteSkillName = picked.skillName || E.skill.name;
+  } else {
+    const fallbackKinds = ['slam', 'nova', 'volley', 'charge'];
+    const idx = Math.floor(n / Math.max(1, E.every || 5));
+    eliteName = sim.pickUniqueBossName ? sim.pickUniqueBossName(`精英·${ENEMIES[type].name}`, [], ENEMIES[type].name) : `精英·${ENEMIES[type].name}`;
+    eliteSkillKind = fallbackKinds[idx % fallbackKinds.length];
+    eliteSkillName = E.skill.name;
+  }
   const e = sim.spawnEnemy(type, p[0] + sim.rand(-40, 40), p[1] + sim.rand(-40, 40), {
-    lane, elite: true, scale: E.scale, tint: E.tint, name: `精英·${ENEMIES[type].name}`,
+    lane, elite: true, scale: E.scale, tint: E.tint, name: eliteName,
     hpMul: (wv.hpMul || 1) * E.hpMul, atkMul: (wv.atkMul || 1) * E.atkMul,
+    extra: { eliteSkillKind, eliteSkillName },
   });
   e.ox = 0;
   e.oy = 0;
   e.copper *= E.copperMul;
   e.xp *= E.xpMul;
   e.eliteT = 3;
-  sim.banner(`精英 ${e.name} 来袭`, '#ffb070');
+  sim.banner(`精英首领【${e.name}】来袭！`, '#ffb070');
   sim.emit('eliteSpawn', e);
   return e;
 }
 
 function eliteSkill(sim, e, dt) {
   const S = BD.elite.skill;
-  if (e.st.stun > 0 || e.st.freeze > 0) return;
+  if (e.st.stun > 0 || e.st.freeze > 0 || e.st.silence > 0) return;
   e.eliteT -= dt;
   if (e.eliteT > 0) return;
   let t = e.tgt && e.tgt.alive && (e.tgt.x - e.x) ** 2 + (e.tgt.y - e.y) ** 2 <= S.range * S.range ? e.tgt : null;
@@ -296,6 +325,39 @@ function eliteSkill(sim, e, dt) {
   if (!t) { e.eliteT = 0.5; return; }
   e.eliteT = S.cd;
   const x = t.x; const y = t.y;
+  const kind = e.eliteSkillKind || 'slam';
+  const label = e.eliteSkillName || S.name;
+  sim.pushFx({ t: 'text', x: e.x, y: e.y - e.h - 14, text: `${label}！`, color: '#ffb070', size: 20 });
+  if (kind === 'nova') {
+    const r = S.r * 1.2;
+    warnThen(sim, e, e.x, e.y, r, S.warn, () => {
+      hitAllies(sim, e, e.x, e.y, r, e.atk * S.coef * 0.9);
+      sim.pushFx({ t: 'boom', x: e.x, y: e.y, r, small: true });
+      sim.pushFx({ t: 'ring', x: e.x, y: e.y, r, color: 0xff9a3c, dur: 0.45 });
+    });
+    return;
+  }
+  if (kind === 'volley') {
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU;
+      const vx = i === 0 ? x : x + Math.cos(a) * 105;
+      const vy = i === 0 ? y : y + Math.sin(a) * 75;
+      warnThen(sim, e, vx, vy, S.r * 0.72, S.warn + i * 0.1, () => {
+        hitAllies(sim, e, vx, vy, S.r * 0.72, e.atk * S.coef * 0.7);
+        sim.pushFx({ t: 'boom', x: vx, y: vy, r: S.r * 0.72, small: true });
+      }, 0xb05aff);
+    }
+    return;
+  }
+  if (kind === 'charge') {
+    warnThen(sim, e, x, y, S.r * 0.9, S.warn, () => {
+      e.x = x; e.y = y; e.prevX = x; e.prevY = y;
+      pushOutOfWalls(e, e.r, sim.walls, { flying: e.flying });
+      hitAllies(sim, e, x, y, S.r * 0.9, e.atk * S.coef);
+      sim.pushFx({ t: 'boom', x, y, r: S.r * 0.9, small: true });
+    }, 0xff7a30);
+    return;
+  }
   warnThen(sim, e, x, y, S.r, S.warn, () => {
     hitAllies(sim, e, x, y, S.r, e.atk * S.coef);
     sim.pushFx({ t: 'boom', x, y, r: S.r, small: true });

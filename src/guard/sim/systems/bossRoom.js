@@ -121,10 +121,13 @@ function spawnRoomBoss(sim, cfg, td) {
   const [x0, y0, x1, y1] = cfg.rect;
   const cx = (x0 + x1) * 0.5 + 140;
   const cy = (y0 + y1) * 0.5;
+  const bossName = sim.pickUniqueBossName
+    ? sim.pickUniqueBossName(td.bossName || '装备BOSS', td.roster || [], td.bossName || '装备BOSS')
+    : (td.bossName || '装备BOSS');
   const def = { ...td, ai: 'melee', aggro: 950 };
   const e = sim.spawnEnemy(`bossroom_${td.id}`, cx, cy, {
     def,
-    name: td.bossName || '装备BOSS',
+    name: bossName,
     boss: 'realm',
     realm: cfg.id,
     home: { x: cx, y: cy },
@@ -211,8 +214,8 @@ export default {
           if (art) L.grant(art, e.x, e.y);
         }
       }
-      sim.banner(`BOSS房首领【${td.bossName}】击破！铜钱 +${ad.copper} · 经验 +${ad.xp} · 高阶装备×${eqN}${tomeName ? ` + 【${tomeName}】` : ''}`, '#ffd36a', true);
-      sim.emit('bossRoomClear', { tier: td.id, clears: BR.clears, equipCount: eqN, bonusTomes: ad.bonusTomes, tomeName, copper: ad.copper, xp: ad.xp, fixed: true, adaptMul: ad.adaptMul });
+      sim.banner(`BOSS房首领【${e.name || td.bossName}】击破！铜钱 +${ad.copper} · 经验 +${ad.xp} · 高阶装备×${eqN}${tomeName ? ` + 【${tomeName}】` : ''}`, '#ffd36a', true);
+      sim.emit('bossRoomClear', { tier: td.id, bossName: e.name || td.bossName, clears: BR.clears, equipCount: eqN, bonusTomes: ad.bonusTomes, tomeName, copper: ad.copper, xp: ad.xp, fixed: true, adaptMul: ad.adaptMul });
     });
   },
   update(sim, dt) {
@@ -246,8 +249,8 @@ export default {
 
     // 房内有人且冷却结束时自动刷出下一轮 BOSS
     if (!roomBosses(sim).length && BR.respawnAt > 0 && sim.t >= BR.respawnAt) {
-      spawnRoomBoss(sim, cfg, BR.tierDef());
-      sim.banner(`BOSS房重生 · 【${BR.tierDef().bossName}】再度降临！`, '#ff8a7a');
+      const nb = spawnRoomBoss(sim, cfg, BR.tierDef());
+      sim.banner(`BOSS房新首领 · 【${nb.name}】降临！`, '#ff8a7a');
     }
 
     // 兜底不跑出房间

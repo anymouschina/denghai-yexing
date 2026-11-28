@@ -19,9 +19,12 @@ function setup(sc, sim) {
   if (map.hunterCamp) {
     const hc = map.hunterCamp;
     const nx = hc.x - 170; const ny = hc.y + 40;
-    const npcImg = sc.textures.exists('g_merc_nu')
-      ? sc.add.image(nx, ny, 'g_merc_nu').setOrigin(0.5, 0.92).setScale(0.46).setTint(0xc8ffd8).setDepth(ny)
+    const hasHunter = sc.textures.exists('g_npc_hunter');
+    const hunterTex = hasHunter ? 'g_npc_hunter' : (sc.textures.exists('g_merc_nu') ? 'g_merc_nu' : null);
+    const npcImg = hunterTex
+      ? sc.add.image(nx, ny, hunterTex).setOrigin(0.5, 0.92).setScale(0.46).setDepth(ny)
       : null;
+    if (npcImg && !hasHunter) npcImg.setTint(0xc8ffd8);
     labels.hunterNpc = sc.add.text(nx, ny - 86, hc.npcName || '老猎人·陈老汉', {
       fontFamily: KAI, fontSize: '22px', color: '#9ff0b8', stroke: INK, strokeThickness: 5,
     }).setOrigin(0.5).setDepth(9000);

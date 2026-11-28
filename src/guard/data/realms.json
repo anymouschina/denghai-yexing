@@ -15,7 +15,7 @@
       "repeatable": true, "respawnSec": 30, "minQ": 2, "equipCount": 2, "bonusTomes": 0, "recPower": "推荐Lv.6+",
       "rounds": [{ "paperman": 6, "jiangshi": 1 }, { "jiangshi": 2, "lantern": 2 }],
       "boss": {
-        "name": "神兽·玄武", "hp": 22000, "atk": 165, "def": 90, "spd": 72, "range": 60, "cd": 1.4, "ai": "melee", "r": 44, "h": 170, "copper": 100, "xp": 90,
+        "name": "神兽·玄武", "altNames": ["玄冥龟相·执明", "镇海玄灵·重冥", "北极龟尊·沧岳", "玄渊灵龟·镇水"], "hp": 22000, "atk": 165, "def": 90, "spd": 72, "range": 60, "cd": 1.4, "ai": "melee", "r": 44, "h": 170, "copper": 100, "xp": 90,
         "moves": [
           { "id": "harden", "name": "龟甲", "type": "harden", "cd": 14, "t": 6, "armor": 36, "heal": 0.06 },
           { "id": "coil", "name": "蛇缠", "type": "slam", "cd": 7, "warn": 0.6, "r": 140, "coef": 1.4, "range": 420 },
@@ -28,7 +28,7 @@
       "repeatable": true, "respawnSec": 30, "minQ": 2, "equipCount": 2, "bonusTomes": 0, "recPower": "推荐Lv.10+",
       "rounds": [{ "foxfire": 6, "paperman": 3 }, { "foxfire": 4, "jiangshi": 2 }],
       "boss": {
-        "name": "神兽·白虎", "hp": 42000, "atk": 260, "def": 85, "spd": 150, "range": 70, "cd": 0.9, "ai": "melee", "r": 36, "h": 160, "copper": 160, "xp": 140,
+        "name": "神兽·白虎", "altNames": ["庚金白煞·监兵", "西岳虎尊·啸天", "杀伐圣灵·白牙", "太白虎皇·裂风"], "hp": 42000, "atk": 260, "def": 85, "spd": 150, "range": 70, "cd": 0.9, "ai": "melee", "r": 36, "h": 160, "copper": 160, "xp": 140,
         "moves": [
           { "id": "pounce", "name": "虎扑", "type": "pounce", "cd": 6, "warn": 0.6, "r": 120, "coef": 1.8, "range": 520 },
           { "id": "gale", "name": "啸风", "type": "fan", "cd": 8, "n": 10, "spread": 6.283, "speed": 380, "coef": 0.8, "tex": "proj_ghostfire", "tint": 15263976 },
@@ -41,7 +41,7 @@
       "repeatable": true, "respawnSec": 30, "minQ": 3, "equipCount": 3, "bonusTomes": 1, "recPower": "推荐Lv.14+",
       "rounds": [{ "foxfire": 6, "firecracker": 3 }, { "lantern": 3, "firecracker": 3, "foxfire": 2 }],
       "boss": {
-        "name": "神兽·朱雀", "hp": 72000, "atk": 360, "def": 105, "spd": 110, "range": 360, "cd": 1.15, "ai": "ranged", "r": 34, "h": 170, "flying": true, "bullet": "proj_flame", "copper": 240, "xp": 210,
+        "name": "神兽·朱雀", "altNames": ["南明离火·陵光", "赤羽凤尊·焚空", "炎阳圣灵·丹翼", "焚天火凤·朱明"], "hp": 72000, "atk": 360, "def": 105, "spd": 110, "range": 360, "cd": 1.15, "ai": "ranged", "r": 34, "h": 170, "flying": true, "bullet": "proj_flame", "copper": 240, "xp": 210,
         "moves": [
           { "id": "breath", "name": "离火吐息", "type": "fan", "cd": 6, "n": 5, "spread": 0.8, "speed": 420, "coef": 1.0, "tex": "proj_flame" },
           { "id": "brood", "name": "雀羽化火", "type": "summon", "cd": 15, "enemy": "foxfire", "n": 3 },
@@ -54,7 +54,7 @@
       "repeatable": true, "respawnSec": 35, "minQ": 3, "equipCount": 3, "bonusTomes": 1, "recPower": "推荐Lv.18+",
       "rounds": [{ "lantern": 4, "jiangshi": 2, "paperman": 4 }, { "jiangshi": 3, "lantern": 3, "foxfire": 3 }],
       "boss": {
-        "name": "神兽·青龙", "hp": 120000, "atk": 480, "def": 130, "spd": 120, "range": 380, "cd": 1.05, "ai": "ranged", "r": 36, "h": 180, "flying": true, "bullet": "proj_ghostfire", "bulletTint": 8381439, "copper": 340, "xp": 300,
+        "name": "神兽·青龙", "altNames": ["苍穹雷龙·孟章", "东海青尊·震泽", "太乙龙灵·苍鳞", "惊霄龙帝·青冥"], "hp": 120000, "atk": 480, "def": 130, "spd": 120, "range": 380, "cd": 1.05, "ai": "ranged", "r": 36, "h": 180, "flying": true, "bullet": "proj_ghostfire", "bulletTint": 8381439, "copper": 340, "xp": 300,
         "moves": [
           { "id": "thunder", "name": "惊雷", "type": "slam", "cd": 6, "warn": 0.6, "r": 130, "coef": 1.6, "range": 600 },
           { "id": "whirl", "name": "龙卷", "type": "fan", "cd": 8, "n": 7, "spread": 1.2, "speed": 460, "coef": 0.9, "tex": "proj_ghostfire", "tint": 8381439 },
@@ -67,7 +67,7 @@
       "repeatable": true, "respawnSec": 35, "minQ": 4, "equipCount": 3, "bonusTomes": 2, "recPower": "推荐Lv.22+",
       "rounds": [{ "jiangshi": 3, "lantern": 3, "foxfire": 4 }, { "guiche": 1, "jiangshi": 3, "firecracker": 3 }],
       "boss": {
-        "name": "神兽·麒麟", "hp": 200000, "atk": 640, "def": 165, "spd": 130, "range": 340, "cd": 1.0, "ai": "ranged", "r": 36, "h": 180, "bullet": "proj_ghostfire", "bulletTint": 16765546, "copper": 480, "xp": 450,
+        "name": "神兽·麒麟", "altNames": ["瑞云圣兽·索冥", "天火麟尊·昭明", "五德神麟·玉衡", "星辉瑞麟·玄枢"], "hp": 200000, "atk": 640, "def": 165, "spd": 130, "range": 340, "cd": 1.0, "ai": "ranged", "r": 36, "h": 180, "bullet": "proj_ghostfire", "bulletTint": 16765546, "copper": 480, "xp": 450,
         "moves": [
           { "id": "horn", "name": "麟角冲", "type": "pounce", "cd": 7, "warn": 0.6, "r": 130, "coef": 1.8, "range": 520 },
           { "id": "bless", "name": "祥瑞", "type": "harden", "cd": 16, "t": 5, "armor": 30, "heal": 0.1 },
@@ -80,7 +80,7 @@
       "repeatable": true, "respawnSec": 40, "minQ": 4, "equipCount": 4, "bonusTomes": 2, "bonusSlot": "weapon", "recPower": "推荐Lv.30觉醒后",
       "rounds": [{ "hunbing": 4, "jiangshi": 2 }, { "hunbing": 5, "guiche": 1 }],
       "boss": {
-        "name": "西楚霸王·项羽", "tex": "g_boss_hanba", "sheetKey": "boss_xiangyu",
+        "name": "西楚霸王·项羽", "altNames": ["乌江霸魂·龙且骸", "楚军骁将·虞子期", "西楚虎臣·钟离昧", "霸王亲卫·季布影"], "tex": "g_boss_hanba", "sheetKey": "boss_xiangyu",
         "hp": 340000, "atk": 820, "def": 210, "spd": 135, "range": 84, "cd": 0.95, "ai": "melee", "r": 42, "h": 185, "copper": 680, "xp": 650,
         "moves": [
           { "id": "pofu", "name": "破釜沉舟", "type": "pounce", "cd": 7.5, "warn": 0.6, "r": 145, "coef": 2.0, "range": 540, "fury": true },
@@ -94,7 +94,7 @@
       "repeatable": true, "respawnSec": 45, "minQ": 4, "equipCount": 4, "bonusTomes": 3, "bonusSlot": "armor", "recPower": "推荐Lv.30觉醒后",
       "rounds": [{ "hunbing": 5, "lantern": 3 }, { "hunbing": 6, "guiche": 1, "jiangshi": 2 }],
       "boss": {
-        "name": "不屈战神·刑天", "tex": "g_boss_yedi", "sheetKey": "boss_xingtian",
+        "name": "不屈战神·刑天", "altNames": ["九黎战巫·蚩尤影", "巫族大将·风伯煞", "太古荒神·雨师骸", "常羊战灵·夸父魂"], "tex": "g_boss_yedi", "sheetKey": "boss_xingtian",
         "hp": 560000, "atk": 1080, "def": 260, "spd": 128, "range": 88, "cd": 0.9, "ai": "melee", "r": 44, "h": 190, "copper": 950, "xp": 920,
         "moves": [
           { "id": "berserk", "name": "战意不灭", "type": "berserk", "cd": 14, "t": 6, "armor": 28, "heal": 0.08, "atkMul": 1.28, "spdMul": 1.25, "r": 180, "coef": 1.4, "phase2Only": true },

@@ -46,7 +46,7 @@ export function clampAim(u, aim, range) {
 export function hitCircle(sim, u, x, y, r, dmg, o = {}) {
   const hits = sim.enemiesIn(x, y, r);
   for (const e of hits) {
-    sim.damage(u, e, dmg, { skill: true, tag: o.tag });
+    sim.damage(u, e, dmg, { skill: true, tag: o.tag, pierceArmor: !!o.pierceArmor });
     if (o.stun) sim.applyStatus(e, 'stun', o.stun);
     if (o.freeze) sim.applyStatus(e, 'freeze', o.freeze);
     if (o.root) sim.applyStatus(e, 'root', o.root);
@@ -66,7 +66,7 @@ export function hitCone(sim, u, a, r, arc, dmg, o = {}) {
     while (da < -Math.PI) da += Math.PI * 2;
     if (Math.abs(da) > arc / 2 && d2(u, e) > (u.r + e.r) ** 2) continue;
     hits.push(e);
-    sim.damage(u, e, dmg, { skill: true, tag: o.tag });
+    sim.damage(u, e, dmg, { skill: true, tag: o.tag, pierceArmor: !!o.pierceArmor });
     if (o.stun) sim.applyStatus(e, 'stun', o.stun);
     if (o.slow) sim.applyStatus(e, 'slow', o.slowT || 2, o.slow);
     if (o.burn) sim.applyStatus(e, 'burn', o.burnT || 3, { dps: o.burn, src: u.id });
